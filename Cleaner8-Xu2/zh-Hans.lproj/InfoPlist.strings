@@ -1,7 +1,2 @@
-/* 
-  InfoPlist.strings
-  Cleaner8-Xu2
-
-  Created by 徐文豪 on 2025/12/16.
-  
-*/
+"NSPhotoLibraryUsageDescription" = "需要访问您的相册，用于扫描相似/重复照片与视频并统计可清理空间。";
+"NSPhotoLibraryAddUsageDescription" = "需要修改相册权限，用于删除您选择清理的照片与视频。";

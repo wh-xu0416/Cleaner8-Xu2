@@ -11,6 +11,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 @implementation SecretViewController
 
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    self.view.backgroundColor = UIColor.whiteColor;
+    self.title = @"私密";
+}
+
 @end
 
 NS_ASSUME_NONNULL_END

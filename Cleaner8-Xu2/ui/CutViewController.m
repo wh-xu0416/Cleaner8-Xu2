@@ -11,6 +11,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 @implementation CutViewController
 
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    self.view.backgroundColor = UIColor.whiteColor;
+    self.title = @"切换";
+}
+
 @end
 
 NS_ASSUME_NONNULL_END

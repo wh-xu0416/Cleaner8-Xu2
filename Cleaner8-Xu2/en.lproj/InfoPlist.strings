@@ -1,7 +1,2 @@
-/* 
-  InfoPlist.strings
-  Cleaner8-Xu2
-
-  Created by 徐文豪 on 2025/12/16.
-  
-*/
+"NSPhotoLibraryUsageDescription" = "We need access to your Photos to scan similar/duplicate media and calculate reclaimable space.";
+"NSPhotoLibraryAddUsageDescription" = "We need permission to modify your Photos to delete the items you select.";
