@@ -41,6 +41,20 @@ static inline ASScreenMetrics ASScreenMetricsMake(void) {
     return m;
 }
 
+static CGImagePropertyOrientation ASCGImageOrientationFromUIImage(UIImageOrientation o) {
+    switch (o) {
+        case UIImageOrientationUp: return kCGImagePropertyOrientationUp;
+        case UIImageOrientationDown: return kCGImagePropertyOrientationDown;
+        case UIImageOrientationLeft: return kCGImagePropertyOrientationLeft;
+        case UIImageOrientationRight: return kCGImagePropertyOrientationRight;
+        case UIImageOrientationUpMirrored: return kCGImagePropertyOrientationUpMirrored;
+        case UIImageOrientationDownMirrored: return kCGImagePropertyOrientationDownMirrored;
+        case UIImageOrientationLeftMirrored: return kCGImagePropertyOrientationLeftMirrored;
+        case UIImageOrientationRightMirrored: return kCGImagePropertyOrientationRightMirrored;
+    }
+    return kCGImagePropertyOrientationUp;
+}
+
 static ASScreenMetrics ASScreen(void) {
     static ASScreenMetrics metrics;
     static dispatch_once_t onceToken;
@@ -713,23 +727,10 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         [self.pendingInsertedMap removeAllObjects];
         [self.pendingRemovedIDs removeAllObjects];
 
-        // removedIDs -> PHAsset(可选)：如果你 rebuild 只需要 IDs，直接传 IDs 更好
-        NSMutableArray<PHAsset *> *finalRemovedAssets = [NSMutableArray array];
-        for (NSString *lid in finalRemovedIDs) {
-            PHAsset *a = [PHAsset fetchAssetsWithLocalIdentifiers:@[lid] options:nil].firstObject;
-            if (a) [finalRemovedAssets addObject:a];
-            // 若已被删，fetch 可能拿不到；没关系，你后面按 ID 删除即可
-        }
-
-        // 真正执行增量重建（跑在 workQ）
         dispatch_async(self.workQ, ^{
-            // 如果缓存还没 ready（比如没 full scan 完成），直接退出
             if (self.cache.snapshot.state != ASScanStateFinished) return;
 
-            // 这里建议你用 “删 + rebuildDays” 的实现：
-            //  - inserted 过滤 screenRecording（可在 rebuild 内用 ASIsScreenRecording 再过滤）
-            //  - removed 用 IDs 删除
-            [self incrementalRebuildWithInserted:finalInserted removed:finalRemovedAssets];
+            [self incrementalRebuildWithInserted:finalInserted removedIDs:finalRemovedIDs];
         });
     });
 
@@ -742,40 +743,60 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 }
 
 - (void)incrementalRebuildWithInserted:(NSArray<PHAsset*> *)inserted
-                               removed:(NSArray<PHAsset*> *)removed
+                            removedIDs:(NSArray<NSString*> *)removedIDs
 {
-    // 0) UI scanning（同 Swift beginIncrementalScan）
+    // ✅ 先把 comparable pools 从 cache 载入（否则 rebuildDays 里会不断 append / 或者丢失）
+    self.comparableImagesM = [self.cache.comparableImages mutableCopy] ?: [NSMutableArray array];
+    self.comparableVideosM = [self.cache.comparableVideos mutableCopy] ?: [NSMutableArray array];
+
+    // 0) UI scanning
     self.snapshot.state = ASScanStateScanning;
     [self emitProgress];
 
-    // 1) 从缓存态加载 mutable 容器（等价 Swift var updated = getGroups()）
+    // 1) 从缓存态加载 mutable 容器
     self.dupGroupsM = [self deepMutableGroups:self.cache.duplicateGroups];
     self.simGroupsM = [self deepMutableGroups:self.cache.similarGroups];
     self.screenshotsM = [self.cache.screenshots mutableCopy] ?: [NSMutableArray array];
     self.screenRecordingsM = [self.cache.screenRecordings mutableCopy] ?: [NSMutableArray array];
     self.bigVideosM = [self.cache.bigVideos mutableCopy] ?: [NSMutableArray array];
 
-    // 2) 删除：剔除 removed IDs（等价 Swift 先删）
-    NSMutableSet<NSString*> *deletedIDs = [NSMutableSet set];
-    for (PHAsset *a in removed) if (a.localIdentifier.length) [deletedIDs addObject:a.localIdentifier];
+    // 2) 删除：剔除 removed IDs
+    NSMutableSet<NSString*> *deletedIDs = [NSMutableSet setWithArray:(removedIDs ?: @[])];
     if (deletedIDs.count) {
         [self removeModelsByIds:deletedIDs];
-        // 如果你有 visionMemo / screenRecordingMemo / size cache，也在这里清掉（同 Swift 清缓存）
+
+        // 可选：清 memo，避免旧缓存误判
+        for (NSString *lid in deletedIDs) {
+            if (lid.length) {
+                [self.visionMemo removeObjectForKey:lid];
+                [[ASScreenRecordingMemo() mutableCopy] removeObjectForKey:lid]; // ❌不要这样
+            }
+        }
+
+        // ✅正确清 screenRecording memo（它本身就是 NSCache，直接 remove 即可）
+        for (NSString *lid in deletedIDs) {
+            if (lid.length) {
+                [ASScreenRecordingMemo() removeObjectForKey:lid];
+            }
+        }
     }
 
-    // 3) affectedDays：只取 inserted 的创建日期（等价 Swift）
+    // 3) affectedDays：只取 inserted 的创建日期
     NSMutableSet<NSDate*> *affectedDayStarts = [NSMutableSet set];
     for (PHAsset *a in inserted) {
         NSDate *cd = a.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
         [affectedDayStarts addObject:ASDayStart(cd)];
     }
 
-    // 4) 重建这些天：先从现有容器移除这些天的所有资产，再按全量口径重扫当天资产并追加
+    // 4) 重建这些天
     if (affectedDayStarts.count) {
         [self rebuildDaysObjC:affectedDayStarts];
     }
 
-    // 5) 统一发布（等价 Swift applyGroupsFinal）：重新计算 snapshot + 写 cache + publish
+    // ✅重建完：用 comparable pools rebuild index（否则后续命中会怪）
+    [self rebuildIndexFromComparablePools];
+
+    // 5) 统一发布：重新计算 snapshot + 写 cache + publish
     [self recomputeSnapshotFromCurrentContainers];
 
     self.cache.snapshot = self.snapshot;
@@ -784,7 +805,12 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     self.cache.screenshots     = [self.screenshotsM copy];
     self.cache.screenRecordings = [self.screenRecordingsM copy];
     self.cache.bigVideos       = [self.bigVideosM copy];
-    self.cache.anchorDate      = [NSDate date]; // anchor 现在只是“last update time”，不再作为核心 diff 依据
+
+    // ✅别忘了把 comparable pools 写回 cache
+    self.cache.comparableImages = [self.comparableImagesM copy];
+    self.cache.comparableVideos = [self.comparableVideosM copy];
+
+    self.cache.anchorDate      = [NSDate date];
     [self saveCache];
 
     [self applyCacheToPublicStateWithCompletion:^{
@@ -824,9 +850,9 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         [NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]
     ];
 
-    // ✅ image + video，但先排除 screenshot（Swift 那个逻辑）
+    // ✅ image + video + 排除 screenshot（与 Swift 逻辑一致）
     opt.predicate = [NSPredicate predicateWithFormat:
-        @"(((mediaType == %d) OR (mediaType == %d)) AND NOT (mediaSubtypes & %d > 0))",
+        @"((mediaType == %d) OR (mediaType == %d)) AND NOT ((mediaSubtypes & %d) != 0)",
         PHAssetMediaTypeImage, PHAssetMediaTypeVideo,
         PHAssetMediaSubtypePhotoScreenshot
     ];
@@ -838,6 +864,14 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         PHAssetSourceTypeiTunesSynced;
 
     return opt;
+}
+
+- (NSArray<ASAssetGroup *> *)mergedSimilarGroupsForUIFromDup:(NSArray<ASAssetGroup *> *)dup
+                                                         sim:(NSArray<ASAssetGroup *> *)sim
+{
+    if (!dup.count) return sim ?: @[];
+    if (!sim.count) return dup ?: @[];
+    return [sim arrayByAddingObjectsFromArray:dup];
 }
 
 
@@ -867,6 +901,8 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     self.screenshotsM = [[self.screenshotsM filteredArrayUsingPredicate:keep] mutableCopy];
     self.screenRecordingsM = [[self.screenRecordingsM filteredArrayUsingPredicate:keep] mutableCopy];
     self.bigVideosM = [[self.bigVideosM filteredArrayUsingPredicate:keep] mutableCopy];
+    self.comparableImagesM = [[self.comparableImagesM filteredArrayUsingPredicate:keep] mutableCopy];
+    self.comparableVideosM = [[self.comparableVideosM filteredArrayUsingPredicate:keep] mutableCopy];
 }
 
 - (void)rebuildDaysObjC:(NSSet<NSDate*> *)dayStarts {
@@ -965,7 +1001,7 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 
         // 2) delete check (only when delta has changes)
         NSMutableSet<NSString *> *deleted = [NSMutableSet set];
-        BOOL needDeleteCheck = (delta.count > 0);
+        BOOL needDeleteCheck = YES;
 
         if (needDeleteCheck) {
             NSMutableSet<NSString *> *cachedIds = [NSMutableSet set];
@@ -1121,8 +1157,14 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
             if (!thumb.CGImage) return nil;
 
             VNGenerateImageFeaturePrintRequest *req = [VNGenerateImageFeaturePrintRequest new];
-            VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:thumb.CGImage options:@{}];
 
+            CGImageRef cg = thumb.CGImage;
+            if (!cg) return nil;
+
+            CGImagePropertyOrientation ori = ASCGImageOrientationFromUIImage(thumb.imageOrientation);
+            VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:cg
+                                                                                orientation:ori
+                                                                                    options:@{}];
             NSError *err = nil;
             [handler performRequests:@[req] error:&err];
             if (err) return nil;
@@ -1174,12 +1216,12 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
             if (dur > eps) t = MIN(t, dur - eps);
             else t = 0;
 
-            thumb = [self requestVideoFrameSyncForAsset:asset seconds:t target:CGSizeMake(256, 256)];
+            thumb = [self requestVideoFrameSyncForAsset:asset seconds:t target:CGSizeMake(512, 512)];
             if (!thumb) {
-                thumb = [self requestVideoFrameSyncForAsset:asset seconds:0 target:CGSizeMake(256, 256)];
+                thumb = [self requestVideoFrameSyncForAsset:asset seconds:0 target:CGSizeMake(512, 512)];
             }
         } else {
-            thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(128, 128)];
+            thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(512, 512)];
         }
 
         if (thumb) {
@@ -1404,10 +1446,13 @@ static inline void ASDCT1D_64(const float *in, float *out) {
         if (!cg) return nil;
 
         VNGenerateImageFeaturePrintRequest *req = [VNGenerateImageFeaturePrintRequest new];
-        VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:cg options:@{}];
-
+        CGImagePropertyOrientation ori = ASCGImageOrientationFromUIImage(image.imageOrientation);
+        VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:cg
+                                                                            orientation:ori
+                                                                                options:@{}];
         NSError *error = nil;
         [handler performRequests:@[req] error:&error];
+
         if (error) return nil;
 
         VNFeaturePrintObservation *obs = (VNFeaturePrintObservation *)req.results.firstObject;
@@ -1660,7 +1705,11 @@ static inline void ASDCT1D_64(const float *in, float *out) {
     void (^assign)(void) = ^{
         self.snapshot = self.cache.snapshot ?: [ASScanSnapshot new];
         self.duplicateGroups = self.cache.duplicateGroups ?: @[];
-        self.similarGroups = self.cache.similarGroups ?: @[];
+
+        // ✅ UI 上 similar = (similar + duplicate)
+        NSArray *sim = self.cache.similarGroups ?: @[];
+        self.similarGroups = [self mergedSimilarGroupsForUIFromDup:self.duplicateGroups sim:sim];
+
         self.screenshots = self.cache.screenshots ?: @[];
         self.screenRecordings = self.cache.screenRecordings ?: @[];
         self.bigVideos = self.cache.bigVideos ?: @[];
@@ -1675,7 +1724,8 @@ static inline void ASDCT1D_64(const float *in, float *out) {
     void (^assign)(void) = ^{
         self.snapshot = self.cache.snapshot ?: [ASScanSnapshot new];
         self.duplicateGroups = self.cache.duplicateGroups ?: @[];
-        self.similarGroups = self.cache.similarGroups ?: @[];
+        NSArray *sim = self.cache.similarGroups ?: @[];
+        self.similarGroups = [self mergedSimilarGroupsForUIFromDup:self.duplicateGroups sim:sim];
         self.screenshots = self.cache.screenshots ?: @[];
         self.screenRecordings = self.cache.screenRecordings ?: @[];
         self.bigVideos = self.cache.bigVideos ?: @[];
@@ -1706,14 +1756,16 @@ static inline void ASDCT1D_64(const float *in, float *out) {
 
     ASScanSnapshot *snap = self.snapshot; // 同一个对象也行，这里只是引用一下
 
-    // ✅关键：在同一次 main dispatch 中，先更新公开容器，再回调 UI
+    //关键：在同一次 main dispatch 中，先更新公开容器，再回调 UI
     dispatch_async(dispatch_get_main_queue(), ^{
         self.duplicateGroups = dupCopy;
-        self.similarGroups = simCopy;
+
+        // UI similar = sim + dup
+        self.similarGroups = [self mergedSimilarGroupsForUIFromDup:dupCopy sim:simCopy];
+
         self.screenshots = shotCopy;
         self.screenRecordings = recCopy;
         self.bigVideos = bigCopy;
-
         if (self.progressBlock) self.progressBlock(snap);
     });
 }
@@ -1722,7 +1774,7 @@ static inline void ASDCT1D_64(const float *in, float *out) {
 - (void)emitProgressMaybe {
     static CFTimeInterval lastT = 0;
     CFTimeInterval t = CACurrentMediaTime();
-    if (self.snapshot.scannedCount % 20 == 0 || (t - lastT) > 1) {
+    if (self.snapshot.scannedCount % 100 == 0 || (t - lastT) > 2.5) {
         lastT = t;
         [self emitProgress];
     }
