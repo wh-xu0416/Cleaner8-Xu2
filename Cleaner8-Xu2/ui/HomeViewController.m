@@ -22,7 +22,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 @property (nonatomic, copy) NSString *title;
 @property (nonatomic) NSUInteger totalCount;
 @property (nonatomic) uint64_t totalBytes;
-@property (nonatomic, strong) NSArray<NSString *> *thumbLocalIds; // 最多2个
+@property (nonatomic, strong) NSArray<NSString *> *thumbLocalIds; // 最多2个（允许0/1/2）
 @end
 
 @implementation ASHomeModuleVM
@@ -38,6 +38,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 @property (nonatomic, strong) UIImageView *img1;
 @property (nonatomic, strong) UIImageView *img2;
 - (void)applyVM:(ASHomeModuleVM *)vm;
++ (NSString *)humanSize:(uint64_t)bytes;
 @end
 
 @implementation HomeModuleCell
@@ -130,9 +131,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 #pragma mark - HomeViewController
 
 @interface HomeViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
-@property (nonatomic, assign) ASScanState lastScanState;
-@property (nonatomic, assign) BOOL didBuildOnce;
-
 @property (nonatomic, strong) NSSet<NSString *> *allCleanableIds;   // 去重后的可删集合
 @property (nonatomic, assign) uint64_t allCleanableBytes;           // 去重后的总大小
 @property (nonatomic, strong) UILabel *totalBytesLabel;
@@ -143,6 +141,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 @property (nonatomic, strong) PHCachingImageManager *imgMgr;
 @property (nonatomic, strong) ASPhotoScanManager *scanMgr;
+
+@property (nonatomic) CFTimeInterval lastUIUpdateT;
 
 @property (nonatomic, strong) UILabel *scanStateLabel; // 顶部实时状态
 @end
@@ -158,59 +158,53 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.imgMgr = [PHCachingImageManager new];
     self.scanMgr = [ASPhotoScanManager shared];
 
-    __weak typeof(self) weakSelf = self;
-    [self.scanMgr subscribeProgress:^(ASScanSnapshot *snapshot) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [weakSelf updateScanStateText:snapshot];
-
-            // ✅ 只在首次构建一次（比如从缓存来的）
-            if (!weakSelf.didBuildOnce) {
-                weakSelf.didBuildOnce = YES;
-                weakSelf.lastScanState = snapshot.state;
-                [weakSelf rebuildModulesFromManagerAndReload];
-                return;
-            }
-
-            // ✅ 扫描中不刷新模块，避免闪
-            // ✅ 只有状态从 scanning -> finished 才刷新一次
-            if (weakSelf.lastScanState != snapshot.state &&
-                snapshot.state == ASScanStateFinished) {
-                weakSelf.lastScanState = snapshot.state;
-                [weakSelf rebuildModulesFromManagerAndReload];
-                return;
-            }
-
-            weakSelf.lastScanState = snapshot.state;
-        });
-    }];
-
-
+    // 先搭 UI（subscribeProgress 会立即回调）
     [self setupUI];
 
-    [self.scanMgr loadCacheAndCheckIncremental];
+    __weak typeof(self) weakSelf = self;
+    [self.scanMgr subscribeProgress:^(ASScanSnapshot *snapshot) {
 
+        // manager 已经在 main 回调，不要再多 dispatch main
+        [weakSelf updateScanStateText:snapshot];
+
+        if (!weakSelf.cv) return;
+
+        CFTimeInterval now = CACurrentMediaTime();
+
+        if (snapshot.state == ASScanStateScanning) {
+            // 扫描中：节流刷新模块（0.4s）
+            if (now - weakSelf.lastUIUpdateT > 0.4) {
+                weakSelf.lastUIUpdateT = now;
+                [weakSelf rebuildModulesFromManagerAndReload];
+            }
+            return;
+        }
+
+        if (snapshot.state == ASScanStateFinished) {
+            // 扫描结束：立刻刷新一次
+            [weakSelf rebuildModulesFromManagerAndReload];
+        }
+    }];
+
+    // 先显示缓存，再增量
+    [self.scanMgr loadCacheAndCheckIncremental];
     [self rebuildModulesFromManagerAndReload];
 
     [self requestPhotoPermissionThenStartScan];
 }
 
+#pragma mark - Scan
+
 - (void)startScanCallbacks {
+    // 如果已经 finished（有缓存），不再全量扫
+    if (self.scanMgr.snapshot.state == ASScanStateFinished) return;
+
     __weak typeof(self) weakSelf = self;
-
-    // 如果上次已经扫完，有缓存，别再全量扫
-    if (self.scanMgr.snapshot.state == ASScanStateFinished) {
-        // 不用 return 了，增量靠 subscribeProgress 推进 UI
-        return;
-    }
-
-    [self.scanMgr startFullScanWithProgress:^(ASScanSnapshot *snapshot) {
-//        [weakSelf updateScanStatomManagerAndReload];
-    } completion:^(ASScanSnapshot *snapshot, NSError * _Nullable error) {
-//        [weakSelf updateScanStateText:snapshot];
-//        [weakSelf rebuildModulesFromManagerAndReload];
+    [self.scanMgr startFullScanWithProgress:nil completion:^(ASScanSnapshot *snapshot, NSError * _Nullable error) {
+        [weakSelf updateScanStateText:snapshot];
+        [weakSelf rebuildModulesFromManagerAndReload];
     }];
 }
-
 
 #pragma mark - UI
 
@@ -222,14 +216,12 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.scanStateLabel.textColor = [UIColor grayColor];
     [self.view addSubview:self.scanStateLabel];
 
-    // ✅ 总大小（去重）
     self.totalBytesLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, CGRectGetMaxY(self.scanStateLabel.frame) + 8, w - 32 - 110, 18)];
     self.totalBytesLabel.font = [UIFont systemFontOfSize:13];
     self.totalBytesLabel.textColor = [UIColor grayColor];
-    self.totalBytesLabel.text = @"可清理总大小：--";
+    self.totalBytesLabel.text = @"总可清理（去重）：--";
     [self.view addSubview:self.totalBytesLabel];
 
-    // ✅ 一键删除
     self.deleteAllBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     self.deleteAllBtn.frame = CGRectMake(w - 16 - 100, CGRectGetMinY(self.totalBytesLabel.frame) - 4, 100, 26);
     self.deleteAllBtn.layer.cornerRadius = 6;
@@ -257,15 +249,21 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     [self.view addSubview:self.cv];
 }
 
+- (void)updateScanStateText:(ASScanSnapshot *)s {
+    NSString *state = @"未扫描";
+    if (s.state == ASScanStateScanning) state = @"扫描中";
+    if (s.state == ASScanStateFinished) state = @"扫描完成";
+
+    self.scanStateLabel.text = [NSString stringWithFormat:@"%@  已扫描:%lu  大小:%@",
+                                state,
+                                (unsigned long)s.scannedCount,
+                                [HomeModuleCell humanSize:s.scannedBytes]];
+}
+
+#pragma mark - Delete all
+
 - (void)onDeleteAllTapped {
     if (self.allCleanableIds.count == 0) return;
-
-    // ✅ 可选：扫描中先不让删（更稳）
-    if (self.scanMgr.snapshot.state == ASScanStateScanning) {
-        NSLog(@"scanning... consider stop scan before deleting");
-        // 你也可以弹 UIAlertController 提示
-        // return;
-    }
 
     NSArray<NSString *> *ids = self.allCleanableIds.allObjects;
     PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
@@ -279,13 +277,14 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                 NSLog(@"delete failed: %@", error);
                 return;
             }
+            // 删除后：重新加载缓存 + 做一次增量同步
             [self.scanMgr loadCacheAndCheckIncremental];
             [self rebuildModulesFromManagerAndReload];
         });
     }];
 }
 
-#pragma mark - Permission + scan
+#pragma mark - Permission
 
 - (void)requestPhotoPermissionThenStartScan {
     PHAuthorizationStatus st = [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
@@ -305,17 +304,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     }];
 }
 
-- (void)updateScanStateText:(ASScanSnapshot *)s {
-    NSString *state = @"未扫描";
-    if (s.state == ASScanStateScanning) state = @"扫描中";
-    if (s.state == ASScanStateFinished) state = @"扫描完成";
-
-    self.scanStateLabel.text = [NSString stringWithFormat:@"%@  已扫描:%lu",
-                                state,
-                                (unsigned long)s.scannedCount];
-}
-
-#pragma mark - Build modules
+#pragma mark - Build modules + reload
 
 - (void)rebuildModulesFromManagerAndReload {
     self.modules = [self buildModulesFromManager];
@@ -329,52 +318,61 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.deleteAllBtn.alpha = canDelete ? 1.0 : 0.4;
 
     [UIView performWithoutAnimation:^{
-          [self.cv reloadData];
+        [self.cv reloadData];
     }];
 }
-
 
 - (NSArray<ASHomeModuleVM *> *)buildModulesFromManager {
 
     NSArray<ASAssetGroup *> *dup = self.scanMgr.duplicateGroups ?: @[];
     NSArray<ASAssetGroup *> *sim = self.scanMgr.similarGroups ?: @[];
-    __block NSArray<ASAssetModel *> *shots = self.scanMgr.screenshots ?: @[];
-    __block NSArray<ASAssetModel *> *recs  = self.scanMgr.screenRecordings ?: @[];
-    __block NSArray<ASAssetModel *> *bigs  = self.scanMgr.bigVideos ?: @[];
+    NSArray<ASAssetModel *> *shots = self.scanMgr.screenshots ?: @[];
+    NSArray<ASAssetModel *> *recs  = self.scanMgr.screenRecordings ?: @[];
+    NSArray<ASAssetModel *> *bigs  = self.scanMgr.bigVideos ?: @[];
 
-    // ✅ 0) 批量校验当前仍存在的 asset（避免用到已删除的 localId）
-    NSMutableArray<NSString *> *candidateIds = [NSMutableArray array];
+    // ✅ 扫描中不要做“存在性校验”（会很重）；finished 再做一次矫正即可
+    BOOL needExistCheck = (self.scanMgr.snapshot.state == ASScanStateFinished);
 
-    void (^collectIdsFromModels)(NSArray<ASAssetModel *> *) = ^(NSArray<ASAssetModel *> *arr) {
-        for (ASAssetModel *m in arr) {
-            if (m.localId.length) [candidateIds addObject:m.localId];
-        }
-    };
+    NSMutableSet<NSString *> *existIdSet = nil;
 
-    void (^collectIdsFromGroups)(NSArray<ASAssetGroup *> *) = ^(NSArray<ASAssetGroup *> *groups) {
-        for (ASAssetGroup *g in groups) {
-            for (ASAssetModel *m in g.assets) {
-                if (m.localId.length) [candidateIds addObject:m.localId];
+    if (needExistCheck) {
+        // 收集 candidateIds
+        NSMutableArray<NSString *> *candidateIds = [NSMutableArray array];
+
+        void (^collectIdsFromModels)(NSArray<ASAssetModel *> *) = ^(NSArray<ASAssetModel *> *arr) {
+            for (ASAssetModel *m in arr) if (m.localId.length) [candidateIds addObject:m.localId];
+        };
+        void (^collectIdsFromGroups)(NSArray<ASAssetGroup *> *) = ^(NSArray<ASAssetGroup *> *groups) {
+            for (ASAssetGroup *g in groups) {
+                for (ASAssetModel *m in g.assets) if (m.localId.length) [candidateIds addObject:m.localId];
             }
-        }
+        };
+
+        collectIdsFromGroups(sim);
+        collectIdsFromGroups(dup);
+        collectIdsFromModels(shots);
+        collectIdsFromModels(recs);
+        collectIdsFromModels(bigs);
+
+        PHFetchResult<PHAsset *> *existFR = [PHAsset fetchAssetsWithLocalIdentifiers:candidateIds options:nil];
+        existIdSet = [NSMutableSet setWithCapacity:existFR.count];
+        [existFR enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            if (obj.localIdentifier.length) [existIdSet addObject:obj.localIdentifier];
+        }];
+    }
+
+    // helper：是否有效（扫描中 existIdSet==nil 时直接放行）
+    BOOL (^isValidId)(NSString *) = ^BOOL(NSString *lid) {
+        if (!lid.length) return NO;
+        if (!existIdSet) return YES;
+        return [existIdSet containsObject:lid];
     };
 
-    collectIdsFromGroups(sim);
-    collectIdsFromGroups(dup);
-    collectIdsFromModels(shots);
-    collectIdsFromModels(recs);
-    collectIdsFromModels(bigs);
-
-    PHFetchResult<PHAsset *> *existFR = [PHAsset fetchAssetsWithLocalIdentifiers:candidateIds options:nil];
-    NSMutableSet<NSString *> *existIdSet = [NSMutableSet setWithCapacity:existFR.count];
-    
     NSArray<ASAssetModel *> *(^filterValidModels)(NSArray<ASAssetModel *> *) =
     ^NSArray<ASAssetModel *> *(NSArray<ASAssetModel *> *arr) {
         NSMutableArray<ASAssetModel *> *out = [NSMutableArray array];
         for (ASAssetModel *m in arr) {
-            if (!m.localId.length) continue;
-            if (![existIdSet containsObject:m.localId]) continue;
-            [out addObject:m];
+            if (isValidId(m.localId)) [out addObject:m];
         }
         return out;
     };
@@ -383,29 +381,23 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     recs  = filterValidModels(recs);
     bigs  = filterValidModels(bigs);
 
-    [existFR enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        if (obj.localIdentifier.length) [existIdSet addObject:obj.localIdentifier];
-    }];
-
-    
-    // 1) flatten groups（你原来就有）
+    // flatten groups（过滤 invalid，且 >=2 才算分组）
     NSArray<ASAssetModel *> *(^flattenGroups)(NSArray<ASAssetGroup *> *, ASGroupType) =
     ^NSArray<ASAssetModel *> *(NSArray<ASAssetGroup *> *groups, ASGroupType type) {
-        NSMutableArray *arr = [NSMutableArray array];
+        NSMutableArray<ASAssetModel *> *arr = [NSMutableArray array];
+
         for (ASAssetGroup *g in groups) {
             if (g.type != type) continue;
-            // ✅ 小于2个不算分组（你新要求）
-            // ✅ 小于2个不算分组（但这里要以“有效资产数”判断）
+
             NSMutableArray<ASAssetModel *> *valid = [NSMutableArray array];
             for (ASAssetModel *m in g.assets) {
-                if (!m.localId.length) continue;
-                if (![existIdSet containsObject:m.localId]) continue; // ✅ 已删除的过滤掉
-                [valid addObject:m];
+                if (isValidId(m.localId)) [valid addObject:m];
             }
             if (valid.count < 2) continue;
 
             [arr addObjectsFromArray:valid];
         }
+
         [arr sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
             NSDate *da = a.creationDate ?: a.modificationDate;
             NSDate *db = b.creationDate ?: b.modificationDate;
@@ -417,26 +409,18 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         return arr;
     };
 
-    // 只取“第一个有效分组(>=2)”的前两张；凑不齐两张就返回空
     NSArray<NSString *> *(^thumbsFromFirstValidGroup)(NSArray<ASAssetGroup *> *, ASGroupType) =
     ^NSArray<NSString *>* (NSArray<ASAssetGroup *> *groups, ASGroupType type) {
-
         for (ASAssetGroup *g in groups) {
             if (g.type != type) continue;
-            NSInteger validCount = 0;
-            for (ASAssetModel *m in g.assets) {
-                if (m.localId.length && [existIdSet containsObject:m.localId]) validCount++;
-            }
-            if (validCount < 2) continue;
 
-            NSMutableArray<NSString *> *ids = [NSMutableArray arrayWithCapacity:2];
+            NSMutableArray<NSString *> *ids = [NSMutableArray array];
             for (ASAssetModel *m in g.assets) {
-                if (!m.localId.length) continue;
-                if (![existIdSet containsObject:m.localId]) continue; //  加这一行
+                if (!isValidId(m.localId)) continue;
                 [ids addObject:m.localId];
                 if (ids.count == 2) break;
             }
-            return (ids.count == 2) ? ids : @[]; //  不允许只返回1张
+            if (ids.count >= 1) return ids; // 允许 1 张
         }
         return @[];
     };
@@ -446,19 +430,18 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     NSArray<ASAssetModel *> *dupImg = flattenGroups(dup, ASGroupTypeDuplicateImage);
     NSArray<ASAssetModel *> *dupVid = flattenGroups(dup, ASGroupTypeDuplicateVideo);
 
-    // --- 3) 全局去重统计（总可清理：去重）
+    // ✅ 总可清理（去重）：以 localId 做去重；这里按“模块全部算进总清理”
     NSMutableDictionary<NSString*, NSNumber*> *bytesById = [NSMutableDictionary dictionary];
 
-    void (^collect)(NSArray<ASAssetModel *> *) = ^(NSArray<ASAssetModel *> *arr) {
+    void (^collectUniq)(NSArray<ASAssetModel *> *) = ^(NSArray<ASAssetModel *> *arr) {
         for (ASAssetModel *m in arr) {
-            if (!m.localId.length) continue;
-            if (![existIdSet containsObject:m.localId]) continue; // ✅ 加这一行
+            if (!isValidId(m.localId)) continue;
             if (!bytesById[m.localId]) bytesById[m.localId] = @(m.fileSizeBytes);
         }
     };
 
-    collect(simImg); collect(simVid); collect(dupImg); collect(dupVid);
-    collect(shots); collect(recs); collect(bigs);
+    collectUniq(simImg); collectUniq(simVid); collectUniq(dupImg); collectUniq(dupVid);
+    collectUniq(shots); collectUniq(recs); collectUniq(bigs);
 
     uint64_t uniqBytes = 0;
     for (NSNumber *n in bytesById.allValues) uniqBytes += n.unsignedLongLongValue;
@@ -466,26 +449,22 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.allCleanableIds = [NSSet setWithArray:bytesById.allKeys];
     self.allCleanableBytes = uniqBytes;
 
-    // --- 4) 普通列表模块缩略图：跨模块去重（仅给 shots/recs/bigs 用）
+    // ✅ 缩略图：跨模块去重（shots/recs/bigs 用）
     NSMutableSet<NSString *> *usedThumbIds = [NSMutableSet set];
 
     NSArray<NSString *> *(^pickThumbIds)(NSArray<ASAssetModel *> *) =
     ^NSArray<NSString *> *(NSArray<ASAssetModel *> *arr) {
-        NSMutableArray *ids = [NSMutableArray array];
-
+        NSMutableArray<NSString *> *ids = [NSMutableArray array];
         for (ASAssetModel *m in arr) {
-            if (!m.localId.length) continue;
-            if (![existIdSet containsObject:m.localId]) continue;
+            if (!isValidId(m.localId)) continue;
             if ([usedThumbIds containsObject:m.localId]) continue;
             [usedThumbIds addObject:m.localId];
             [ids addObject:m.localId];
-            if (ids.count == 2) return ids;
+            if (ids.count == 2) break;
         }
-        // 不够2张就不补（你也可以保留“补齐”逻辑）
         return ids;
     };
 
-    // 5) VM builders
     ASHomeModuleVM *(^makeVM)(ASHomeModuleType, NSString *, NSArray<ASAssetModel *> *) =
     ^ASHomeModuleVM *(ASHomeModuleType type, NSString *title, NSArray<ASAssetModel *> *arr) {
         ASHomeModuleVM *vm = [ASHomeModuleVM new];
@@ -496,7 +475,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         for (ASAssetModel *m in arr) bytes += m.fileSizeBytes;
         vm.totalCount = arr.count;
         vm.totalBytes = bytes;
-
         vm.thumbLocalIds = pickThumbIds(arr);
         return vm;
     };
@@ -512,7 +490,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         vm.totalCount = flat.count;
         vm.totalBytes = bytes;
 
-        // ✅ 只看第一个分组：没有分组则空白
         vm.thumbLocalIds = thumbsFromFirstValidGroup(groups, gt);
         return vm;
     };
@@ -536,12 +513,10 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     ASHomeModuleVM *vm = self.modules[indexPath.item];
 
     ASAssetListMode mode;
-    if (![self mapHomeModule:vm.type toListMode:&mode]) {
-        return; // 没映射就不跳（理论上不会）
-    }
+    if (![self mapHomeModule:vm.type toListMode:&mode]) return;
 
     ASAssetListViewController *vc = [[ASAssetListViewController alloc] initWithMode:mode];
-    vc.hidesBottomBarWhenPushed = YES;   //隐藏底部 tabbar
+    vc.hidesBottomBarWhenPushed = YES;
     [self.navigationController pushViewController:vc animated:YES];
 }
 
@@ -560,7 +535,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     return NO;
 }
 
-
 #pragma mark - Collection
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
@@ -569,17 +543,22 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 - (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     HomeModuleCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"HomeModuleCell" forIndexPath:indexPath];
+
     ASHomeModuleVM *vm = self.modules[indexPath.item];
     [cell applyVM:vm];
 
-    NSArray *ids = vm.thumbLocalIds ?: @[];
+    NSArray<NSString *> *ids = vm.thumbLocalIds ?: @[];
     cell.representedLocalIds = ids;
 
-    if (ids.count < 2) {
-        cell.img1.image = nil;
-        cell.img2.image = nil;
-        return cell;
-    }
+    // 先清空，避免复用串图
+    cell.img1.image = nil;
+    cell.img2.image = nil;
+
+    if (ids.count == 0) return cell;
+
+    // ✅ 关键：保证 frame/bounds 已经有值再算 targetSize
+    [cell setNeedsLayout];
+    [cell layoutIfNeeded];
 
     [self loadThumbsForVM:vm intoCell:cell atIndexPath:indexPath];
     return cell;
@@ -596,18 +575,24 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 #pragma mark - Thumbnails
 
 - (void)loadThumbsForVM:(ASHomeModuleVM *)vm intoCell:(HomeModuleCell *)cell atIndexPath:(NSIndexPath *)indexPath {
-    if (vm.thumbLocalIds.count < 2) {
-         cell.img1.image = nil;
-         cell.img2.image = nil;
-         return;
-     }
 
-     PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:vm.thumbLocalIds options:nil];
-     if (fr.count < 2) { // fetch 不足两张也当空
-         cell.img1.image = nil;
-         cell.img2.image = nil;
-         return;
-     }
+    NSArray<NSString *> *ids = vm.thumbLocalIds ?: @[];
+    if (ids.count == 0) {
+        cell.img1.image = nil;
+        cell.img2.image = nil;
+        return;
+    }
+
+    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
+    if (fr.count == 0) {
+        cell.img1.image = nil;
+        cell.img2.image = nil;
+        return;
+    }
+
+    if (fr.count == 1) {
+        cell.img2.image = nil;
+    }
 
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.networkAccessAllowed = YES;
@@ -617,7 +602,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
     CGFloat scale = UIScreen.mainScreen.scale;
 
-    // 兜底：如果此时 bounds 还没布局好，用 frame 或固定值
     CGSize s1 = cell.img1.bounds.size;
     CGSize s2 = cell.img2.bounds.size;
     if (s1.width <= 1 || s1.height <= 1) s1 = cell.img1.frame.size;
@@ -634,9 +618,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         dispatch_async(dispatch_get_main_queue(), ^{
             HomeModuleCell *nowCell = (HomeModuleCell *)[weakSelf.cv cellForItemAtIndexPath:indexPath];
             if (!nowCell) return;
-
-            // 防复用：确保还是同一个模块的 localIds
-            if (![nowCell.representedLocalIds isEqualToArray:vm.thumbLocalIds]) return;
+            if (![nowCell.representedLocalIds isEqualToArray:vm.thumbLocalIds ?: @[]]) return;
 
             if (idx == 0) nowCell.img1.image = img;
             else nowCell.img2.image = img;

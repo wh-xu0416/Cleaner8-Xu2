@@ -365,6 +365,10 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 @interface ASPhotoScanManager ()
 @property (atomic) BOOL pendingIncremental;
 @property (atomic) BOOL incrementalScheduled;
+@property (nonatomic, strong) PHFetchResult<PHAsset *> *allAssetsFetchResult;
+@property (nonatomic, strong) NSMutableDictionary<NSString*, PHAsset*> *pendingInsertedMap; // id->asset
+@property (nonatomic, strong) NSMutableSet<NSString*> *pendingRemovedIDs;
+@property (nonatomic, strong) dispatch_block_t incrementalDebounceBlock;
 
 @property (nonatomic, strong) NSCache<NSString*, VNFeaturePrintObservation*> *visionMemo;
 @property (nonatomic, strong) dispatch_queue_t workQ;
@@ -414,10 +418,17 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     return m;
 }
 
+- (void)refreshAllAssetsFetchResult {
+    self.allAssetsFetchResult = [PHAsset fetchAssetsWithOptions:[self allImageVideoFetchOptions]];
+}
+
 - (instancetype)init {
     if (self=[super init]) {
         _workQ = dispatch_queue_create("as.photo.scan.q", DISPATCH_QUEUE_SERIAL);
         _imageManager = [PHCachingImageManager new];
+
+        _pendingInsertedMap = [NSMutableDictionary dictionary];
+        _pendingRemovedIDs = [NSMutableSet set];
 
         _snapshot = [ASScanSnapshot new];
         _duplicateGroups = @[];
@@ -461,7 +472,7 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 - (void)startFullScanWithProgress:(ASScanProgressBlock)progress
                        completion:(ASScanCompletionBlock)completion
 {
-    self.progressBlock = progress;
+    if (progress) self.progressBlock = progress;
     self.completionBlock = completion;
     self.cancelled = NO;
 
@@ -487,9 +498,8 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 
             self.currentDay = nil;
 
-            PHFetchOptions *opt = [PHFetchOptions new];
-            opt.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
-            PHFetchResult<PHAsset *> *result = [PHAsset fetchAssetsWithOptions:opt];
+            PHFetchResult<PHAsset *> *result =
+                [PHAsset fetchAssetsWithOptions:[self allImageVideoFetchOptions]];
 
             NSDate *maxAnchor = [NSDate dateWithTimeIntervalSince1970:0];
 
@@ -508,10 +518,14 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
                     if ([md compare:maxAnchor] == NSOrderedDescending) maxAnchor = md;
 
                     NSDate *day = ASDayStart(cd);
-                    if (!self.currentDay) self.currentDay = day;
-                    if (![day isEqualToDate:self.currentDay]) {
+                    if (!self.currentDay || ![day isEqualToDate:self.currentDay]) {
                         self.currentDay = day;
+
+                        // ✅关键：按天对比，切天就清空索引
+                        [self.indexImage removeAllObjects];
+                        [self.indexVideo removeAllObjects];
                     }
+
 
                     ASAssetModel *model = [self buildModelForAsset:asset error:&error];
                     if (!model) { if (error) break; else continue; }
@@ -630,7 +644,289 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         self.pendingIncremental = YES;
         return;
     }
-    [self scheduleIncrementalCheck];
+
+    PHFetchResult *fr = self.allAssetsFetchResult;
+    PHFetchResultChangeDetails *changes = fr ? [changeInstance changeDetailsForFetchResult:fr] : nil;
+    if (!changes) { [self scheduleIncrementalCheck]; return; }
+
+    self.allAssetsFetchResult = changes.fetchResultAfterChanges;
+
+    if (changes.hasIncrementalChanges) {
+        NSArray<PHAsset*> *insertedRaw = changes.insertedObjects ?: @[];
+        NSArray<PHAsset*> *removedRaw  = changes.removedObjects  ?: @[];
+
+        NSArray<PHAsset*> *inserted = insertedRaw ?: @[];
+        NSArray<PHAsset*> *removed  = removedRaw  ?: @[];
+
+        if (inserted.count == 0 && removed.count == 0) return;
+
+        // 走“删 + 重建 affectedDays”
+        [self scheduleIncrementalRebuildWithInserted:inserted removed:removed];
+    } else {
+        // 无增量细节 → 你可以保留原来的 anchor sync（或做一次全库 diff）
+        [self scheduleIncrementalCheck];
+    }
+}
+
+- (void)scheduleIncrementalRebuildWithInserted:(NSArray<PHAsset *> *)inserted
+                                      removed:(NSArray<PHAsset *> *)removed
+{
+    // 全量扫描中：只标记，等全量结束后再触发一次（你已有 pendingIncremental 逻辑）
+    if (self.snapshot.state == ASScanStateScanning) {
+        self.pendingIncremental = YES;
+        return;
+    }
+
+    // 合并：inserted / removed 先汇总起来
+    for (PHAsset *a in inserted) {
+        NSString *lid = a.localIdentifier ?: @"";
+        if (!lid.length) continue;
+        // 如果同一个 id 同时在 removed 里，优先以 inserted 为准（新增/恢复）
+        [self.pendingRemovedIDs removeObject:lid];
+        self.pendingInsertedMap[lid] = a;
+    }
+
+    for (PHAsset *a in removed) {
+        NSString *lid = a.localIdentifier ?: @"";
+        if (!lid.length) continue;
+        // 如果刚插入过又删掉，移出 inserted，并记为 removed
+        [self.pendingInsertedMap removeObjectForKey:lid];
+        [self.pendingRemovedIDs addObject:lid];
+    }
+
+    // debounce：取消上一次延迟任务，重新计时
+    if (self.incrementalDebounceBlock) {
+        dispatch_block_cancel(self.incrementalDebounceBlock);
+        self.incrementalDebounceBlock = nil;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_block_t block = dispatch_block_create(0, ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+
+        // 拿出本次要处理的合并集合
+        NSArray<PHAsset *> *finalInserted = self.pendingInsertedMap.allValues ?: @[];
+        NSArray<NSString *> *finalRemovedIDs = self.pendingRemovedIDs.allObjects ?: @[];
+
+        // 清空 pending（下一波变化重新累计）
+        [self.pendingInsertedMap removeAllObjects];
+        [self.pendingRemovedIDs removeAllObjects];
+
+        // removedIDs -> PHAsset(可选)：如果你 rebuild 只需要 IDs，直接传 IDs 更好
+        NSMutableArray<PHAsset *> *finalRemovedAssets = [NSMutableArray array];
+        for (NSString *lid in finalRemovedIDs) {
+            PHAsset *a = [PHAsset fetchAssetsWithLocalIdentifiers:@[lid] options:nil].firstObject;
+            if (a) [finalRemovedAssets addObject:a];
+            // 若已被删，fetch 可能拿不到；没关系，你后面按 ID 删除即可
+        }
+
+        // 真正执行增量重建（跑在 workQ）
+        dispatch_async(self.workQ, ^{
+            // 如果缓存还没 ready（比如没 full scan 完成），直接退出
+            if (self.cache.snapshot.state != ASScanStateFinished) return;
+
+            // 这里建议你用 “删 + rebuildDays” 的实现：
+            //  - inserted 过滤 screenRecording（可在 rebuild 内用 ASIsScreenRecording 再过滤）
+            //  - removed 用 IDs 删除
+            [self incrementalRebuildWithInserted:finalInserted removed:finalRemovedAssets];
+        });
+    });
+
+    self.incrementalDebounceBlock = block;
+
+    // 0.4~0.6s 都行；Swift 里常用 0.6
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
+                   self.workQ,
+                   block);
+}
+
+- (void)incrementalRebuildWithInserted:(NSArray<PHAsset*> *)inserted
+                               removed:(NSArray<PHAsset*> *)removed
+{
+    // 0) UI scanning（同 Swift beginIncrementalScan）
+    self.snapshot.state = ASScanStateScanning;
+    [self emitProgress];
+
+    // 1) 从缓存态加载 mutable 容器（等价 Swift var updated = getGroups()）
+    self.dupGroupsM = [self deepMutableGroups:self.cache.duplicateGroups];
+    self.simGroupsM = [self deepMutableGroups:self.cache.similarGroups];
+    self.screenshotsM = [self.cache.screenshots mutableCopy] ?: [NSMutableArray array];
+    self.screenRecordingsM = [self.cache.screenRecordings mutableCopy] ?: [NSMutableArray array];
+    self.bigVideosM = [self.cache.bigVideos mutableCopy] ?: [NSMutableArray array];
+
+    // 2) 删除：剔除 removed IDs（等价 Swift 先删）
+    NSMutableSet<NSString*> *deletedIDs = [NSMutableSet set];
+    for (PHAsset *a in removed) if (a.localIdentifier.length) [deletedIDs addObject:a.localIdentifier];
+    if (deletedIDs.count) {
+        [self removeModelsByIds:deletedIDs];
+        // 如果你有 visionMemo / screenRecordingMemo / size cache，也在这里清掉（同 Swift 清缓存）
+    }
+
+    // 3) affectedDays：只取 inserted 的创建日期（等价 Swift）
+    NSMutableSet<NSDate*> *affectedDayStarts = [NSMutableSet set];
+    for (PHAsset *a in inserted) {
+        NSDate *cd = a.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+        [affectedDayStarts addObject:ASDayStart(cd)];
+    }
+
+    // 4) 重建这些天：先从现有容器移除这些天的所有资产，再按全量口径重扫当天资产并追加
+    if (affectedDayStarts.count) {
+        [self rebuildDaysObjC:affectedDayStarts];
+    }
+
+    // 5) 统一发布（等价 Swift applyGroupsFinal）：重新计算 snapshot + 写 cache + publish
+    [self recomputeSnapshotFromCurrentContainers];
+
+    self.cache.snapshot = self.snapshot;
+    self.cache.duplicateGroups = [self.dupGroupsM copy];
+    self.cache.similarGroups   = [self.simGroupsM copy];
+    self.cache.screenshots     = [self.screenshotsM copy];
+    self.cache.screenRecordings = [self.screenRecordingsM copy];
+    self.cache.bigVideos       = [self.bigVideosM copy];
+    self.cache.anchorDate      = [NSDate date]; // anchor 现在只是“last update time”，不再作为核心 diff 依据
+    [self saveCache];
+
+    [self applyCacheToPublicStateWithCompletion:^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.snapshot.state = ASScanStateFinished;
+            [self emitProgress];
+        });
+    }];
+}
+
+#pragma mark - FetchOptions (All image+video, include hidden, include sources)
+
+- (PHFetchOptions *)allImageVideoFetchOptions {
+    PHFetchOptions *opt = [PHFetchOptions new];
+    opt.sortDescriptors = @[
+        [NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]
+    ];
+
+    // ✅拿到所有 image + video（不要在 predicate 里排除截屏/录屏）
+    opt.predicate = [NSPredicate predicateWithFormat:
+                     @"(mediaType == %d) OR (mediaType == %d)",
+                     PHAssetMediaTypeImage, PHAssetMediaTypeVideo];
+
+    opt.includeHiddenAssets = YES;
+    opt.includeAssetSourceTypes =
+        PHAssetSourceTypeUserLibrary |
+        PHAssetSourceTypeCloudShared |
+        PHAssetSourceTypeiTunesSynced;
+
+    return opt;
+}
+
+// 仅用于相似/重复（先在 predicate 里排除截屏；录屏没法纯 predicate 判，只能在循环里判）
+- (PHFetchOptions *)comparableFetchOptions {
+    PHFetchOptions *opt = [PHFetchOptions new];
+    opt.sortDescriptors = @[
+        [NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]
+    ];
+
+    // ✅ image + video，但先排除 screenshot（Swift 那个逻辑）
+    opt.predicate = [NSPredicate predicateWithFormat:
+        @"(((mediaType == %d) OR (mediaType == %d)) AND NOT (mediaSubtypes & %d > 0))",
+        PHAssetMediaTypeImage, PHAssetMediaTypeVideo,
+        PHAssetMediaSubtypePhotoScreenshot
+    ];
+
+    opt.includeHiddenAssets = YES;
+    opt.includeAssetSourceTypes =
+        PHAssetSourceTypeUserLibrary |
+        PHAssetSourceTypeCloudShared |
+        PHAssetSourceTypeiTunesSynced;
+
+    return opt;
+}
+
+
+- (void)removeModelsByDayStarts:(NSSet<NSDate*> *)dayStarts {
+    NSPredicate *keep = [NSPredicate predicateWithBlock:^BOOL(ASAssetModel *m, NSDictionary *_) {
+        NSDate *cd = m.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+        NSDate *d0 = ASDayStart(cd);
+        return ![dayStarts containsObject:d0];
+    }];
+
+    // groups：保留不在这些天的 + 组内>=2
+    NSArray *(^filterGroups)(NSArray<ASAssetGroup*>*) = ^NSArray*(NSArray *groups){
+        NSMutableArray *out = [NSMutableArray array];
+        for (ASAssetGroup *g in groups) {
+            NSMutableArray *kept = [[g.assets filteredArrayUsingPredicate:keep] mutableCopy];
+            if (kept.count >= 2) {
+                g.assets = kept;
+                [out addObject:g];
+            }
+        }
+        return out;
+    };
+
+    self.dupGroupsM = [[filterGroups(self.dupGroupsM) mutableCopy] ?: [NSMutableArray array] mutableCopy];
+    self.simGroupsM = [[filterGroups(self.simGroupsM) mutableCopy] ?: [NSMutableArray array] mutableCopy];
+
+    self.screenshotsM = [[self.screenshotsM filteredArrayUsingPredicate:keep] mutableCopy];
+    self.screenRecordingsM = [[self.screenRecordingsM filteredArrayUsingPredicate:keep] mutableCopy];
+    self.bigVideosM = [[self.bigVideosM filteredArrayUsingPredicate:keep] mutableCopy];
+}
+
+- (void)rebuildDaysObjC:(NSSet<NSDate*> *)dayStarts {
+    // 1) 移除这些天的所有旧资产
+    [self removeModelsByDayStarts:dayStarts];
+
+    // 2) 逐天重扫（全量同口径：当天 index、当天 compare）
+    NSCalendar *cal = [NSCalendar currentCalendar];
+
+    for (NSDate *dayStart in dayStarts) {
+        NSDate *dayEnd = [cal dateByAddingUnit:NSCalendarUnitDay value:1 toDate:dayStart options:0];
+
+        PHFetchOptions *opt = [self allImageVideoFetchOptions];
+        // ✅按天过滤（image+video）
+        opt.predicate = [NSPredicate predicateWithFormat:
+            @"((mediaType == %d) OR (mediaType == %d)) AND creationDate >= %@ AND creationDate < %@",
+            PHAssetMediaTypeImage, PHAssetMediaTypeVideo,
+            dayStart, dayEnd
+        ];
+
+        PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithOptions:opt];
+
+        // ✅当天 compare：先清空索引（保持你“按天分组”的策略）
+        [self.indexImage removeAllObjects];
+        [self.indexVideo removeAllObjects];
+
+        for (PHAsset *asset in fr) {
+            NSError *err = nil;
+
+            ASAssetModel *m = [self buildModelForAsset:asset error:&err];
+            if (!m) continue;
+
+            // ✅先分流：截屏/录屏/大视频
+            if (ASIsScreenshot(asset)) {
+                [self.screenshotsM addObject:m];
+                continue;
+            }
+            if (ASIsScreenRecording(asset)) {
+                [self.screenRecordingsM addObject:m];
+                continue;
+            }
+            if (asset.mediaType == PHAssetMediaTypeVideo && m.fileSizeBytes >= kBigVideoMinBytes) {
+                [self.bigVideosM addObject:m];
+            }
+
+            // ✅相似/重复：排除截屏/录屏（由 ASAllowedForCompare 控制）
+            if (!ASAllowedForCompare(asset)) continue;
+
+            [self matchAndGroup:m asset:asset];
+
+            // ✅如果你希望增量重建也维持 comparable pools（建议加上）
+            if (asset.mediaType == PHAssetMediaTypeImage) {
+                if (!self.comparableImagesM) self.comparableImagesM = [NSMutableArray array];
+                [self.comparableImagesM addObject:m];
+            } else if (asset.mediaType == PHAssetMediaTypeVideo) {
+                if (!self.comparableVideosM) self.comparableVideosM = [NSMutableArray array];
+                [self.comparableVideosM addObject:m];
+            }
+        }
+    }
 }
 
 - (void)scheduleIncrementalCheck {
@@ -658,9 +954,13 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         NSDate *anchor = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
 
         // 1) delta (new/modified)
-        PHFetchOptions *opt = [PHFetchOptions new];
+        PHFetchOptions *opt = [self allImageVideoFetchOptions];
         opt.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
-        opt.predicate = [NSPredicate predicateWithFormat:@"(creationDate > %@) OR (modificationDate > %@)", anchor, anchor];
+        opt.predicate = [NSPredicate predicateWithFormat:
+            @"(((mediaType == %d) OR (mediaType == %d)) AND ((creationDate > %@) OR (modificationDate > %@)))",
+            PHAssetMediaTypeImage, PHAssetMediaTypeVideo,
+            anchor, anchor
+        ];
         PHFetchResult<PHAsset *> *delta = [PHAsset fetchAssetsWithOptions:opt];
 
         // 2) delete check (only when delta has changes)
@@ -1334,22 +1634,6 @@ static inline void ASDCT1D_64(const float *in, float *out) {
     for (ASAssetModel *m in self.comparableVideosM) addModelToIndex(m, self.indexVideo);
 }
 
-- (void)publishLiveContainers {
-    NSArray<ASAssetGroup *> *dupCopy = [self.dupGroupsM copy] ?: @[];
-    NSArray<ASAssetGroup *> *simCopy = [self.simGroupsM copy] ?: @[];
-    NSArray<ASAssetModel *> *shotCopy = [self.screenshotsM copy] ?: @[];
-    NSArray<ASAssetModel *> *recCopy  = [self.screenRecordingsM copy] ?: @[];
-    NSArray<ASAssetModel *> *bigCopy  = [self.bigVideosM copy] ?: @[];
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        self.duplicateGroups = dupCopy;
-        self.similarGroups = simCopy;
-        self.screenshots = shotCopy;
-        self.screenRecordings = recCopy;
-        self.bigVideos = bigCopy;
-    });
-}
-
 #pragma mark - Cache IO
 
 - (void)loadCacheIfExists {
@@ -1413,18 +1697,32 @@ static inline void ASDCT1D_64(const float *in, float *out) {
 - (void)emitProgress {
     self.snapshot.lastUpdated = [NSDate date];
 
-    // ✅ 关键：每次 progress 都先把 live containers 发布出去
-    [self publishLiveContainers];
+    // 先把当前扫描中的 mutable 容器拷贝出来（在 workQ 上）
+    NSArray<ASAssetGroup *> *dupCopy = [self.dupGroupsM copy] ?: self.cache.duplicateGroups ?: @[];
+    NSArray<ASAssetGroup *> *simCopy = [self.simGroupsM copy] ?: self.cache.similarGroups ?: @[];
+    NSArray<ASAssetModel *> *shotCopy = [self.screenshotsM copy] ?: self.cache.screenshots ?: @[];
+    NSArray<ASAssetModel *> *recCopy  = [self.screenRecordingsM copy] ?: self.cache.screenRecordings ?: @[];
+    NSArray<ASAssetModel *> *bigCopy  = [self.bigVideosM copy] ?: self.cache.bigVideos ?: @[];
 
+    ASScanSnapshot *snap = self.snapshot; // 同一个对象也行，这里只是引用一下
+
+    // ✅关键：在同一次 main dispatch 中，先更新公开容器，再回调 UI
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (self.progressBlock) self.progressBlock(self.snapshot);
+        self.duplicateGroups = dupCopy;
+        self.similarGroups = simCopy;
+        self.screenshots = shotCopy;
+        self.screenRecordings = recCopy;
+        self.bigVideos = bigCopy;
+
+        if (self.progressBlock) self.progressBlock(snap);
     });
 }
+
 
 - (void)emitProgressMaybe {
     static CFTimeInterval lastT = 0;
     CFTimeInterval t = CACurrentMediaTime();
-    if (self.snapshot.scannedCount % 20 == 0 || (t - lastT) > 0.3) {
+    if (self.snapshot.scannedCount % 20 == 0 || (t - lastT) > 1) {
         lastT = t;
         [self emitProgress];
     }
