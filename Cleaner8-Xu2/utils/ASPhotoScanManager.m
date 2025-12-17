@@ -719,46 +719,49 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
 
-        // 拿出本次要处理的合并集合
         NSArray<PHAsset *> *finalInserted = self.pendingInsertedMap.allValues ?: @[];
         NSArray<NSString *> *finalRemovedIDs = self.pendingRemovedIDs.allObjects ?: @[];
 
-        // 清空 pending（下一波变化重新累计）
         [self.pendingInsertedMap removeAllObjects];
         [self.pendingRemovedIDs removeAllObjects];
 
-        dispatch_async(self.workQ, ^{
-            if (self.cache.snapshot.state != ASScanStateFinished) return;
+        if (self.cache.snapshot.state != ASScanStateFinished) return;
 
-            [self incrementalRebuildWithInserted:finalInserted removedIDs:finalRemovedIDs];
-        });
+        [self incrementalRebuildWithInserted:finalInserted removedIDs:finalRemovedIDs];
     });
-
-    self.incrementalDebounceBlock = block;
-
-    // 0.4~0.6s 都行；Swift 里常用 0.6
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
                    self.workQ,
                    block);
 }
 
+- (void)publishSnapshotStateOnMain:(ASScanState)state {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.snapshot.state = state;
+        if (self.progressBlock) self.progressBlock(self.snapshot);
+    });
+}
+
 - (void)incrementalRebuildWithInserted:(NSArray<PHAsset*> *)inserted
                             removedIDs:(NSArray<NSString*> *)removedIDs
 {
+    NSDate *newAnchor = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+
     // ✅ 先把 comparable pools 从 cache 载入（否则 rebuildDays 里会不断 append / 或者丢失）
     self.comparableImagesM = [self.cache.comparableImages mutableCopy] ?: [NSMutableArray array];
     self.comparableVideosM = [self.cache.comparableVideos mutableCopy] ?: [NSMutableArray array];
 
-    // 0) UI scanning
-    self.snapshot.state = ASScanStateScanning;
-    [self emitProgress];
+    // 1) 从缓存态加载 mutable 容器（先做这个）
+    self.comparableImagesM = [self.cache.comparableImages mutableCopy] ?: [NSMutableArray array];
+    self.comparableVideosM = [self.cache.comparableVideos mutableCopy] ?: [NSMutableArray array];
 
-    // 1) 从缓存态加载 mutable 容器
     self.dupGroupsM = [self deepMutableGroups:self.cache.duplicateGroups];
     self.simGroupsM = [self deepMutableGroups:self.cache.similarGroups];
     self.screenshotsM = [self.cache.screenshots mutableCopy] ?: [NSMutableArray array];
     self.screenRecordingsM = [self.cache.screenRecordings mutableCopy] ?: [NSMutableArray array];
     self.bigVideosM = [self.cache.bigVideos mutableCopy] ?: [NSMutableArray array];
+
+    // 0) UI scanning（统一在 main）
+    [self publishSnapshotStateOnMain:ASScanStateScanning];
 
     // 2) 删除：剔除 removed IDs
     NSMutableSet<NSString*> *deletedIDs = [NSMutableSet setWithArray:(removedIDs ?: @[])];
@@ -769,11 +772,10 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         for (NSString *lid in deletedIDs) {
             if (lid.length) {
                 [self.visionMemo removeObjectForKey:lid];
-                [[ASScreenRecordingMemo() mutableCopy] removeObjectForKey:lid]; // ❌不要这样
             }
         }
 
-        // ✅正确清 screenRecording memo（它本身就是 NSCache，直接 remove 即可）
+        // 正确清 screenRecording memo（它本身就是 NSCache，直接 remove 即可）
         for (NSString *lid in deletedIDs) {
             if (lid.length) {
                 [ASScreenRecordingMemo() removeObjectForKey:lid];
@@ -783,14 +785,18 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 
     // 3) affectedDays：只取 inserted 的创建日期
     NSMutableSet<NSDate*> *affectedDayStarts = [NSMutableSet set];
+
     for (PHAsset *a in inserted) {
         NSDate *cd = a.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+        NSDate *md = a.modificationDate ?: cd;
+
         [affectedDayStarts addObject:ASDayStart(cd)];
+        [affectedDayStarts addObject:ASDayStart(md)];
     }
 
     // 4) 重建这些天
     if (affectedDayStarts.count) {
-        [self rebuildDaysObjC:affectedDayStarts];
+        newAnchor = [self rebuildDaysObjC:affectedDayStarts];
     }
 
     // ✅重建完：用 comparable pools rebuild index（否则后续命中会怪）
@@ -810,7 +816,7 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     self.cache.comparableImages = [self.comparableImagesM copy];
     self.cache.comparableVideos = [self.comparableVideosM copy];
 
-    self.cache.anchorDate      = [NSDate date];
+    self.cache.anchorDate = newAnchor;
     [self saveCache];
 
     [self applyCacheToPublicStateWithCompletion:^{
@@ -905,37 +911,35 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     self.comparableVideosM = [[self.comparableVideosM filteredArrayUsingPredicate:keep] mutableCopy];
 }
 
-- (void)rebuildDaysObjC:(NSSet<NSDate*> *)dayStarts {
-    // 1) 移除这些天的所有旧资产
-    [self removeModelsByDayStarts:dayStarts];
+- (NSDate *)rebuildDaysObjC:(NSSet<NSDate*> *)dayStarts {
+    NSDate *maxA = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
 
-    // 2) 逐天重扫（全量同口径：当天 index、当天 compare）
     NSCalendar *cal = [NSCalendar currentCalendar];
-
     for (NSDate *dayStart in dayStarts) {
         NSDate *dayEnd = [cal dateByAddingUnit:NSCalendarUnitDay value:1 toDate:dayStart options:0];
 
         PHFetchOptions *opt = [self allImageVideoFetchOptions];
-        // ✅按天过滤（image+video）
         opt.predicate = [NSPredicate predicateWithFormat:
             @"((mediaType == %d) OR (mediaType == %d)) AND creationDate >= %@ AND creationDate < %@",
-            PHAssetMediaTypeImage, PHAssetMediaTypeVideo,
-            dayStart, dayEnd
+            PHAssetMediaTypeImage, PHAssetMediaTypeVideo, dayStart, dayEnd
         ];
 
         PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithOptions:opt];
 
-        // ✅当天 compare：先清空索引（保持你“按天分组”的策略）
         [self.indexImage removeAllObjects];
         [self.indexVideo removeAllObjects];
 
         for (PHAsset *asset in fr) {
-            NSError *err = nil;
+            // ✅ 更新 maxA
+            NSDate *cd = asset.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+            NSDate *md = asset.modificationDate ?: cd;
+            if ([cd compare:maxA] == NSOrderedDescending) maxA = cd;
+            if ([md compare:maxA] == NSOrderedDescending) maxA = md;
 
+            NSError *err = nil;
             ASAssetModel *m = [self buildModelForAsset:asset error:&err];
             if (!m) continue;
 
-            // ✅先分流：截屏/录屏/大视频
             if (ASIsScreenshot(asset)) {
                 [self.screenshotsM addObject:m];
                 continue;
@@ -948,12 +952,10 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
                 [self.bigVideosM addObject:m];
             }
 
-            // ✅相似/重复：排除截屏/录屏（由 ASAllowedForCompare 控制）
             if (!ASAllowedForCompare(asset)) continue;
 
             [self matchAndGroup:m asset:asset];
 
-            // ✅如果你希望增量重建也维持 comparable pools（建议加上）
             if (asset.mediaType == PHAssetMediaTypeImage) {
                 if (!self.comparableImagesM) self.comparableImagesM = [NSMutableArray array];
                 [self.comparableImagesM addObject:m];
@@ -963,6 +965,7 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
             }
         }
     }
+    return maxA;
 }
 
 - (void)scheduleIncrementalCheck {
@@ -1216,17 +1219,17 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
             if (dur > eps) t = MIN(t, dur - eps);
             else t = 0;
 
-            thumb = [self requestVideoFrameSyncForAsset:asset seconds:t target:CGSizeMake(512, 512)];
+            thumb = [self requestVideoFrameSyncForAsset:asset seconds:t target:CGSizeMake(128, 128)];
             if (!thumb) {
-                thumb = [self requestVideoFrameSyncForAsset:asset seconds:0 target:CGSizeMake(512, 512)];
+                thumb = [self requestVideoFrameSyncForAsset:asset seconds:0 target:CGSizeMake(128, 128)];
             }
         } else {
-            thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(512, 512)];
+            thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(128, 128)];
         }
 
         if (thumb) {
             m.phash256Data = [self computeColorPHash256Data:thumb];
-            m.visionPrintData = [self computeVisionPrintDataFromImage:thumb];
+//            m.visionPrintData = [self computeVisionPrintDataFromImage:thumb];
         }
     }
 
@@ -1276,8 +1279,8 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 
             AVAssetImageGenerator *gen = [[AVAssetImageGenerator alloc] initWithAsset:avAsset];
             gen.appliesPreferredTrackTransform = YES;
-            gen.requestedTimeToleranceBefore = kCMTimeZero;
-            gen.requestedTimeToleranceAfter  = kCMTimeZero;
+            gen.requestedTimeToleranceBefore = CMTimeMakeWithSeconds(0.2, 600);
+            gen.requestedTimeToleranceAfter  = CMTimeMakeWithSeconds(0.2, 600);
             if (!CGSizeEqualToSize(target, CGSizeZero)) gen.maximumSize = target;
 
             CMTime t = CMTimeMakeWithSeconds(seconds, 600);
