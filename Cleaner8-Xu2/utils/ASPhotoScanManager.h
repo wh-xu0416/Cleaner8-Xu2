@@ -86,6 +86,11 @@ typedef void(^ASScanCompletionBlock)(ASScanSnapshot *snapshot, NSError *_Nullabl
 @property (nonatomic, readonly) NSArray<ASAssetModel *> *screenRecordings;
 @property (nonatomic, readonly) NSArray<ASAssetModel *> *bigVideos;
 
+- (void)purgeDeletedAssetsAndRecalculate;
+
+//@property (nonatomic, strong) NSMutableArray<ASAssetModel *> *comparableImagesM;
+//@property (nonatomic, strong) NSMutableArray<ASAssetModel *> *comparableVideosM;
+
 + (instancetype)shared;
 
 // 启动：读取缓存 + 检测是否需要增量更新（杀死App后也能）
@@ -97,6 +102,7 @@ typedef void(^ASScanCompletionBlock)(ASScanSnapshot *snapshot, NSError *_Nullabl
 
 // 停止扫描（中断）
 - (void)cancel;
+- (void)subscribeProgress:(ASScanProgressBlock)progress;
 
 // 选择相关：只提供“可清理全选/反选”，其他类别是真全选
 - (NSArray<ASAssetModel *> *)allCleanableAssets;     // 相似/重复每组除第一个
