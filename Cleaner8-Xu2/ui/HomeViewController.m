@@ -493,7 +493,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     NSArray<ASAssetModel *> *dupImg = flattenGroups(dup, ASGroupTypeDuplicateImage);
     NSArray<ASAssetModel *> *dupVid = flattenGroups(dup, ASGroupTypeDuplicateVideo);
 
-    // ✅ 总可清理（去重）：以 localId 做去重；这里按“模块全部算进总清理”
+    // 总可清理（去重）：以 localId 做去重；这里按“模块全部算进总清理”
     NSMutableDictionary<NSString*, NSNumber*> *bytesById = [NSMutableDictionary dictionary];
 
     void (^collectUniq)(NSArray<ASAssetModel *> *) = ^(NSArray<ASAssetModel *> *arr) {

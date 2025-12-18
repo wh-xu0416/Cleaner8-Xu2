@@ -4,8 +4,8 @@
 NS_ASSUME_NONNULL_BEGIN
 
 typedef struct {
-    uint32_t phashThreshold;   // popcount(hashA^hashB) <= threshold
-    float    visionThreshold;  // similarityScore >= threshold (0~1)
+    uint32_t phashThreshold;
+    float    visionThreshold;
 } ASComparePolicy;
 
 extern const ASComparePolicy kPolicySimilar;
