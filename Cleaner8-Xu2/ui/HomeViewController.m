@@ -20,8 +20,10 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 @interface ASHomeModuleVM : NSObject
 @property (nonatomic) ASHomeModuleType type;
 @property (nonatomic, copy) NSString *title;
+@property (nonatomic, copy) NSString *statusText;
 @property (nonatomic) NSUInteger totalCount;
 @property (nonatomic) uint64_t totalBytes;
+@property (nonatomic, copy) NSString *thumbKey; // 用于判断是否变化
 @property (nonatomic, strong) NSArray<NSString *> *thumbLocalIds; // 最多2个（允许0/1/2）
 @end
 
@@ -37,6 +39,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 @property (nonatomic, strong) UILabel *sizeLabel;
 @property (nonatomic, strong) UIImageView *img1;
 @property (nonatomic, strong) UIImageView *img2;
+@property (nonatomic, copy) NSString *thumbKey;
 - (void)applyVM:(ASHomeModuleVM *)vm;
 + (NSString *)humanSize:(uint64_t)bytes;
 @end
@@ -105,12 +108,34 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 - (void)prepareForReuse {
     [super prepareForReuse];
     self.representedLocalIds = @[];
+    self.thumbKey = nil;
     self.img1.image = nil;
     self.img2.image = nil;
 }
 
 - (void)applyVM:(ASHomeModuleVM *)vm {
-    self.titleLabel.text = vm.title;
+
+    NSString *st = vm.statusText ?: @"";
+    if (st.length > 0) {
+        // 方案1：纯拼接
+        // self.titleLabel.text = [NSString stringWithFormat:@"%@  %@", vm.title ?: @"", st];
+
+        // 方案2（推荐）：状态灰色一点
+        NSString *title = vm.title ?: @"";
+        NSString *full = [NSString stringWithFormat:@"%@  %@", title, st];
+        NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full];
+
+        NSRange r = [full rangeOfString:st options:NSBackwardsSearch];
+        if (r.location != NSNotFound) {
+            [att addAttribute:NSForegroundColorAttributeName value:UIColor.grayColor range:r];
+            [att addAttribute:NSFontAttributeName value:[UIFont systemFontOfSize:12 weight:UIFontWeightMedium] range:r];
+        }
+        self.titleLabel.attributedText = att;
+    } else {
+        self.titleLabel.text = vm.title;
+        self.titleLabel.attributedText = nil;
+    }
+
     self.countLabel.text = [NSString stringWithFormat:@"数量：%lu", (unsigned long)vm.totalCount];
     self.sizeLabel.text  = [NSString stringWithFormat:@"大小：%@", [HomeModuleCell humanSize:vm.totalBytes]];
 }
@@ -464,12 +489,30 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         }
         return ids;
     };
+    
+    NSArray<NSNumber *> *states = self.scanMgr.snapshot.moduleStates;
+
+    NSString *(^statusTextForType)(ASHomeModuleType) = ^NSString *(ASHomeModuleType t) {
+        if (states.count != 7) return @""; // 没有模块状态就不显示
+        NSInteger st = states[t].integerValue;
+        switch (st) {
+            case 0: return @"(等待)";
+            case 1: return @"(扫描中)";
+            case 2: return @"(分析中)";
+            case 3: return @"(完成)";
+            default: return @"";
+        }
+    };
 
     ASHomeModuleVM *(^makeVM)(ASHomeModuleType, NSString *, NSArray<ASAssetModel *> *) =
     ^ASHomeModuleVM *(ASHomeModuleType type, NSString *title, NSArray<ASAssetModel *> *arr) {
         ASHomeModuleVM *vm = [ASHomeModuleVM new];
         vm.type = type;
         vm.title = title;
+        vm.statusText = statusTextForType(type);
+
+        vm.thumbLocalIds = pickThumbIds(arr);
+        vm.thumbKey = [vm.thumbLocalIds componentsJoinedByString:@"|"];
 
         uint64_t bytes = 0;
         for (ASAssetModel *m in arr) bytes += m.fileSizeBytes;
@@ -484,6 +527,10 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         ASHomeModuleVM *vm = [ASHomeModuleVM new];
         vm.type = type;
         vm.title = title;
+        vm.statusText = statusTextForType(type);
+
+        vm.thumbLocalIds = thumbsFromFirstValidGroup(groups, gt);
+        vm.thumbKey = [vm.thumbLocalIds componentsJoinedByString:@"|"];
 
         uint64_t bytes = 0;
         for (ASAssetModel *m in flat) bytes += m.fileSizeBytes;
@@ -548,19 +595,29 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     [cell applyVM:vm];
 
     NSArray<NSString *> *ids = vm.thumbLocalIds ?: @[];
+    NSString *newKey = vm.thumbKey ?: @"";
+
+    BOOL thumbChanged = (cell.thumbKey == nil) || ![cell.thumbKey isEqualToString:newKey];
+
+    // ✅ 先更新标记
     cell.representedLocalIds = ids;
+    cell.thumbKey = newKey;
 
-    // 先清空，避免复用串图
-    cell.img1.image = nil;
-    cell.img2.image = nil;
+    if (ids.count == 0) {
+        cell.img1.image = nil;
+        cell.img2.image = nil;
+        return cell;
+    }
 
-    if (ids.count == 0) return cell;
+    // ✅只有变化时才重新请求图片（扫描中尤其有效）
+    if (thumbChanged) {
+        cell.img1.image = nil;
+        cell.img2.image = nil;
 
-    // ✅ 关键：保证 frame/bounds 已经有值再算 targetSize
-    [cell setNeedsLayout];
-    [cell layoutIfNeeded];
-
-    [self loadThumbsForVM:vm intoCell:cell atIndexPath:indexPath];
+        [cell setNeedsLayout];
+        [cell layoutIfNeeded];
+        [self loadThumbsForVM:vm intoCell:cell atIndexPath:indexPath];
+    }
     return cell;
 }
 

@@ -215,6 +215,12 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 @implementation ASScanSnapshot
 + (BOOL)supportsSecureCoding { return YES; }
 - (instancetype)init {
+    _moduleStates = @[
+      @(ASModuleScanStateIdle), @(ASModuleScanStateIdle), @(ASModuleScanStateIdle),
+      @(ASModuleScanStateIdle), @(ASModuleScanStateIdle), @(ASModuleScanStateIdle),
+      @(ASModuleScanStateIdle)
+    ];
+
     if (self=[super init]){
         _lastUpdated=[NSDate date];
     }
@@ -236,6 +242,7 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     [coder encodeInteger:self.similarGroupCount forKey:@"similarGroupCount"];
     [coder encodeObject:self.lastUpdated forKey:@"lastUpdated"];
     [coder encodeObject:self.phash256Data forKey:@"phash256Data"];
+    [coder encodeObject:self.moduleStates forKey:@"moduleStates"];
 }
 - (instancetype)initWithCoder:(NSCoder *)coder {
     if (self=[super init]) {
@@ -254,6 +261,11 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         _similarGroupCount = [coder decodeIntegerForKey:@"similarGroupCount"];
         _lastUpdated = [coder decodeObjectOfClass:[NSDate class] forKey:@"lastUpdated"] ?: [NSDate date];
         _phash256Data = [coder decodeObjectOfClass:[NSData class] forKey:@"phash256Data"];
+        NSSet *classes = [NSSet setWithArray:@[[NSArray class],[NSNumber class]]];
+        _moduleStates = [coder decodeObjectOfClasses:classes forKey:@"moduleStates"];
+        if (!_moduleStates || _moduleStates.count != 7) {
+            _moduleStates = @[@0,@0,@0,@0,@0,@0,@0];
+        }
     }
     return self;
 }
@@ -374,6 +386,16 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 }
 @end
 
+typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
+    ASHomeModuleTypeSimilarImage = 0,
+    ASHomeModuleTypeSimilarVideo,
+    ASHomeModuleTypeDuplicateImage,
+    ASHomeModuleTypeDuplicateVideo,
+    ASHomeModuleTypeScreenshots,
+    ASHomeModuleTypeScreenRecordings,
+    ASHomeModuleTypeBigVideos,
+};
+
 #pragma mark - Manager
 
 @interface ASPhotoScanManager ()
@@ -436,6 +458,21 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     self.allAssetsFetchResult = [PHAsset fetchAssetsWithOptions:[self allImageVideoFetchOptions]];
 }
 
+- (void)setModule:(ASHomeModuleType)type state:(ASModuleScanState)st {
+    NSMutableArray *arr = [self.snapshot.moduleStates mutableCopy];
+    if (!arr || arr.count != 7) {
+        arr = [@[@0,@0,@0,@0,@0,@0,@0] mutableCopy];
+    }
+    arr[type] = @(st);
+    self.snapshot.moduleStates = arr;
+}
+
+- (void)setAllModulesState:(ASModuleScanState)st {
+    self.snapshot.moduleStates = @[
+        @(st),@(st),@(st),@(st),@(st),@(st),@(st)
+    ];
+}
+
 - (instancetype)init {
     if (self=[super init]) {
         _workQ = dispatch_queue_create("as.photo.scan.q", DISPATCH_QUEUE_SERIAL);
@@ -473,6 +510,7 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 - (void)loadCacheAndCheckIncremental {
     [self loadCacheIfExists];
     [self applyCacheToPublicState];       // 立即让 UI 显示缓存
+    [self refreshAllAssetsFetchResult];
     [self checkIncrementalFromDiskAnchor];// 再做增量同步
 }
 
@@ -492,6 +530,7 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 
     self.snapshot = [ASScanSnapshot new];
     self.snapshot.state = ASScanStateScanning;
+    [self setAllModulesState:ASModuleScanStateScanning];
     [self emitProgress];
 
     dispatch_async(self.workQ, ^{
@@ -574,6 +613,12 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
                         continue;
                     }
 
+                    // 只要开始做相似/重复比对，就把 4 个比对模块置为 Analyzing
+                    [self setModule:ASHomeModuleTypeSimilarImage state:ASModuleScanStateAnalyzing];
+                    [self setModule:ASHomeModuleTypeSimilarVideo state:ASModuleScanStateAnalyzing];
+                    [self setModule:ASHomeModuleTypeDuplicateImage state:ASModuleScanStateAnalyzing];
+                    [self setModule:ASHomeModuleTypeDuplicateVideo state:ASModuleScanStateAnalyzing];
+
                     // ✅ 分组（只做一次）
                     [self matchAndGroup:model asset:asset];
 
@@ -612,11 +657,14 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
                 }
 
                 [self saveCache];
+                [self setAllModulesState:ASModuleScanStateFinished];
 
                 // ✅ 发布缓存态到公共属性
                 [self applyCacheToPublicStateWithCompletion:^{
                     [self emitProgress];
                 }];
+                
+                [self refreshAllAssetsFetchResult];
 
                 if (self.pendingIncremental) {
                     self.pendingIncremental = NO;
@@ -729,6 +777,10 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 
         [self incrementalRebuildWithInserted:finalInserted removedIDs:finalRemovedIDs];
     });
+
+    // 保存起来，后续才能 cancel
+    self.incrementalDebounceBlock = block;
+
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
                    self.workQ,
                    block);
@@ -762,6 +814,28 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 
     // 0) UI scanning（统一在 main）
     [self publishSnapshotStateOnMain:ASScanStateScanning];
+    
+    // ✅ 增量开始：模块状态
+    [self setAllModulesState:ASModuleScanStateIdle];
+
+    // 先把三类统计模块标记 scanning（因为 rebuildDays 里会重新填）
+    [self setModule:ASHomeModuleTypeScreenshots       state:ASModuleScanStateScanning];
+    [self setModule:ASHomeModuleTypeScreenRecordings  state:ASModuleScanStateScanning];
+    [self setModule:ASHomeModuleTypeBigVideos         state:ASModuleScanStateScanning];
+
+    // 如果 inserted 里有可比对项，再把四个比对模块标 analyzing
+    __block BOOL hasComparable = NO;
+    for (PHAsset *a in inserted) {
+        if (ASAllowedForCompare(a)) { hasComparable = YES; break; }
+    }
+    if (hasComparable) {
+        [self setModule:ASHomeModuleTypeSimilarImage    state:ASModuleScanStateAnalyzing];
+        [self setModule:ASHomeModuleTypeSimilarVideo    state:ASModuleScanStateAnalyzing];
+        [self setModule:ASHomeModuleTypeDuplicateImage  state:ASModuleScanStateAnalyzing];
+        [self setModule:ASHomeModuleTypeDuplicateVideo  state:ASModuleScanStateAnalyzing];
+    }
+
+    [self emitProgress]; // 让首页 title 立刻看到状态变化（可选）
 
     // 2) 删除：剔除 removed IDs
     NSMutableSet<NSString*> *deletedIDs = [NSMutableSet setWithArray:(removedIDs ?: @[])];
@@ -794,8 +868,9 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         [affectedDayStarts addObject:ASDayStart(md)];
     }
 
-    // 4) 重建这些天
+    // 4) 重建这些天：✅先删旧，再重建
     if (affectedDayStarts.count) {
+        [self removeModelsByDayStarts:affectedDayStarts];   // ✅ 必须加，不然叠加
         newAnchor = [self rebuildDaysObjC:affectedDayStarts];
     }
 
@@ -818,6 +893,7 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 
     self.cache.anchorDate = newAnchor;
     [self saveCache];
+    [self setAllModulesState:ASModuleScanStateFinished];
 
     [self applyCacheToPublicStateWithCompletion:^{
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -1251,12 +1327,12 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.synchronous = YES;
     opt.networkAccessAllowed = NO;
-    opt.resizeMode = PHImageRequestOptionsResizeModeFast;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeFastFormat;
+    opt.resizeMode = PHImageRequestOptionsResizeModeExact;              // ✅ exact
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat; // ✅ high quality
 
     [self.imageManager requestImageForAsset:asset
                                  targetSize:target
-                                contentMode:PHImageContentModeAspectFill
+                                contentMode:PHImageContentModeAspectFill // ✅ aspectFill
                                     options:opt
                               resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
         img = result;
@@ -1360,75 +1436,97 @@ static inline void ASDCT1D_64(const float *in, float *out) {
     }
 }
 
+// 建一个 DCT setup（64 点 DCT-II），复用
+static vDSP_DFT_Setup ASDCTSetup64(void) {
+    static vDSP_DFT_Setup setup = NULL;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        // DCT-II, length=64
+        setup = vDSP_DCT_CreateSetup(NULL, 64, vDSP_DCT_II);
+    });
+    return setup;
+}
+
 - (NSData *)computeColorPHash256Data:(UIImage *)image {
     CGImageRef cg = image.CGImage;
-    if (!cg) {
-        uint64_t z[4] = {0,0,0,0};
-        return [NSData dataWithBytes:z length:32];
-    }
+    if (!cg) { uint64_t z[4] = {0,0,0,0}; return [NSData dataWithBytes:z length:32]; }
 
-    const int width = 64;
-    const int height = 64;
+    const int width = 64, height = 64;
     const int bytesPerRow = width * 4;
 
-    uint8_t pixels[64*64*4];
+    uint8_t pixels[64 * 64 * 4];
     memset(pixels, 0, sizeof(pixels));
 
-    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
     CGContextRef ctx = CGBitmapContextCreate(
-        pixels,
-        width,
-        height,
-        8,
-        bytesPerRow,
-        colorSpace,
+        pixels, width, height, 8, bytesPerRow, cs,
         (CGBitmapInfo)kCGImageAlphaPremultipliedLast
     );
-    CGColorSpaceRelease(colorSpace);
+    CGColorSpaceRelease(cs);
 
-    if (!ctx) {
-        uint64_t z[4] = {0,0,0,0};
-        return [NSData dataWithBytes:z length:32];
-    }
+    if (!ctx) { uint64_t z[4] = {0,0,0,0}; return [NSData dataWithBytes:z length:32]; }
 
-    CGContextSetInterpolationQuality(ctx, kCGInterpolationLow);
+    // Swift 没显式设置插值质量，这里也不要强行 setInterpolationQuality，避免差异
     CGContextDrawImage(ctx, CGRectMake(0, 0, width, height), cg);
     CGContextRelease(ctx);
 
-    float floatPixels[64*64];
-    for (int i = 0; i < width*height; i++) {
+    // === 1) 图像增强：完全对齐 Swift ===
+    // Swift: enhanced = min(max(1.1*(0.299*r+0.587*g+0.114*b) - 10, 0), 255)
+    // 然后 pixels RGB 都写成 UInt8(enhanced)
+    for (int i = 0; i < width * height; i++) {
         float r = (float)pixels[i*4 + 0];
         float g = (float)pixels[i*4 + 1];
         float b = (float)pixels[i*4 + 2];
 
-        float luma = 0.299f*r + 0.587f*g + 0.114f*b;
-        float enhanced = ASClamp255(1.1f*luma - 10.f);
-        floatPixels[i] = enhanced;
+        float enhanced = 1.1f * (0.299f*r + 0.587f*g + 0.114f*b) - 10.f;
+        if (enhanced < 0.f) enhanced = 0.f;
+        if (enhanced > 255.f) enhanced = 255.f;
+
+        // Swift 的 UInt8(enhanced) 是截断（toward zero）
+        uint8_t e8 = (uint8_t)enhanced;
+
+        pixels[i*4 + 0] = e8;
+        pixels[i*4 + 1] = e8;
+        pixels[i*4 + 2] = e8;
     }
 
+    // === 2) 转 Float：对齐 Swift => Float(pixels[i*4]) ===
+    float floatPixels[64 * 64];
+    for (int i = 0; i < width * height; i++) {
+        floatPixels[i] = (float)pixels[i*4 + 0];
+    }
+
+    // === 3) 2D DCT-II：先行后列（对齐 Swift vDSP.DCT(.II) 的调用方式）===
     float rowIn[64], rowOut[64];
     for (int row = 0; row < 64; row++) {
-        memcpy(rowIn, &floatPixels[row*64], sizeof(rowIn));
+        memcpy(rowIn, &floatPixels[row * 64], sizeof(rowIn));
         ASDCT1D_64(rowIn, rowOut);
-        memcpy(&floatPixels[row*64], rowOut, sizeof(rowOut));
+        memcpy(&floatPixels[row * 64], rowOut, sizeof(rowOut));
     }
 
     float colIn[64], colOut[64];
     for (int col = 0; col < 64; col++) {
-        for (int row = 0; row < 64; row++) colIn[row] = floatPixels[row*64 + col];
+        for (int row = 0; row < 64; row++) colIn[row] = floatPixels[row * 64 + col];
         ASDCT1D_64(colIn, colOut);
-        for (int row = 0; row < 64; row++) floatPixels[row*64 + col] = colOut[row];
+        for (int row = 0; row < 64; row++) floatPixels[row * 64 + col] = colOut[row];
     }
 
-    float topLeft[16*16];
+    // === 4) 取左上 16x16 ===
+    float topLeft[16 * 16];
     int idx = 0;
-    for (int r = 0; r < 16; r++) for (int c = 0; c < 16; c++) topLeft[idx++] = floatPixels[r*64 + c];
+    for (int r = 0; r < 16; r++) {
+        for (int c = 0; c < 16; c++) {
+            topLeft[idx++] = floatPixels[r * 64 + c];
+        }
+    }
 
-    float sorted[16*16];
+    // === 5) median：对齐 Swift => topLeft.sorted()[count/2] ===
+    float sorted[16 * 16];
     memcpy(sorted, topLeft, sizeof(sorted));
     qsort(sorted, 256, sizeof(float), ASFloatCmp);
-    float median = sorted[128];
+    float median = sorted[256 / 2];
 
+    // === 6) pack 256-bit：对齐 Swift 的 bit order ===
     uint64_t hash[4] = {0,0,0,0};
     for (int i = 0; i < 256; i++) {
         if (topLeft[i] > median) {
@@ -1440,6 +1538,7 @@ static inline void ASDCT1D_64(const float *in, float *out) {
 
     return [NSData dataWithBytes:hash length:32];
 }
+
 
 #pragma mark - Vision FeaturePrint (archived data for cache)
 
@@ -1504,28 +1603,28 @@ static inline void ASDCT1D_64(const float *in, float *out) {
     if (!pool) { pool = [NSMutableArray array]; index[k] = pool; }
 
     ASAssetModel *hit = nil;
-    ASGroupType hitType = isImage ? ASGroupTypeDuplicateImage : ASGroupTypeDuplicateVideo;
+    BOOL hitIsDup = NO;
+
+    ASGroupType simType = isImage ? ASGroupTypeSimilarImage : ASGroupTypeSimilarVideo;
+    ASGroupType dupType = isImage ? ASGroupTypeDuplicateImage : ASGroupTypeDuplicateVideo;
 
     for (ASAssetModel *cand in pool) {
         if (!cand.phash256Data || cand.phash256Data.length < 32) continue;
 
         int hd = ASHamming256(model.phash256Data, cand.phash256Data);
-        if (hd > kPolicySimilar.phashThreshold) continue;
+        if (hd > kPolicySimilar.phashThreshold) continue;          // pHash gate
 
         float vd = [self visionDistanceBetweenLocalId:model.localId and:cand.localId];
         if (vd == FLT_MAX) continue;
 
-        if (hd <= kPolicyDuplicate.phashThreshold && vd <= kPolicyDuplicate.visionThreshold) {
-            hit = cand;
-            hitType = isImage ? ASGroupTypeDuplicateImage : ASGroupTypeDuplicateVideo;
-            break;
-        }
+        if (vd > kPolicySimilar.visionThreshold) continue;         // 相似门槛（包含重复）
 
-        if (vd <= kPolicySimilar.visionThreshold) {
-            hit = cand;
-            hitType = isImage ? ASGroupTypeSimilarImage : ASGroupTypeSimilarVideo;
-            break;
-        }
+        // 命中：相似
+        hit = cand;
+
+        // 是否重复（更严格门槛）
+        hitIsDup = (hd <= kPolicyDuplicate.phashThreshold && vd <= kPolicyDuplicate.visionThreshold);
+        break;
     }
 
     if (!hit) {
@@ -1533,14 +1632,21 @@ static inline void ASDCT1D_64(const float *in, float *out) {
         return;
     }
 
-    if (![self appendModel:model toExistingGroupByAnyMemberId:hit.localId groupType:hitType]) {
+    // ✅ 相似：必入（相似包含重复）
+    if (![self appendModel:model toExistingGroupByAnyMemberId:hit.localId groupType:simType]) {
         ASAssetGroup *g = [ASAssetGroup new];
-        g.type = hitType;
+        g.type = simType;
         g.assets = [NSMutableArray arrayWithObjects:hit, model, nil];
-        if (hitType == ASGroupTypeDuplicateImage || hitType == ASGroupTypeDuplicateVideo) {
-            [self.dupGroupsM addObject:g];
-        } else {
-            [self.simGroupsM addObject:g];
+        [self.simGroupsM addObject:g];
+    }
+
+    // ✅ 重复：可选入（镜像一份）
+    if (hitIsDup) {
+        if (![self appendModel:model toExistingGroupByAnyMemberId:hit.localId groupType:dupType]) {
+            ASAssetGroup *g2 = [ASAssetGroup new];
+            g2.type = dupType;
+            g2.assets = [NSMutableArray arrayWithObjects:hit, model, nil];
+            [self.dupGroupsM addObject:g2];
         }
     }
 

@@ -26,7 +26,17 @@ typedef NS_ENUM(NSUInteger, ASGroupType) {
 
 @class ASAssetModel, ASAssetGroup, ASScanSnapshot;
 
+typedef NS_ENUM(NSInteger, ASModuleScanState) {
+    ASModuleScanStateIdle = 0,     // 等待/未开始
+    ASModuleScanStateScanning,     // 扫描中（遍历相册、收集素材）
+    ASModuleScanStateAnalyzing,    // 分析中（相似/重复比对阶段）
+    ASModuleScanStateFinished,     // 完成
+};
+
 @interface ASScanSnapshot : NSObject <NSSecureCoding>
+
+@property (nonatomic, strong) NSArray<NSNumber *> *moduleStates; // 长度固定=7，按 ASHomeModuleType 顺序
+
 @property (nonatomic) ASScanState state;
 
 @property (nonatomic) NSUInteger scannedCount;
