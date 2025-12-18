@@ -1,59 +1,88 @@
-//
-//  MainTabBarController.m
-//  Cleaner8-Xu2
-//
-//  Created by 徐文豪 on 2025/12/15.
-//
 #import "MainTabBarController.h"
-
+#import "ASFloatingTabBar.h"
 #import "HomeViewController.h"
 #import "CutViewController.h"
 #import "SecretViewController.h"
 #import "SetViewController.h"
 
-NS_ASSUME_NONNULL_BEGIN
+@interface MainTabBarController ()
+@property (nonatomic, strong) ASFloatingTabBar *floatingTab;
+@end
 
 @implementation MainTabBarController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
+    // 设置底部四个页面
     self.viewControllers = @[
-        [self navWithVC:[HomeViewController new]
-                 title:@"首页"
-                 image:@"Frame 383"],
-
-        [self navWithVC:[CutViewController new]
-                 title:@"切换"
-                 image:@"Frame 383"],
-
-        [self navWithVC:[SecretViewController new]
-                 title:@"私密"
-                 image:@"Frame 383"],
-
-        [self navWithVC:[SetViewController new]
-                 title:@"设置"
-                 image:@"Frame 383"]
+        [self navWithVC:[HomeViewController new]   title:@"首页" image:@"Frame 383"],
+        [self navWithVC:[CutViewController new]    title:@"切换" image:@"Frame 383"],
+        [self navWithVC:[SecretViewController new] title:@"私密" image:@"Frame 383"],
+        [self navWithVC:[SetViewController new]    title:@"设置" image:@"Frame 383"],
     ];
+
+    self.tabBar.hidden = YES;  // 隐藏系统的 tabBar
+
+    // 创建浮动 tab
+    self.floatingTab = [[ASFloatingTabBar alloc] initWithItems:@[
+        [ASFloatingTabBarItem itemWithTitle:@"首页" normal:@"tab_home_n" selected:@"tab_home_s"],
+        [ASFloatingTabBarItem itemWithTitle:@"切换" normal:@"tab_cut_n"  selected:@"tab_cut_s"],
+        [ASFloatingTabBarItem itemWithTitle:@"私密" normal:@"tab_secret_n" selected:@"tab_secret_s"],
+        [ASFloatingTabBarItem itemWithTitle:@"设置" normal:@"tab_set_n" selected:@"tab_set_s"],
+    ]];
+
+    __weak typeof(self) weakSelf = self;
+    self.floatingTab.onSelect = ^(NSInteger idx) {
+        weakSelf.selectedIndex = idx;
+    };
 }
 
-- (UINavigationController *)navWithVC:(UIViewController *)vc
-                                title:(NSString *)title
-                                image:(NSString *)imageName {
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
 
+    // 只在首页显示浮动 tab
+    if (self.selectedIndex == 0) {
+        [self.view addSubview:self.floatingTab];  // 首页显示
+    }
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+
+    CGFloat w = self.view.bounds.size.width;
+    CGFloat h = 64;
+    CGFloat side = 20;
+    CGFloat bottom = 20 + self.view.safeAreaInsets.bottom;
+
+    self.floatingTab.frame = CGRectMake(side,
+                                        self.view.bounds.size.height - h - bottom,
+                                        w - side * 2,
+                                        h);
+
+    // 保证浮动 tab 在最上层
+    [self.view bringSubviewToFront:self.floatingTab];
+}
+
+- (void)setSelectedIndex:(NSUInteger)selectedIndex {
+    [super setSelectedIndex:selectedIndex];
+
+    // 确保页面切换时，首页才显示浮动 tab
+    if (selectedIndex == 0) {
+        if (![self.view.subviews containsObject:self.floatingTab]) {
+            [self.view addSubview:self.floatingTab];
+        }
+    } else {
+        [self.floatingTab removeFromSuperview];
+    }
+}
+
+- (UINavigationController *)navWithVC:(UIViewController *)vc title:(NSString *)title image:(NSString *)imageName {
     vc.title = title;
-
-    UINavigationController *nav =
-        [[UINavigationController alloc] initWithRootViewController:vc];
-
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.tabBarItem.title = title;
-    nav.tabBarItem.image =
-        [[UIImage imageNamed:imageName]
-         imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-
+    nav.tabBarItem.image = [[UIImage imageNamed:imageName] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     return nav;
 }
 
 @end
-
-NS_ASSUME_NONNULL_END

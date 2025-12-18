@@ -26,7 +26,6 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 @end
 @implementation ASAssetSection @end
 
-
 #pragma mark - Cell
 
 @interface ASAssetGridCell : UICollectionViewCell
@@ -96,6 +95,7 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 }
 - (void)prepareForReuse {
     [super prepareForReuse];
+    self.representedLocalId = @"";
     self.img.image = nil;
     self.badge.text = @"";
     self.sizeLabel.text = @"";
@@ -150,6 +150,11 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 @property (nonatomic, strong) UIButton *deleteBtn;
 @property (nonatomic) CGFloat bottomBarH;
 
+@property (nonatomic, strong) UIView *customNavBar;  // 自定义导航栏
+@property (nonatomic, strong) UILabel *titleLabel;   // 自定义标题
+@property (nonatomic, strong) UIButton *backButton;  // 返回按钮
+@property (nonatomic, strong) UIButton *selectAllButton; // 全选按钮
+
 @property (nonatomic, strong) PHCachingImageManager *imgMgr;
 @property (nonatomic, strong) ASPhotoScanManager *scanMgr;
 
@@ -158,6 +163,8 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 
 @property (nonatomic) uint64_t totalCleanableBytes;
 @property (nonatomic) uint64_t selectedBytes;
+
+@property (nonatomic, strong) NSDictionary<NSString*, PHAsset*> *assetById;
 @end
 
 @implementation ASAssetListViewController
@@ -167,24 +174,35 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
         _mode = mode;
         _sections = [NSMutableArray array];
         _selectedIds = [NSMutableSet set];
+        _assetById = @{};
     }
     return self;
 }
 
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    // 隐藏系统的导航栏
+    self.navigationController.navigationBar.hidden = YES;
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.whiteColor;
 
+    // 隐藏系统的导航栏
+    self.navigationController.navigationBar.hidden = YES;
+
+    // 设置自定义导航栏
+    [self setupCustomNavBar];
+
+    // 继续执行原有代码
     self.imgMgr = [PHCachingImageManager new];
     self.scanMgr = [ASPhotoScanManager shared];
 
     self.title = [self titleForMode:self.mode];
-
     [self setupUI];
-    
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 在后台构建 sections（注意不要触碰 UI）
-        [self rebuildDataFromManager]; // 如果里面会用 Photos fetch，仍建议在主线程；纯逻辑才放后台
+        [self rebuildDataFromManager];
 
         dispatch_async(dispatch_get_main_queue(), ^{
             [self applyDefaultSelectionRule];
@@ -192,15 +210,78 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
             [self recomputeBytesAndRefreshUI];
         });
     });
+
     [self setupNavSelectAllIfNeeded];
 }
 
-#pragma mark - UI
+#pragma mark - 自定义导航栏设置
+
+- (void)setupCustomNavBar {
+    CGFloat navBarHeight = 44 + self.view.safeAreaInsets.top;  // 适配刘海屏
+
+    // 创建自定义导航栏容器
+    self.customNavBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, navBarHeight)];
+    self.customNavBar.backgroundColor = [UIColor whiteColor]; // 设置背景色为白色
+
+    // 创建返回按钮
+    self.backButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.backButton.frame = CGRectMake(10, self.view.safeAreaInsets.top, 44, 44);  // 左上角按钮
+    [self.backButton setImage:[UIImage systemImageNamed:@"arrow.left.circle.fill"] forState:UIControlStateNormal];
+    [self.backButton addTarget:self action:@selector(onBackButtonTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.customNavBar addSubview:self.backButton];
+
+    // 创建标题
+    self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 44)];
+    self.titleLabel.text = self.title;
+    self.titleLabel.textAlignment = NSTextAlignmentCenter;
+    self.titleLabel.font = [UIFont boldSystemFontOfSize:17];
+    self.titleLabel.textColor = [UIColor blackColor];
+    [self.customNavBar addSubview:self.titleLabel];
+
+    // 创建全选按钮
+    self.selectAllButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.selectAllButton.frame = CGRectMake(self.view.bounds.size.width - 80, self.view.safeAreaInsets.top, 80, 44);
+    [self.selectAllButton setTitle:@"全选" forState:UIControlStateNormal];
+    [self.selectAllButton addTarget:self action:@selector(onSelectAllTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.customNavBar addSubview:self.selectAllButton];
+
+    // 将自定义导航栏添加到视图
+    [self.view addSubview:self.customNavBar];
+}
+
+- (void)onBackButtonTapped {
+    [self.navigationController popViewControllerAnimated:YES];
+}
+
+- (void)onSelectAllTapped {
+    // 在这里添加全选的操作逻辑
+    [self toggleSelectAll];
+}
+
+#pragma mark - 自定义布局调整
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+
+    // 确保自定义导航栏的frame正确
+    CGFloat navBarHeight = 44 + self.view.safeAreaInsets.top;  // 适配刘海屏
+    self.customNavBar.frame = CGRectMake(0, 0, self.view.bounds.size.width, navBarHeight);
+
+    // 调整UICollectionView的contentInset，以避开自定义导航栏
+    UIEdgeInsets inset = self.cv.contentInset;
+    inset.top = navBarHeight;  // 更新 contentInset 的 top 值
+    self.cv.contentInset = inset;
+    self.cv.scrollIndicatorInsets = inset;
+
+    // 确保自定义导航栏显示在最上面
+    [self.view bringSubviewToFront:self.customNavBar];
+}
+
+#pragma mark - UI 设置
 
 - (void)setupUI {
     self.bottomBarH = 64;
 
-    // 1) collectionView 先铺满（底部用 contentInset 给悬浮栏留空间）
     UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
     layout.minimumInteritemSpacing = 8;
     layout.minimumLineSpacing = 8;
@@ -220,14 +301,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     [self.view addSubview:self.cv];
 
-    // 2) bottomBar（悬浮）
     UIView *bar = [UIView new];
     bar.backgroundColor = UIColor.whiteColor;
     bar.layer.cornerRadius = 16;
-    bar.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.12].CGColor;
-    bar.layer.shadowOpacity = 1;
-    bar.layer.shadowOffset = CGSizeMake(0, -2);
-    bar.layer.shadowRadius = 10;
 
     UILabel *lab = [UILabel new];
     lab.numberOfLines = 2;
@@ -249,11 +325,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.totalLabel = lab;
     self.deleteBtn = btn;
 
-    // 删除按钮：默认隐藏（只有选中才显示）
     self.deleteBtn.hidden = YES;
     self.deleteBtn.alpha = 0.0;
 
-    // 关键：永远给列表底部留出空间（不要选中/取消时改 inset，避免闪）
     UIEdgeInsets inset = self.cv.contentInset;
     inset.bottom = self.bottomBarH + 16;
     self.cv.contentInset = inset;
@@ -262,32 +336,41 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     [self.view bringSubviewToFront:self.bottomBar];
 }
 
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
+#pragma mark - 全选功能
 
-    self.cv.frame = self.view.bounds;
+- (void)toggleSelectAll {
+    NSMutableSet<NSString *> *shouldAll = [NSMutableSet set];
 
-    CGFloat side = 12;
-    CGFloat barH = self.bottomBarH;
-    CGFloat safeBottom = self.view.safeAreaInsets.bottom;
+    // 根据模式选择全选的内容
+    if ([self isGroupMode]) {
+        for (ASAssetSection *sec in self.sections) {
+            for (NSInteger i = 1; i < sec.assets.count; i++) {
+                ASAssetModel *m = sec.assets[i];
+                if (m.localId.length) [shouldAll addObject:m.localId];
+            }
+        }
+    } else {
+        for (ASAssetSection *sec in self.sections) {
+            for (ASAssetModel *m in sec.assets) if (m.localId.length) [shouldAll addObject:m.localId];
+        }
+    }
 
-    CGFloat barW = self.view.bounds.size.width - side * 2;
-    CGFloat barX = side;
-    CGFloat barY = self.view.bounds.size.height - safeBottom - 8 - barH;
+    // 检查当前是否已经全选，如果已全选则取消选择，否则全选
+    BOOL alreadyAll = YES;
+    for (NSString *lid in shouldAll) {
+        if (![self.selectedIds containsObject:lid]) { alreadyAll = NO; break; }
+    }
 
-    self.bottomBar.frame = CGRectMake(barX, barY, barW, barH);
+    if (alreadyAll) {
+        [self.selectedIds removeAllObjects];
+    } else {
+        [self.selectedIds unionSet:shouldAll];
+    }
 
-    // label / button 布局
-    CGFloat pad = 14;
-    CGFloat btnW = 110;
-    CGFloat btnH = 36;
-
-    self.deleteBtn.frame = CGRectMake(barW - pad - btnW, (barH - btnH)/2.0, btnW, btnH);
-    self.totalLabel.frame = CGRectMake(pad, 8, barW - pad*2 - btnW - 10, barH - 16);
+    [self recomputeBytesAndRefreshUI];
 }
 
 - (void)setupNavSelectAllIfNeeded {
-    // 你要求：右上角全选（相似/重复：除每组第一个；其他：正常全选）
     UIBarButtonItem *btn = [[UIBarButtonItem alloc] initWithTitle:@"全选"
                                                             style:UIBarButtonItemStylePlain
                                                            target:self
@@ -314,7 +397,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     return m.creationDate ?: m.modificationDate;
 }
 
-// 组日期：取该组里“最新”的那张（max）
 - (NSDate *)dateForGroupAssets:(NSArray<ASAssetModel *> *)assets {
     NSDate *best = nil;
     for (ASAssetModel *m in assets) {
@@ -342,8 +424,10 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 }
 
+/// ✅ 核心：构建 sections + 一次性 batch fetch 所有 ids，填 assetById
 - (void)rebuildDataFromManager {
     [self.sections removeAllObjects];
+    self.assetById = @{}; // 先清空
 
     if ([self isGroupMode]) {
         NSArray<ASAssetGroup *> *src = (self.mode == ASAssetListModeSimilarImage ||
@@ -353,29 +437,13 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
         ASGroupType t = [self wantedGroupType];
 
+        // 先建 section（这一步只处理 ASAssetModel，不触碰 PHAsset）
         for (ASAssetGroup *g in src) {
             if (g.type != t) continue;
 
-            // 先收集该组所有 id
-            NSMutableArray<NSString *> *ids = [NSMutableArray array];
-            for (ASAssetModel *m in g.assets) {
-                if (m.localId.length) [ids addObject:m.localId];
-            }
-            if (ids.count < 2) continue;
-
-            // 一次性 fetch
-            PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
-            NSMutableSet<NSString *> *exist = [NSMutableSet setWithCapacity:fr.count];
-            [fr enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-                if (obj.localIdentifier.length) [exist addObject:obj.localIdentifier];
-            }];
-
-            // 再过滤
             NSMutableArray<ASAssetModel *> *valid = [NSMutableArray array];
             for (ASAssetModel *m in g.assets) {
-                if (!m.localId.length) continue;
-                if (![exist containsObject:m.localId]) continue;
-                [valid addObject:m];
+                if (m.localId.length) [valid addObject:m];
             }
             if (valid.count < 2) continue;
 
@@ -395,59 +463,96 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             sec.title = [NSString stringWithFormat:@"第 %ld 组（%lu）", (long)idx, (unsigned long)sec.assets.count];
             idx++;
         }
+    } else {
+        NSArray<ASAssetModel *> *arr = @[];
+        switch (self.mode) {
+            case ASAssetListModeScreenshots:       arr = self.scanMgr.screenshots ?: @[]; break;
+            case ASAssetListModeScreenRecordings:  arr = self.scanMgr.screenRecordings ?: @[]; break;
+            case ASAssetListModeBigVideos:         arr = self.scanMgr.bigVideos ?: @[]; break;
+            default: break;
+        }
+
+        NSMutableArray<ASAssetModel *> *valid = [NSMutableArray array];
+        for (ASAssetModel *m in arr) {
+            if (m.localId.length) [valid addObject:m];
+        }
+
+        [valid sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
+            NSDate *da = [self dateForModel:a];
+            NSDate *db = [self dateForModel:b];
+
+            if (!da && !db) return NSOrderedSame;
+            if (!da) return NSOrderedDescending;
+            if (!db) return NSOrderedAscending;
+
+            return [db compare:da];
+        }];
+
+        ASAssetSection *s = [ASAssetSection new];
+        s.isGrouped = NO;
+        s.title = @"";
+        s.assets = valid;
+
+        [self.sections addObject:s];
+    }
+
+    // ✅ 统一收集所有 localId，一次性 fetch PHAsset，并过滤掉已经不存在的 id
+    NSMutableArray<NSString *> *allIds = [NSMutableArray array];
+
+    for (ASAssetSection *sec in self.sections) {
+        for (ASAssetModel *m in sec.assets) {
+            if (m.localId.length) [allIds addObject:m.localId];
+        }
+    }
+
+    if (allIds.count == 0) {
+        self.assetById = @{};
         return;
     }
 
-    // ✅ 非分组：先拿到 arr
-    NSArray<ASAssetModel *> *arr = @[];
-    switch (self.mode) {
-        case ASAssetListModeScreenshots:       arr = self.scanMgr.screenshots ?: @[]; break;
-        case ASAssetListModeScreenRecordings:  arr = self.scanMgr.screenRecordings ?: @[]; break;
-        case ASAssetListModeBigVideos:         arr = self.scanMgr.bigVideos ?: @[]; break;
-        default: break;
-    }
+    // 去重（避免 fetch 重复 id）
+    NSOrderedSet<NSString *> *uniq = [NSOrderedSet orderedSetWithArray:allIds];
+    NSArray<NSString *> *uniqIds = uniq.array;
 
-    // ✅ 批量过滤掉已删除的 localId
-    NSMutableArray<ASAssetModel *> *valid = [NSMutableArray array];
-    NSMutableArray<NSString *> *ids = [NSMutableArray array];
-    for (ASAssetModel *m in arr) {
-        if (m.localId.length) [ids addObject:m.localId];
-    }
+    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:uniqIds options:nil];
+    NSMutableDictionary<NSString*, PHAsset*> *map = [NSMutableDictionary dictionaryWithCapacity:fr.count];
 
-    NSMutableSet<NSString *> *exist = [NSMutableSet set];
-    if (ids.count > 0) {
-        PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
-        exist = [NSMutableSet setWithCapacity:fr.count];
-        [fr enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-            if (obj.localIdentifier.length) [exist addObject:obj.localIdentifier];
-        }];
-    }
-
-    for (ASAssetModel *m in arr) {
-        if (!m.localId.length) continue;
-        if (ids.count > 0 && ![exist containsObject:m.localId]) continue;
-        [valid addObject:m];
-    }
-
-    ASAssetSection *s = [ASAssetSection new];
-    s.isGrouped = NO;
-    s.title = @"";
-    s.assets = valid;
-
-    [s.assets sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
-        NSDate *da = [self dateForModel:a];
-        NSDate *db = [self dateForModel:b];
-
-        if (!da && !db) return NSOrderedSame;
-        if (!da) return NSOrderedDescending;
-        if (!db) return NSOrderedAscending;
-
-        return [db compare:da];
+    [fr enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if (obj.localIdentifier.length) {
+            map[obj.localIdentifier] = obj;
+        }
     }];
 
-    [self.sections addObject:s];
-}
+    self.assetById = map;
 
+    // ✅ 过滤掉 asset 不存在的 model（避免列表里出现空格子/闪）
+    for (NSInteger si = self.sections.count - 1; si >= 0; si--) {
+        ASAssetSection *sec = self.sections[si];
+
+        NSMutableArray<ASAssetModel *> *kept = [NSMutableArray arrayWithCapacity:sec.assets.count];
+        for (ASAssetModel *m in sec.assets) {
+            if (!m.localId.length) continue;
+            if (!self.assetById[m.localId]) continue;
+            [kept addObject:m];
+        }
+
+        sec.assets = kept;
+
+        // 分组：不足 2 就整组丢掉
+        if (sec.isGrouped && sec.assets.count < 2) {
+            [self.sections removeObjectAtIndex:si];
+        }
+    }
+
+    // 分组标题重排（因为过滤后可能删了组）
+    if ([self isGroupMode]) {
+        NSInteger idx2 = 1;
+        for (ASAssetSection *sec in self.sections) {
+            sec.title = [NSString stringWithFormat:@"第 %ld 组（%lu）", (long)idx2, (unsigned long)sec.assets.count];
+            idx2++;
+        }
+    }
+}
 
 #pragma mark - Default selection rule
 
@@ -455,7 +560,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     [self.selectedIds removeAllObjects];
 
     if ([self isGroupMode]) {
-        // 默认全选：每组除第一个
         for (ASAssetSection *sec in self.sections) {
             for (NSInteger i = 1; i < sec.assets.count; i++) {
                 ASAssetModel *m = sec.assets[i];
@@ -463,7 +567,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             }
         }
     } else {
-        // 其他正常全选：全部
         for (ASAssetSection *sec in self.sections) {
             for (ASAssetModel *m in sec.assets) {
                 if (m.localId.length) [self.selectedIds addObject:m.localId];
@@ -482,18 +585,13 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     [self recomputeBytesAndRefreshTopOnly];
 
-    // 先算 bytes（不要中途 reload）
     if ([self isGroupMode]) {
         for (ASAssetSection *sec in self.sections) {
-            for (NSInteger i = 1; i < sec.assets.count; i++) {
-                ASAssetModel *m = sec.assets[i];
-                total += [self bytesForModel:m];
-            }
+            for (NSInteger i=1; i<sec.assets.count; i++) total += [self bytesForModel:sec.assets[i]];
         }
     } else {
-        for (ASAssetSection *sec in self.sections) {
+        for (ASAssetSection *sec in self.sections)
             for (ASAssetModel *m in sec.assets) total += [self bytesForModel:m];
-        }
     }
 
     for (ASAssetSection *sec in self.sections) {
@@ -531,7 +629,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 #pragma mark - Select all (nav)
 
 - (void)onSelectAllToggle {
-    // 判断当前是否“全选”
     NSMutableSet<NSString *> *shouldAll = [NSMutableSet set];
 
     if ([self isGroupMode]) {
@@ -553,10 +650,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 
     if (alreadyAll) {
-        // 取消全选（清空）
         [self.selectedIds removeAllObjects];
     } else {
-        // 全选到目标集合
         [self.selectedIds unionSet:shouldAll];
     }
 
@@ -576,7 +671,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         [targets addObjectsFromArray:sec.assets];
     }
 
-    // 是否本组已全选
     BOOL allSel = YES;
     for (ASAssetModel *m in targets) {
         if (![self.selectedIds containsObject:m.localId]) { allSel = NO; break; }
@@ -596,7 +690,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 - (void)onDelete {
     if (self.selectedIds.count == 0) return;
 
-    // 先拷贝，避免异步过程中 selectedIds 被改动
     NSSet<NSString *> *toDelete = [self.selectedIds copy];
     NSArray<NSString *> *ids = toDelete.allObjects;
 
@@ -612,19 +705,19 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!success) return;
 
-            // 修复 ScanManager 的缓存
-//            [[ASPhotoScanManager shared] purgeDeletedAssetsAndRecalculate];
-
-            // 再刷新当前列表
             [weakSelf.selectedIds removeAllObjects];
-            [weakSelf rebuildDataFromManager];
-            [weakSelf applyDefaultSelectionRule];
-            [weakSelf.cv reloadData];
-            [weakSelf recomputeBytesAndRefreshUI];
+
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                [weakSelf rebuildDataFromManager];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [weakSelf applyDefaultSelectionRule];
+                    [weakSelf.cv reloadData];
+                    [weakSelf recomputeBytesAndRefreshUI];
+                });
+            });
         });
     }];
 }
-
 
 #pragma mark - Collection DS
 
@@ -648,25 +741,27 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     // 先清空，避免复用闪旧图
     cell.img.image = nil;
-    cell.representedLocalId = m.localId;
+    cell.representedLocalId = m.localId ?: @"";
 
-    PHAsset *a = [PHAsset fetchAssetsWithLocalIdentifiers:@[m.localId] options:nil].firstObject;
+    // ✅ 关键：不再每个 cell fetch，一次性缓存里拿
+    PHAsset *a = (m.localId.length ? self.assetById[m.localId] : nil);
     if (!a) return cell;
 
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
-    opt.networkAccessAllowed = YES; // iCloud 上的也能拉
+    opt.networkAccessAllowed = YES;
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
     opt.resizeMode = PHImageRequestOptionsResizeModeExact;
     opt.synchronous = NO;
 
-    // 用 imageView 实际尺寸 * 屏幕 scale
     CGFloat scale = UIScreen.mainScreen.scale;
     CGSize viewSize = cell.img.bounds.size;
     if (viewSize.width <= 1 || viewSize.height <= 1) {
-        // 兜底：如果此时 bounds 还没布局好
         viewSize = cell.contentView.bounds.size;
     }
     CGSize target = CGSizeMake(viewSize.width * scale, viewSize.height * scale);
+
+    __weak typeof(cell) weakCell = cell;
+    NSString *expectId = cell.representedLocalId;
 
     [self.imgMgr requestImageForAsset:a
                            targetSize:target
@@ -676,21 +771,17 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         if (!result) return;
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            // 防复用：确保还是同一个 localId
-            if (![cell.representedLocalId isEqualToString:m.localId]) return;
-            cell.img.image = result;
+            ASAssetGridCell *c = weakCell;
+            if (!c) return;
+            if (![c.representedLocalId isEqualToString:expectId]) return;
+            c.img.image = result;
         });
     }];
 
     return cell;
 }
 
-
 #pragma mark - Selection (tap)
-
-- (BOOL)isIndexPathCleanable:(NSIndexPath *)ip {
-    return YES; // 允许第一张也能单选删除
-}
 
 - (void)recomputeBytesAndRefreshTopOnly {
     uint64_t total = 0;
@@ -722,7 +813,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                     forState:UIControlStateNormal];
     self.deleteBtn.enabled = canDelete;
 
-    //  只控制删除按钮显示/隐藏，bottomBar 一直浮着
     if (canDelete && self.deleteBtn.hidden) {
         self.deleteBtn.hidden = NO;
         [UIView animateWithDuration:0.15 animations:^{
@@ -740,7 +830,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    [collectionView deselectItemAtIndexPath:indexPath animated:NO]; //  去掉系统高亮闪
+    [collectionView deselectItemAtIndexPath:indexPath animated:NO];
 
     ASAssetModel *m = self.sections[indexPath.section].assets[indexPath.item];
     if (!m.localId.length) return;
@@ -748,8 +838,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     if ([self.selectedIds containsObject:m.localId]) [self.selectedIds removeObject:m.localId];
     else [self.selectedIds addObject:m.localId];
 
-    [self updateOneCell:indexPath];          //  只更新这个格子
-    [self recomputeBytesAndRefreshTopOnly];  //  只更新顶部文字/按钮，不 reloadData
+    [self updateOneCell:indexPath];
+    [self recomputeBytesAndRefreshTopOnly];
 }
 
 - (void)updateOneCell:(NSIndexPath *)ip {
@@ -766,7 +856,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     CGFloat gap = ((UICollectionViewFlowLayout *)layout).minimumInteritemSpacing;
     CGFloat w = collectionView.bounds.size.width - inset.left - inset.right;
     CGFloat itemW = floor((w - gap*2) / 3.0);
-    return CGSizeMake(itemW, itemW); // 正方形
+    return CGSizeMake(itemW, itemW);
 }
 
 #pragma mark - Header (group section select all)
@@ -782,7 +872,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     ASAssetSection *sec = self.sections[indexPath.section];
     h.titleLabel.text = sec.isGrouped ? sec.title : @"";
 
-    // 非分组也给个“全选/取消”，你不想要就把按钮隐藏掉
     BOOL showBtn = YES;
     h.selectAllBtn.hidden = !showBtn;
 

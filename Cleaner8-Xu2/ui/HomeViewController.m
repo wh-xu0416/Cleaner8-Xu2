@@ -156,6 +156,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 #pragma mark - HomeViewController
 
 @interface HomeViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
+@property (nonatomic, assign) CGFloat floatingTabReserve; // 给悬浮tab预留的高度
+
 @property (nonatomic, strong) NSSet<NSString *> *allCleanableIds;   // 去重后的可删集合
 @property (nonatomic, assign) uint64_t allCleanableBytes;           // 去重后的总大小
 @property (nonatomic, strong) UILabel *totalBytesLabel;
@@ -176,9 +178,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-
+    
     self.view.backgroundColor = UIColor.whiteColor;
-    self.title = @"首页";
 
     self.imgMgr = [PHCachingImageManager new];
     self.scanMgr = [ASPhotoScanManager shared];
@@ -264,14 +265,51 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     layout.minimumLineSpacing = 12;
     layout.sectionInset = UIEdgeInsetsMake(12, 16, 16, 16);
 
-    CGFloat top = CGRectGetMaxY(self.totalBytesLabel.frame) + 10;
-    self.cv = [[UICollectionView alloc] initWithFrame:CGRectMake(0, top, w, self.view.bounds.size.height - top)
-                                 collectionViewLayout:layout];
+    CGFloat top = 0; // 先占位，后面统一layout
+    self.cv = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
     self.cv.backgroundColor = [UIColor colorWithWhite:0.97 alpha:1];
     self.cv.dataSource = self;
     self.cv.delegate = self;
     [self.cv registerClass:HomeModuleCell.class forCellWithReuseIdentifier:@"HomeModuleCell"];
     [self.view addSubview:self.cv];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+
+    CGFloat w = self.view.bounds.size.width;
+    CGFloat h = self.view.bounds.size.height;
+    UIEdgeInsets safe = self.view.safeAreaInsets;
+
+    // 顶部不要写死88，按 safeArea 来
+    CGFloat topY = safe.top + 8;
+
+    self.scanStateLabel.frame = CGRectMake(16, topY, w - 32, 18);
+
+    self.totalBytesLabel.frame = CGRectMake(
+        16,
+        CGRectGetMaxY(self.scanStateLabel.frame) + 8,
+        w - 32 - 110,
+        18
+    );
+
+    self.deleteAllBtn.frame = CGRectMake(
+        w - 16 - 100,
+        CGRectGetMinY(self.totalBytesLabel.frame) - 4,
+        100,
+        26
+    );
+
+    CGFloat cvTop = CGRectGetMaxY(self.totalBytesLabel.frame) + 10;
+    self.cv.frame = CGRectMake(0, cvTop, w, h - cvTop);
+
+    // 悬浮tab高度64 + margin20 + safe.bottom + buffer10
+    CGFloat reserve = 64 + 20 + safe.bottom + 10;
+
+    UIEdgeInsets inset = self.cv.contentInset;
+    inset.bottom = reserve;
+    self.cv.contentInset = inset;
+    self.cv.scrollIndicatorInsets = inset;
 }
 
 - (void)updateScanStateText:(ASScanSnapshot *)s {
@@ -511,14 +549,14 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         vm.title = title;
         vm.statusText = statusTextForType(type);
 
-        vm.thumbLocalIds = pickThumbIds(arr);
-        vm.thumbKey = [vm.thumbLocalIds componentsJoinedByString:@"|"];
+        NSArray<NSString *> *thumbs = pickThumbIds(arr);
+        vm.thumbLocalIds = thumbs;
+        vm.thumbKey = [thumbs componentsJoinedByString:@"|"];
 
         uint64_t bytes = 0;
         for (ASAssetModel *m in arr) bytes += m.fileSizeBytes;
         vm.totalCount = arr.count;
         vm.totalBytes = bytes;
-        vm.thumbLocalIds = pickThumbIds(arr);
         return vm;
     };
 
@@ -529,15 +567,14 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         vm.title = title;
         vm.statusText = statusTextForType(type);
 
-        vm.thumbLocalIds = thumbsFromFirstValidGroup(groups, gt);
-        vm.thumbKey = [vm.thumbLocalIds componentsJoinedByString:@"|"];
+        NSArray<NSString *> *thumbs = thumbsFromFirstValidGroup(groups, gt);
+        vm.thumbLocalIds = thumbs;
+        vm.thumbKey = [thumbs componentsJoinedByString:@"|"];
 
         uint64_t bytes = 0;
         for (ASAssetModel *m in flat) bytes += m.fileSizeBytes;
         vm.totalCount = flat.count;
         vm.totalBytes = bytes;
-
-        vm.thumbLocalIds = thumbsFromFirstValidGroup(groups, gt);
         return vm;
     };
 
