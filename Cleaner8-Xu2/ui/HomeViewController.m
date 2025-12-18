@@ -592,17 +592,26 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 #pragma mark - Tap Module -> Push List
 
-- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+- (void)collectionView:(UICollectionView *)collectionView
+didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+
     if (indexPath.item >= self.modules.count) return;
+
     ASHomeModuleVM *vm = self.modules[indexPath.item];
 
     ASAssetListMode mode;
     if (![self mapHomeModule:vm.type toListMode:&mode]) return;
 
-    ASAssetListViewController *vc = [[ASAssetListViewController alloc] initWithMode:mode];
-    vc.hidesBottomBarWhenPushed = YES;
-    [self.navigationController pushViewController:vc animated:YES];
+    ASAssetListViewController *vc =
+        [[ASAssetListViewController alloc] initWithMode:mode];
+
+    UINavigationController *rootNav =
+        (UINavigationController *)self.view.window.rootViewController;
+
+    [rootNav pushViewController:vc animated:YES];
+
 }
+
 
 - (BOOL)mapHomeModule:(ASHomeModuleType)type toListMode:(ASAssetListMode *)outMode {
     if (!outMode) return NO;

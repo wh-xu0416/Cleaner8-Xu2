@@ -1,6 +1,7 @@
 #import "ASAssetListViewController.h"
 #import <Photos/Photos.h>
 #import "ASPhotoScanManager.h"
+#import "ASCustomNavBar.h"
 
 #pragma mark - UI helpers
 
@@ -106,6 +107,7 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 }
 @end
 
+
 #pragma mark - Section header
 
 @interface ASAssetSectionHeader : UICollectionReusableView
@@ -142,6 +144,8 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 #pragma mark - VC
 
 @interface ASAssetListViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
+@property (nonatomic, strong) ASCustomNavBar *navBar;
+
 @property (nonatomic) ASAssetListMode mode;
 
 @property (nonatomic, strong) UICollectionView *cv;
@@ -149,11 +153,6 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 @property (nonatomic, strong) UILabel *totalLabel;
 @property (nonatomic, strong) UIButton *deleteBtn;
 @property (nonatomic) CGFloat bottomBarH;
-
-@property (nonatomic, strong) UIView *customNavBar;  // 自定义导航栏
-@property (nonatomic, strong) UILabel *titleLabel;   // 自定义标题
-@property (nonatomic, strong) UIButton *backButton;  // 返回按钮
-@property (nonatomic, strong) UIButton *selectAllButton; // 全选按钮
 
 @property (nonatomic, strong) PHCachingImageManager *imgMgr;
 @property (nonatomic, strong) ASPhotoScanManager *scanMgr;
@@ -188,93 +187,116 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 隐藏系统的导航栏
-    self.navigationController.navigationBar.hidden = YES;
+    self.view.backgroundColor = UIColor.whiteColor;
+    
+    // 只隐藏系统 nav，不影响手势
+    self.navigationController.navigationBarHidden = YES;
 
-    // 设置自定义导航栏
-    [self setupCustomNavBar];
+    // 外部 title 统一从 mode 计算
+    NSString *title = [self titleForMode:self.mode];
 
-    // 继续执行原有代码
+    __weak typeof(self) weakSelf = self;
+
+    self.navBar = [[ASCustomNavBar alloc] initWithTitle:title];
+
+    self.navBar.onBack = ^{
+        [weakSelf.navigationController popViewControllerAnimated:YES];
+    };
+
+    self.navBar.onRight = ^(BOOL allSelected) {
+        [weakSelf toggleSelectAll];
+    };
+
+    [self.view addSubview:self.navBar];
+
     self.imgMgr = [PHCachingImageManager new];
     self.scanMgr = [ASPhotoScanManager shared];
 
-    self.title = [self titleForMode:self.mode];
     [self setupUI];
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [self rebuildDataFromManager];
-
         dispatch_async(dispatch_get_main_queue(), ^{
             [self applyDefaultSelectionRule];
             [self.cv reloadData];
             [self recomputeBytesAndRefreshUI];
+            [self syncNavSelectAllState];
         });
     });
-
-    [self setupNavSelectAllIfNeeded];
 }
 
-#pragma mark - 自定义导航栏设置
-
-- (void)setupCustomNavBar {
-    CGFloat navBarHeight = 44 + self.view.safeAreaInsets.top;  // 适配刘海屏
-
-    // 创建自定义导航栏容器
-    self.customNavBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, navBarHeight)];
-    self.customNavBar.backgroundColor = [UIColor whiteColor]; // 设置背景色为白色
-
-    // 创建返回按钮
-    self.backButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    self.backButton.frame = CGRectMake(10, self.view.safeAreaInsets.top, 44, 44);  // 左上角按钮
-    [self.backButton setImage:[UIImage systemImageNamed:@"arrow.left.circle.fill"] forState:UIControlStateNormal];
-    [self.backButton addTarget:self action:@selector(onBackButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.customNavBar addSubview:self.backButton];
-
-    // 创建标题
-    self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 44)];
-    self.titleLabel.text = self.title;
-    self.titleLabel.textAlignment = NSTextAlignmentCenter;
-    self.titleLabel.font = [UIFont boldSystemFontOfSize:17];
-    self.titleLabel.textColor = [UIColor blackColor];
-    [self.customNavBar addSubview:self.titleLabel];
-
-    // 创建全选按钮
-    self.selectAllButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.selectAllButton.frame = CGRectMake(self.view.bounds.size.width - 80, self.view.safeAreaInsets.top, 80, 44);
-    [self.selectAllButton setTitle:@"全选" forState:UIControlStateNormal];
-    [self.selectAllButton addTarget:self action:@selector(onSelectAllTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.customNavBar addSubview:self.selectAllButton];
-
-    // 将自定义导航栏添加到视图
-    [self.view addSubview:self.customNavBar];
-}
-
-- (void)onBackButtonTapped {
-    [self.navigationController popViewControllerAnimated:YES];
-}
-
-- (void)onSelectAllTapped {
-    // 在这里添加全选的操作逻辑
-    [self toggleSelectAll];
-}
 
 #pragma mark - 自定义布局调整
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
 
-    // 确保自定义导航栏的frame正确
-    CGFloat navBarHeight = 44 + self.view.safeAreaInsets.top;  // 适配刘海屏
-    self.customNavBar.frame = CGRectMake(0, 0, self.view.bounds.size.width, navBarHeight);
+    CGFloat navH = 44 + self.view.safeAreaInsets.top;
+    CGFloat bottomSafe = self.view.safeAreaInsets.bottom;
+    CGFloat bottomH = self.bottomBarH;
 
-    // 调整UICollectionView的contentInset，以避开自定义导航栏
-    UIEdgeInsets inset = self.cv.contentInset;
-    inset.top = navBarHeight;  // 更新 contentInset 的 top 值
-    self.cv.contentInset = inset;
-    self.cv.scrollIndicatorInsets = inset;
+    self.navBar.frame = CGRectMake(0, 0,
+                                         self.view.bounds.size.width,
+                                         navH);
 
-    // 确保自定义导航栏显示在最上面
-    [self.view bringSubviewToFront:self.customNavBar];
+    self.bottomBar.frame = CGRectMake(
+        16,
+        self.view.bounds.size.height - bottomH - bottomSafe,
+        self.view.bounds.size.width - 32,
+        bottomH
+    );
+    
+    CGFloat pad = 12;
+    CGFloat h = self.bottomBar.bounds.size.height;
+
+    // 删除按钮（右侧）
+    CGFloat btnW = 120;
+    self.deleteBtn.frame = CGRectMake(
+        self.bottomBar.bounds.size.width - btnW - pad,
+        pad,
+        btnW,
+        h - pad * 2
+    );
+
+    // 文案（左侧）
+    self.totalLabel.frame = CGRectMake(
+        pad,
+        pad,
+        self.bottomBar.bounds.size.width - btnW - pad * 3,
+        h - pad * 2
+    );
+
+    self.cv.frame = CGRectMake(0, navH, self.view.bounds.size.width, self.view.bounds.size.height - navH - bottomH - bottomSafe);
+    self.cv.contentInset = UIEdgeInsetsZero;  // 或调整内边距
+
+    self.cv.scrollIndicatorInsets = self.cv.contentInset;
+
+    [self.view bringSubviewToFront:self.navBar];
+    [self.view bringSubviewToFront:self.bottomBar];
+}
+
+- (void)syncNavSelectAllState {
+    NSMutableSet<NSString *> *shouldAll = [NSMutableSet set];
+
+    if ([self isGroupMode]) {
+        for (ASAssetSection *sec in self.sections)
+            for (NSInteger i = 1; i < sec.assets.count; i++)
+                [shouldAll addObject:sec.assets[i].localId];
+    } else {
+        for (ASAssetSection *sec in self.sections)
+            for (ASAssetModel *m in sec.assets)
+                [shouldAll addObject:m.localId];
+    }
+
+    BOOL all = shouldAll.count > 0;
+    for (NSString *lid in shouldAll) {
+        if (![self.selectedIds containsObject:lid]) {
+            all = NO;
+            break;
+        }
+    }
+
+    self.navBar.allSelected = all;
 }
 
 #pragma mark - UI 设置
@@ -285,7 +307,7 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
     UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
     layout.minimumInteritemSpacing = 8;
     layout.minimumLineSpacing = 8;
-    layout.sectionInset = UIEdgeInsetsMake(10, 12, 12, 12);
+    layout.sectionInset = UIEdgeInsetsMake(0, 12, 0, 12);
     layout.headerReferenceSize = CGSizeMake(self.view.bounds.size.width, 44);
 
     self.cv = [[UICollectionView alloc] initWithFrame:self.view.bounds
@@ -325,13 +347,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.totalLabel = lab;
     self.deleteBtn = btn;
 
-    self.deleteBtn.hidden = YES;
-    self.deleteBtn.alpha = 0.0;
-
-    UIEdgeInsets inset = self.cv.contentInset;
-    inset.bottom = self.bottomBarH + 16;
-    self.cv.contentInset = inset;
-    self.cv.scrollIndicatorInsets = inset;
+    self.deleteBtn.hidden = NO;
+    self.deleteBtn.alpha = 0.4;
+    self.deleteBtn.enabled = NO;
 
     [self.view bringSubviewToFront:self.bottomBar];
 }
@@ -368,15 +386,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 
     [self recomputeBytesAndRefreshUI];
+    [self syncNavSelectAllState];
 }
 
-- (void)setupNavSelectAllIfNeeded {
-    UIBarButtonItem *btn = [[UIBarButtonItem alloc] initWithTitle:@"全选"
-                                                            style:UIBarButtonItemStylePlain
-                                                           target:self
-                                                           action:@selector(onSelectAllToggle)];
-    self.navigationItem.rightBarButtonItem = btn;
-}
 
 #pragma mark - Build data
 
@@ -608,10 +620,14 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                             ASHumanSize(self.selectedBytes)];
 
     BOOL canDelete = (self.selectedIds.count > 0);
+
+    self.deleteBtn.hidden = NO;
     self.deleteBtn.enabled = canDelete;
     self.deleteBtn.alpha = canDelete ? 1.0 : 0.4;
-    [self.deleteBtn setTitle:[NSString stringWithFormat:@"删除(%@)", ASHumanSize(self.selectedBytes)]
-                    forState:UIControlStateNormal];
+
+    [self.deleteBtn setTitle:
+    [NSString stringWithFormat:@"删除(%@)", ASHumanSize(self.selectedBytes)]
+    forState:UIControlStateNormal];
 
     for (NSIndexPath *ip in self.cv.indexPathsForVisibleItems) {
         if (ip.section >= self.sections.count) continue;
@@ -628,35 +644,36 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
 #pragma mark - Select all (nav)
 
-- (void)onSelectAllToggle {
-    NSMutableSet<NSString *> *shouldAll = [NSMutableSet set];
-
-    if ([self isGroupMode]) {
-        for (ASAssetSection *sec in self.sections) {
-            for (NSInteger i = 1; i < sec.assets.count; i++) {
-                ASAssetModel *m = sec.assets[i];
-                if (m.localId.length) [shouldAll addObject:m.localId];
-            }
-        }
-    } else {
-        for (ASAssetSection *sec in self.sections) {
-            for (ASAssetModel *m in sec.assets) if (m.localId.length) [shouldAll addObject:m.localId];
-        }
-    }
-
-    BOOL alreadyAll = YES;
-    for (NSString *lid in shouldAll) {
-        if (![self.selectedIds containsObject:lid]) { alreadyAll = NO; break; }
-    }
-
-    if (alreadyAll) {
-        [self.selectedIds removeAllObjects];
-    } else {
-        [self.selectedIds unionSet:shouldAll];
-    }
-
-    [self recomputeBytesAndRefreshUI];
-}
+//- (void)onSelectAllToggle {
+//    NSMutableSet<NSString *> *shouldAll = [NSMutableSet set];
+//
+//    if ([self isGroupMode]) {
+//        for (ASAssetSection *sec in self.sections) {
+//            for (NSInteger i = 1; i < sec.assets.count; i++) {
+//                ASAssetModel *m = sec.assets[i];
+//                if (m.localId.length) [shouldAll addObject:m.localId];
+//            }
+//        }
+//    } else {
+//        for (ASAssetSection *sec in self.sections) {
+//            for (ASAssetModel *m in sec.assets) if (m.localId.length) [shouldAll addObject:m.localId];
+//        }
+//    }
+//
+//    BOOL alreadyAll = YES;
+//    for (NSString *lid in shouldAll) {
+//        if (![self.selectedIds containsObject:lid]) { alreadyAll = NO; break; }
+//    }
+//
+//    if (alreadyAll) {
+//        [self.selectedIds removeAllObjects];
+//    } else {
+//        [self.selectedIds unionSet:shouldAll];
+//    }
+//
+//    [self recomputeBytesAndRefreshUI];
+//    [self syncNavSelectAllState];
+//}
 
 #pragma mark - Per section select all
 
@@ -683,6 +700,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 
     [self recomputeBytesAndRefreshUI];
+    [self syncNavSelectAllState];
 }
 
 #pragma mark - Delete
@@ -713,6 +731,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                     [weakSelf applyDefaultSelectionRule];
                     [weakSelf.cv reloadData];
                     [weakSelf recomputeBytesAndRefreshUI];
+                    [weakSelf syncNavSelectAllState];
                 });
             });
         });
@@ -813,20 +832,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                     forState:UIControlStateNormal];
     self.deleteBtn.enabled = canDelete;
 
-    if (canDelete && self.deleteBtn.hidden) {
-        self.deleteBtn.hidden = NO;
-        [UIView animateWithDuration:0.15 animations:^{
-            self.deleteBtn.alpha = 1.0;
-        }];
-    } else if (!canDelete && !self.deleteBtn.hidden) {
-        [UIView animateWithDuration:0.15 animations:^{
-            self.deleteBtn.alpha = 0.0;
-        } completion:^(BOOL finished) {
-            self.deleteBtn.hidden = YES;
-        }];
-    } else {
-        self.deleteBtn.alpha = canDelete ? 1.0 : 0.0;
-    }
+    self.deleteBtn.enabled = canDelete;
+    self.deleteBtn.alpha = canDelete ? 1.0 : 0.4;
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
@@ -885,9 +892,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 - (CGSize)collectionView:(UICollectionView *)collectionView
                   layout:(UICollectionViewLayout *)layout
 referenceSizeForHeaderInSection:(NSInteger)section {
-    ASAssetSection *sec = self.sections[section];
-    if ([self isGroupMode]) return CGSizeMake(collectionView.bounds.size.width, 44);
-    return CGSizeMake(collectionView.bounds.size.width, 0.01);
+    if ([self isGroupMode]) {
+        return CGSizeMake(collectionView.bounds.size.width, 44);
+    }
+    return CGSizeZero;
 }
-
 @end

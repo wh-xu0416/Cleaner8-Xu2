@@ -29,21 +29,19 @@
         setBool:YES
         forKey:@"hasCompletedOnboarding"];
 
-    UIWindow *window = self.view.window;
-    if (!window) {
+    MainTabBarController *main = [MainTabBarController new];
+
+    UINavigationController *rootNav =
+        (UINavigationController *)self.view.window.rootViewController;
+
+    // 安全判断（防止以后改结构崩）
+    if (![rootNav isKindOfClass:[UINavigationController class]]) {
         return;
     }
 
-    MainTabBarController *mainVC =
-        [[MainTabBarController alloc] init];
-
-    [UIView transitionWithView:window
-                      duration:0.3
-                       options:UIViewAnimationOptionTransitionCrossDissolve
-                    animations:^{
-                        window.rootViewController = mainVC;
-                    }
-                    completion:nil];
+    // 用 Main 替换整个栈，引导页彻底出局
+    [rootNav setViewControllers:@[main] animated:YES];
 }
+
 
 @end

@@ -6,10 +6,26 @@
 #import "SetViewController.h"
 
 @interface MainTabBarController ()
+<
+UIGestureRecognizerDelegate
+>
 @property (nonatomic, strong) ASFloatingTabBar *floatingTab;
 @end
 
 @implementation MainTabBarController
+
+- (void)presentFlowController:(UIViewController *)vc {
+
+    // 隐藏浮动 Tab
+    self.floatingTab.hidden = YES;
+
+    UINavigationController *nav =
+        [[UINavigationController alloc] initWithRootViewController:vc];
+
+    nav.modalPresentationStyle = UIModalPresentationFullScreen;
+
+    [self presentViewController:nav animated:YES completion:nil];
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -41,10 +57,24 @@
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
 
+    UINavigationController *rootNav =
+           self.navigationController;
+
+    // 恢复系统侧滑返回
+    rootNav.interactivePopGestureRecognizer.enabled = YES;
+    rootNav.interactivePopGestureRecognizer.delegate = self;
+    
     // 只在首页显示浮动 tab
     if (self.selectedIndex == 0) {
         [self.view addSubview:self.floatingTab];  // 首页显示浮动 tab
     }
+}
+
+#pragma mark - UIGestureRecognizerDelegate
+
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
+    // 栈里只有一个 VC（MainTabBarController）时，禁止返回
+    return self.navigationController.viewControllers.count > 1;
 }
 
 - (void)viewDidLayoutSubviews {

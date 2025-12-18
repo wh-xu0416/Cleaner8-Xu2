@@ -15,16 +15,21 @@ options:(UISceneConnectionOptions *)connectionOptions {
         [[NSUserDefaults standardUserDefaults]
             boolForKey:@"hasCompletedOnboarding"];
 
+    UIViewController *rootVC;
+
     if (!hasCompletedOnboarding) {
         NSLog(@"➡️ 显示引导页");
-        self.window.rootViewController =
-            [[OnboardingViewController alloc] init];
+        rootVC = [[OnboardingViewController alloc] init];
     } else {
         NSLog(@"➡️ 显示主界面");
-        self.window.rootViewController =
-            [[MainTabBarController alloc] init];
+        rootVC = [[MainTabBarController alloc] init];
     }
 
+    UINavigationController *rootNav =
+        [[UINavigationController alloc] initWithRootViewController:rootVC];
+    rootNav.navigationBarHidden = YES;
+
+    self.window.rootViewController = rootNav;
     [self.window makeKeyAndVisible];
 }
 
