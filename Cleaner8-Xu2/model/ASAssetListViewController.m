@@ -206,6 +206,7 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
     self.navBar.onRight = ^(BOOL allSelected) {
         [weakSelf toggleSelectAll];
     };
+    [self.navBar setShowRightButton:YES];
 
     [self.view addSubview:self.navBar];
 

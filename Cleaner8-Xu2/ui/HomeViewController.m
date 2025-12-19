@@ -2,6 +2,7 @@
 #import <Photos/Photos.h>
 #import "ASPhotoScanManager.h"
 #import "ASAssetListViewController.h"
+#import "ASContactsViewController.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -15,6 +16,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     ASHomeModuleTypeScreenshots,
     ASHomeModuleTypeScreenRecordings,
     ASHomeModuleTypeBigVideos,
+    ASHomeModuleTypeContacts,
 };
 
 @interface ASHomeModuleVM : NSObject
@@ -94,6 +96,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     CGFloat h = self.contentView.bounds.size.height;
 
     self.titleLabel.frame = CGRectMake(pad, pad, w - pad*2, 20);
+    NSLog(@"titleLabel frame: %@", NSStringFromCGRect(self.titleLabel.frame));  // Debug log for titleLabel frame
     self.countLabel.frame = CGRectMake(pad, CGRectGetMaxY(self.titleLabel.frame) + 6, w - pad*2, 18);
     self.sizeLabel.frame  = CGRectMake(pad, CGRectGetMaxY(self.countLabel.frame) + 2, w - pad*2, 18);
 
@@ -105,6 +108,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.img2.frame = CGRectMake(CGRectGetMaxX(self.img1.frame) + 10, imgY, imgW, imgH);
 }
 
+
 - (void)prepareForReuse {
     [super prepareForReuse];
     self.representedLocalIds = @[];
@@ -114,6 +118,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 }
 
 - (void)applyVM:(ASHomeModuleVM *)vm {
+    NSLog(@"Setting title: %@", vm.title); // 检查 title 是否为空
 
     NSString *st = vm.statusText ?: @"";
     if (st.length > 0) {
@@ -135,6 +140,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         self.titleLabel.text = vm.title;
         self.titleLabel.attributedText = nil;
     }
+    NSLog(@"titleLabel text: %@", self.titleLabel.text);  // Check what title is being set
 
     self.countLabel.text = [NSString stringWithFormat:@"数量：%lu", (unsigned long)vm.totalCount];
     self.sizeLabel.text  = [NSString stringWithFormat:@"大小：%@", [HomeModuleCell humanSize:vm.totalBytes]];
@@ -281,7 +287,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     CGFloat h = self.view.bounds.size.height;
     UIEdgeInsets safe = self.view.safeAreaInsets;
 
-    // 顶部不要写死88，按 safeArea 来
     CGFloat topY = safe.top + 8;
 
     self.scanStateLabel.frame = CGRectMake(16, topY, w - 32, 18);
@@ -393,7 +398,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     NSArray<ASAssetModel *> *recs  = self.scanMgr.screenRecordings ?: @[];
     NSArray<ASAssetModel *> *bigs  = self.scanMgr.bigVideos ?: @[];
 
-    // ✅ 扫描中不要做“存在性校验”（会很重）；finished 再做一次矫正即可
     BOOL needExistCheck = (self.scanMgr.snapshot.state == ASScanStateFinished);
 
     NSMutableSet<NSString *> *existIdSet = nil;
@@ -512,7 +516,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.allCleanableIds = [NSSet setWithArray:bytesById.allKeys];
     self.allCleanableBytes = uniqBytes;
 
-    // ✅ 缩略图：跨模块去重（shots/recs/bigs 用）
+    // 缩略图：跨模块去重（shots/recs/bigs 用）
     NSMutableSet<NSString *> *usedThumbIds = [NSMutableSet set];
 
     NSArray<NSString *> *(^pickThumbIds)(NSArray<ASAssetModel *> *) =
@@ -578,6 +582,15 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         return vm;
     };
 
+    ASHomeModuleVM *contactsVM = [ASHomeModuleVM new];
+    contactsVM.type = ASHomeModuleTypeContacts;
+    contactsVM.title = @"联系人";
+    contactsVM.statusText = @"0";
+    contactsVM.totalCount = 0;
+    contactsVM.totalBytes = 0;
+    contactsVM.thumbLocalIds = @[@"defaultPlaceholderID"];
+    contactsVM.thumbKey = @"defaultPlaceholderKey";
+
     return @[
         makeGroupVM(ASHomeModuleTypeSimilarImage,   @"相似图片", sim, ASGroupTypeSimilarImage,   simImg),
         makeGroupVM(ASHomeModuleTypeSimilarVideo,   @"相似视频", sim, ASGroupTypeSimilarVideo,   simVid),
@@ -587,6 +600,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         makeVM(ASHomeModuleTypeScreenshots,        @"截屏", shots),
         makeVM(ASHomeModuleTypeScreenRecordings,   @"录屏", recs),
         makeVM(ASHomeModuleTypeBigVideos,          @"大视频", bigs),
+        contactsVM,
     ];
 }
 
@@ -599,18 +613,26 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
 
     ASHomeModuleVM *vm = self.modules[indexPath.item];
 
+    UINavigationController *rootNav =
+        (UINavigationController *)self.view.window.rootViewController;
+
+    // ✅ 联系人模块：保持同一套 rootNav push
+    if (vm.type == ASHomeModuleTypeContacts) {
+        ASContactsViewController *vc = [[ASContactsViewController alloc] init];
+        [rootNav pushViewController:vc animated:YES];
+        return;
+    }
+
+    // ✅ 原来的相册模块逻辑不变
     ASAssetListMode mode;
     if (![self mapHomeModule:vm.type toListMode:&mode]) return;
 
     ASAssetListViewController *vc =
         [[ASAssetListViewController alloc] initWithMode:mode];
 
-    UINavigationController *rootNav =
-        (UINavigationController *)self.view.window.rootViewController;
-
     [rootNav pushViewController:vc animated:YES];
-
 }
+
 
 
 - (BOOL)mapHomeModule:(ASHomeModuleType)type toListMode:(ASAssetListMode *)outMode {
@@ -624,6 +646,7 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
         case ASHomeModuleTypeScreenshots:       *outMode = ASAssetListModeScreenshots; return YES;
         case ASHomeModuleTypeScreenRecordings:  *outMode = ASAssetListModeScreenRecordings; return YES;
         case ASHomeModuleTypeBigVideos:         *outMode = ASAssetListModeBigVideos; return YES;
+        case ASHomeModuleTypeContacts:          return NO;
     }
     return NO;
 }
@@ -645,7 +668,7 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
 
     BOOL thumbChanged = (cell.thumbKey == nil) || ![cell.thumbKey isEqualToString:newKey];
 
-    // ✅ 先更新标记
+    //  先更新标记
     cell.representedLocalIds = ids;
     cell.thumbKey = newKey;
 
@@ -655,7 +678,7 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
         return cell;
     }
 
-    // ✅只有变化时才重新请求图片（扫描中尤其有效）
+    // 只有变化时才重新请求图片（扫描中尤其有效）
     if (thumbChanged) {
         cell.img1.image = nil;
         cell.img2.image = nil;
@@ -666,6 +689,7 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     }
     return cell;
 }
+
 
 - (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
     CGFloat totalW = collectionView.bounds.size.width;

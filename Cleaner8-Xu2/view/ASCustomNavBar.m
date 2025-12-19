@@ -18,20 +18,15 @@
         self.backgroundColor = UIColor.whiteColor;
 
         if (@available(iOS 13.0, *)) {
-            self.statusH = UIApplication.sharedApplication
-                               .windows.firstObject
-                               .safeAreaInsets.top;
+            self.statusH = UIApplication.sharedApplication.windows.firstObject.safeAreaInsets.top;
         } else {
             self.statusH = 20;
         }
 
         // 返回按钮
         self.backButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        [self.backButton setImage:[UIImage systemImageNamed:@"chevron.left"]
-                         forState:UIControlStateNormal];
-        [self.backButton addTarget:self
-                            action:@selector(backTap)
-                  forControlEvents:UIControlEventTouchUpInside];
+        [self.backButton setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
+        [self.backButton addTarget:self action:@selector(backTap) forControlEvents:UIControlEventTouchUpInside];
 
         // 标题
         self.titleLabel = [UILabel new];
@@ -43,13 +38,14 @@
         self.rightButton = [UIButton buttonWithType:UIButtonTypeSystem];
         self.rightButton.titleLabel.font = [UIFont systemFontOfSize:15];
         [self.rightButton setTitle:@"全选" forState:UIControlStateNormal];
-        [self.rightButton addTarget:self
-                             action:@selector(rightTap)
-                   forControlEvents:UIControlEventTouchUpInside];
+        [self.rightButton addTarget:self action:@selector(rightTap) forControlEvents:UIControlEventTouchUpInside];
 
         [self addSubview:self.backButton];
         [self addSubview:self.titleLabel];
         [self addSubview:self.rightButton];
+
+        // 默认右侧按钮隐藏
+        self.rightButton.hidden = YES;
     }
     return self;
 }
@@ -69,8 +65,7 @@
 }
 
 - (CGSize)intrinsicContentSize {
-    return CGSizeMake(UIViewNoIntrinsicMetric,
-                      self.statusH + 44);
+    return CGSizeMake(UIViewNoIntrinsicMetric, self.statusH + 44);
 }
 
 #pragma mark - Actions
@@ -95,6 +90,11 @@
 - (void)setAllSelected:(BOOL)allSelected {
     _allSelected = allSelected;
     [self updateRightButtonTitle];
+}
+
+- (void)setShowRightButton:(BOOL)showRightButton {
+    _showRightButton = showRightButton;
+    self.rightButton.hidden = !showRightButton;
 }
 
 - (void)updateRightButtonTitle {
