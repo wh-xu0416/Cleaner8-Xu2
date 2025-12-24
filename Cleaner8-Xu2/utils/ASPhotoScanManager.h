@@ -33,9 +33,19 @@ typedef NS_ENUM(NSInteger, ASModuleScanState) {
     ASModuleScanStateFinished,     // 完成
 };
 
+/// ⚠️ moduleStates 固定长度 = 9，对应 .m 内 ASHomeModuleType 顺序：
+/// 0 SimilarImage
+/// 1 SimilarVideo
+/// 2 DuplicateImage
+/// 3 DuplicateVideo
+/// 4 Screenshots
+/// 5 ScreenRecordings
+/// 6 BigVideos
+/// 7 BlurryPhotos
+/// 8 OtherPhotos
 @interface ASScanSnapshot : NSObject <NSSecureCoding>
 
-@property (nonatomic, strong) NSArray<NSNumber *> *moduleStates; // 长度固定=7，按 ASHomeModuleType 顺序
+@property (nonatomic, strong) NSArray<NSNumber *> *moduleStates; // 长度固定=9
 
 @property (nonatomic) ASScanState state;
 
@@ -57,12 +67,19 @@ typedef NS_ENUM(NSInteger, ASModuleScanState) {
 @property (nonatomic) NSUInteger duplicateGroupCount;
 @property (nonatomic) NSUInteger similarGroupCount;
 
+@property (nonatomic) NSUInteger blurryCount;
+@property (nonatomic) uint64_t   blurryBytes;
+
+@property (nonatomic) NSUInteger otherCount;
+@property (nonatomic) uint64_t   otherBytes;
+
 @property (nonatomic, strong) NSDate *lastUpdated;
 @property (nonatomic, strong, nullable) NSData *phash256Data;
 
 @end
 
 @interface ASAssetModel : NSObject <NSSecureCoding>
+@property (nonatomic, assign) float blurScore; // 越小越模糊（Tenengrad）
 @property (nonatomic, copy) NSString *localId;
 @property (nonatomic) PHAssetMediaType mediaType;
 @property (nonatomic) PHAssetMediaSubtype subtypes;
@@ -71,16 +88,16 @@ typedef NS_ENUM(NSInteger, ASModuleScanState) {
 @property (nonatomic, strong, nullable) NSDate *modificationDate;
 
 @property (nonatomic) uint64_t fileSizeBytes;
+
 @property (nonatomic, strong, nullable) NSData *phash256Data;
 
-// 相似计算特征
-@property (nonatomic) uint64_t pHash;                 // 64-bit
-@property (nonatomic, strong, nullable) NSData *visionPrintData; // VNFeaturePrint (archived)
+@property (nonatomic) uint64_t pHash;
+@property (nonatomic, strong, nullable) NSData *visionPrintData;
 @end
 
 @interface ASAssetGroup : NSObject <NSSecureCoding>
 @property (nonatomic) ASGroupType type;
-@property (nonatomic, strong) NSMutableArray<ASAssetModel *> *assets; // 第一个为保留，其余为可清理
+@property (nonatomic, strong) NSMutableArray<ASAssetModel *> *assets;
 @end
 
 typedef void(^ASScanProgressBlock)(ASScanSnapshot *snapshot);
@@ -95,11 +112,12 @@ typedef void(^ASScanCompletionBlock)(ASScanSnapshot *snapshot, NSError *_Nullabl
 @property (nonatomic, readonly) NSArray<ASAssetModel *> *screenshots;
 @property (nonatomic, readonly) NSArray<ASAssetModel *> *screenRecordings;
 @property (nonatomic, readonly) NSArray<ASAssetModel *> *bigVideos;
+@property (nonatomic, readonly) NSArray<ASAssetModel *> *blurryPhotos;
+@property (nonatomic, readonly) NSArray<ASAssetModel *> *otherPhotos;
 
+/// 手动触发一次「删除资产清理 + 重新统计 + 保存缓存」
+///（可用于你想显式做一次 purge 的场景）
 - (void)purgeDeletedAssetsAndRecalculate;
-
-//@property (nonatomic, strong) NSMutableArray<ASAssetModel *> *comparableImagesM;
-//@property (nonatomic, strong) NSMutableArray<ASAssetModel *> *comparableVideosM;
 
 + (instancetype)shared;
 

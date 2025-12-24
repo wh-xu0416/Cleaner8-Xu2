@@ -3,6 +3,13 @@
 #import <Vision/Vision.h>
 #import <Accelerate/Accelerate.h>
 #import <AVFoundation/AVFoundation.h>
+#import <QuartzCore/QuartzCore.h>
+#import <float.h>
+
+static const float kBlurKeepPercent = 0.05f;   // 保留最差 5%
+static const NSUInteger kBlurKeepMin = 40;     // 至少 40 张
+static const NSUInteger kBlurKeepMax = 300;    // 最多 300 张
+static const NSUInteger kBlurWarmup  = 80;     // 前 80 张只收集，不入榜（稳定分布）
 
 const ASComparePolicy kPolicySimilar   = { .phashThreshold = 119, .visionThreshold = 0.56f };
 const ASComparePolicy kPolicyDuplicate = { .phashThreshold = 30,  .visionThreshold = 0.20f };
@@ -18,6 +25,19 @@ typedef struct {
     int pxEpsilon;        // ±8 px
     int ratioPermille;    // ±2% => 20‰
 } ASScreenMetrics;
+
+// Blur
+static int gBlurDebugPrinted = 0;
+
+static NSCache<NSString*, NSNumber*> *ASBlurMemo(void) {
+    static NSCache *c;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        c = [NSCache new];
+        c.countLimit = 20000;
+    });
+    return c;
+}
 
 static inline ASScreenMetrics ASScreenMetricsMake(void) {
     __block CGRect bounds = CGRectZero;
@@ -215,10 +235,11 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 @implementation ASScanSnapshot
 + (BOOL)supportsSecureCoding { return YES; }
 - (instancetype)init {
+    // ✅ 9 个模块状态
     _moduleStates = @[
-      @(ASModuleScanStateIdle), @(ASModuleScanStateIdle), @(ASModuleScanStateIdle),
-      @(ASModuleScanStateIdle), @(ASModuleScanStateIdle), @(ASModuleScanStateIdle),
-      @(ASModuleScanStateIdle)
+      @(ASModuleScanStateIdle),@(ASModuleScanStateIdle),@(ASModuleScanStateIdle),
+      @(ASModuleScanStateIdle),@(ASModuleScanStateIdle),@(ASModuleScanStateIdle),
+      @(ASModuleScanStateIdle),@(ASModuleScanStateIdle),@(ASModuleScanStateIdle)
     ];
 
     if (self=[super init]){
@@ -238,6 +259,10 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     [coder encodeInt64:(int64_t)self.screenRecordingBytes forKey:@"screenRecordingBytes"];
     [coder encodeInteger:self.bigVideoCount forKey:@"bigVideoCount"];
     [coder encodeInt64:(int64_t)self.bigVideoBytes forKey:@"bigVideoBytes"];
+    [coder encodeInteger:self.blurryCount forKey:@"blurryCount"];
+    [coder encodeInt64:(int64_t)self.blurryBytes forKey:@"blurryBytes"];
+    [coder encodeInteger:self.otherCount forKey:@"otherCount"];
+    [coder encodeInt64:(int64_t)self.otherBytes forKey:@"otherBytes"];
     [coder encodeInteger:self.duplicateGroupCount forKey:@"duplicateGroupCount"];
     [coder encodeInteger:self.similarGroupCount forKey:@"similarGroupCount"];
     [coder encodeObject:self.lastUpdated forKey:@"lastUpdated"];
@@ -257,14 +282,19 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         _screenRecordingBytes = (uint64_t)[coder decodeInt64ForKey:@"screenRecordingBytes"];
         _bigVideoCount = [coder decodeIntegerForKey:@"bigVideoCount"];
         _bigVideoBytes = (uint64_t)[coder decodeInt64ForKey:@"bigVideoBytes"];
+        _blurryCount = [coder decodeIntegerForKey:@"blurryCount"];
+        _blurryBytes = (uint64_t)[coder decodeInt64ForKey:@"blurryBytes"];
+        _otherCount = [coder decodeIntegerForKey:@"otherCount"];
+        _otherBytes = (uint64_t)[coder decodeInt64ForKey:@"otherBytes"];
         _duplicateGroupCount = [coder decodeIntegerForKey:@"duplicateGroupCount"];
         _similarGroupCount = [coder decodeIntegerForKey:@"similarGroupCount"];
         _lastUpdated = [coder decodeObjectOfClass:[NSDate class] forKey:@"lastUpdated"] ?: [NSDate date];
         _phash256Data = [coder decodeObjectOfClass:[NSData class] forKey:@"phash256Data"];
+
         NSSet *classes = [NSSet setWithArray:@[[NSArray class],[NSNumber class]]];
         _moduleStates = [coder decodeObjectOfClasses:classes forKey:@"moduleStates"];
-        if (!_moduleStates || _moduleStates.count != 7) {
-            _moduleStates = @[@0,@0,@0,@0,@0,@0,@0];
+        if (!_moduleStates || _moduleStates.count != 9) {
+            _moduleStates = @[@0,@0,@0,@0,@0,@0,@0,@0,@0];
         }
     }
     return self;
@@ -320,6 +350,9 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 #pragma mark - Cache container
 
 @interface ASScanCache : NSObject <NSSecureCoding>
+@property (nonatomic, strong) NSArray<ASAssetModel *> *blurryPhotos;
+@property (nonatomic, strong) NSArray<ASAssetModel *> *otherPhotos;
+
 @property (nonatomic, strong) ASScanSnapshot *snapshot;
 @property (nonatomic, strong) NSArray<ASAssetGroup *> *duplicateGroups;
 @property (nonatomic, strong) NSArray<ASAssetGroup *> *similarGroups;
@@ -332,6 +365,7 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 
 @property (nonatomic, strong) NSDate *anchorDate;
 @property (nonatomic, strong) NSDate *homeStatRefreshDate;
+@property (nonatomic, assign) float blurScore;
 @end
 
 @implementation ASScanCache
@@ -348,6 +382,8 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         _bigVideos=@[];
         _comparableImages=@[];
         _comparableVideos=@[];
+        _blurryPhotos=@[];
+        _otherPhotos=@[];
     }
     return self;
 }
@@ -362,25 +398,27 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     [coder encodeObject:self.homeStatRefreshDate forKey:@"homeStatRefreshDate"];
     [coder encodeObject:self.comparableImages forKey:@"comparableImages"];
     [coder encodeObject:self.comparableVideos forKey:@"comparableVideos"];
+    [coder encodeObject:self.blurryPhotos forKey:@"blurryPhotos"];
+    [coder encodeObject:self.otherPhotos forKey:@"otherPhotos"];
+    [coder encodeFloat:self.blurScore forKey:@"blurScore"];
 }
 - (instancetype)initWithCoder:(NSCoder *)coder {
     if (self=[super init]) {
         _snapshot = [coder decodeObjectOfClass:[ASScanSnapshot class] forKey:@"snapshot"] ?: [ASScanSnapshot new];
-
         NSSet *gClasses = [NSSet setWithArray:@[[NSArray class],[ASAssetGroup class],[ASAssetModel class],[NSMutableArray class]]];
         _duplicateGroups = [coder decodeObjectOfClasses:gClasses forKey:@"duplicateGroups"] ?: @[];
         _similarGroups   = [coder decodeObjectOfClasses:gClasses forKey:@"similarGroups"] ?: @[];
-
         NSSet *aClasses = [NSSet setWithArray:@[[NSArray class],[ASAssetModel class]]];
         _screenshots = [coder decodeObjectOfClasses:aClasses forKey:@"screenshots"] ?: @[];
         _screenRecordings = [coder decodeObjectOfClasses:aClasses forKey:@"screenRecordings"] ?: @[];
         _bigVideos = [coder decodeObjectOfClasses:aClasses forKey:@"bigVideos"] ?: @[];
-
         _anchorDate = [coder decodeObjectOfClass:[NSDate class] forKey:@"anchorDate"] ?: [NSDate dateWithTimeIntervalSince1970:0];
         _homeStatRefreshDate = [coder decodeObjectOfClass:[NSDate class] forKey:@"homeStatRefreshDate"] ?: [NSDate dateWithTimeIntervalSince1970:0];
-
         _comparableImages = [coder decodeObjectOfClasses:aClasses forKey:@"comparableImages"] ?: @[];
         _comparableVideos = [coder decodeObjectOfClasses:aClasses forKey:@"comparableVideos"] ?: @[];
+        _blurryPhotos = [coder decodeObjectOfClasses:aClasses forKey:@"blurryPhotos"] ?: @[];
+        _otherPhotos  = [coder decodeObjectOfClasses:aClasses forKey:@"otherPhotos"] ?: @[];
+        _blurScore = [coder decodeFloatForKey:@"blurScore"];
     }
     return self;
 }
@@ -394,11 +432,18 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     ASHomeModuleTypeScreenshots,
     ASHomeModuleTypeScreenRecordings,
     ASHomeModuleTypeBigVideos,
+    ASHomeModuleTypeBlurryPhotos,
+    ASHomeModuleTypeOtherPhotos,
 };
 
 #pragma mark - Manager
 
 @interface ASPhotoScanManager ()
+@property (nonatomic, assign) NSUInteger blurryImagesSeen;
+@property (nonatomic, assign) uint64_t blurryBytesRunning;
+
+- (BOOL)matchAndGroup:(ASAssetModel *)model asset:(PHAsset *)asset;
+
 @property (atomic) BOOL pendingIncremental;
 @property (atomic) BOOL incrementalScheduled;
 @property (nonatomic, strong) PHFetchResult<PHAsset *> *allAssetsFetchResult;
@@ -422,7 +467,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 @property (nonatomic, strong) NSArray<ASAssetModel *> *screenRecordings;
 @property (nonatomic, strong) NSArray<ASAssetModel *> *bigVideos;
 
-@property (atomic) BOOL cancelled;
+@property (nonatomic, strong) NSArray<ASAssetModel *> *blurryPhotos;
+@property (nonatomic, strong) NSArray<ASAssetModel *> *otherPhotos;
 
 // index
 @property (nonatomic, strong) NSMutableDictionary<NSNumber *, NSMutableArray<ASAssetModel *> *> *indexImage;
@@ -434,13 +480,20 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 @property (nonatomic, strong) NSMutableArray<ASAssetModel *> *screenshotsM;
 @property (nonatomic, strong) NSMutableArray<ASAssetModel *> *screenRecordingsM;
 @property (nonatomic, strong) NSMutableArray<ASAssetModel *> *bigVideosM;
+@property (nonatomic, strong) NSMutableArray<ASAssetModel *> *blurryPhotosM;
+@property (nonatomic, strong) NSMutableArray<ASAssetModel *> *otherPhotosM;
 
 // comparable pools
 @property (nonatomic, strong) NSMutableArray<ASAssetModel *> *comparableImagesM;
 @property (nonatomic, strong) NSMutableArray<ASAssetModel *> *comparableVideosM;
 
+@property (nonatomic, strong) NSMutableDictionary<NSString*, ASAssetModel*> *otherCandidateMap;
+@property (atomic) uint64_t otherCandidateBytes;
+
 // day
 @property (nonatomic, strong) NSDate *currentDay;
+
+@property (atomic) BOOL cancelled;
 @end
 
 @implementation ASPhotoScanManager
@@ -460,8 +513,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 - (void)setModule:(ASHomeModuleType)type state:(ASModuleScanState)st {
     NSMutableArray *arr = [self.snapshot.moduleStates mutableCopy];
-    if (!arr || arr.count != 7) {
-        arr = [@[@0,@0,@0,@0,@0,@0,@0] mutableCopy];
+    if (!arr || arr.count != 9) {
+        arr = [@[@0,@0,@0,@0,@0,@0,@0,@0,@0] mutableCopy];
     }
     arr[type] = @(st);
     self.snapshot.moduleStates = arr;
@@ -469,7 +522,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 - (void)setAllModulesState:(ASModuleScanState)st {
     self.snapshot.moduleStates = @[
-        @(st),@(st),@(st),@(st),@(st),@(st),@(st)
+        @(st),@(st),@(st),@(st),@(st),@(st),@(st),@(st),@(st)
     ];
 }
 
@@ -487,6 +540,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         _screenshots = @[];
         _screenRecordings = @[];
         _bigVideos = @[];
+        _blurryPhotos = @[];
+        _otherPhotos = @[];
 
         _indexImage = [NSMutableDictionary dictionary];
         _indexVideo = [NSMutableDictionary dictionary];
@@ -503,6 +558,57 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 - (void)dealloc {
     [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
+}
+
+- (void)updateBlurryTopKIncremental:(ASAssetModel *)m desiredK:(NSUInteger)desiredK {
+    if (!m || m.blurScore < 0.f) return;
+    if (desiredK == 0) return;
+
+    if (!self.blurryPhotosM) self.blurryPhotosM = [NSMutableArray array];
+
+    // 如果榜已满且不更糊，直接丢
+    if (self.blurryPhotosM.count >= desiredK) {
+        ASAssetModel *leastBlurry = self.blurryPhotosM.lastObject; // 升序：last 最不糊
+        if (!(m.blurScore < leastBlurry.blurScore)) return;
+
+        [self.blurryPhotosM removeLastObject];
+        if (self.blurryBytesRunning >= leastBlurry.fileSizeBytes) self.blurryBytesRunning -= leastBlurry.fileSizeBytes;
+        // ⚠️增量最终会 rebuild other，所以这里不需要 add back other
+    }
+
+    // 二分插入，保持升序
+    NSUInteger lo = 0, hi = self.blurryPhotosM.count;
+    while (lo < hi) {
+        NSUInteger mid = (lo + hi) >> 1;
+        ASAssetModel *x = self.blurryPhotosM[mid];
+        if (m.blurScore < x.blurScore) hi = mid;
+        else lo = mid + 1;
+    }
+    [self.blurryPhotosM insertObject:m atIndex:lo];
+    self.blurryBytesRunning += m.fileSizeBytes;
+
+    self.snapshot.blurryCount = self.blurryPhotosM.count;
+    self.snapshot.blurryBytes = self.blurryBytesRunning;
+}
+
+- (NSUInteger)blurryDesiredKForLibraryQuick {
+    PHFetchOptions *opt = [PHFetchOptions new];
+    opt.predicate = [NSPredicate predicateWithFormat:
+        @"(mediaType == %d) AND NOT ((mediaSubtypes & %d) != 0)",
+        PHAssetMediaTypeImage,
+        PHAssetMediaSubtypePhotoScreenshot
+    ];
+    opt.includeHiddenAssets = YES;
+    opt.includeAssetSourceTypes =
+        PHAssetSourceTypeUserLibrary |
+        PHAssetSourceTypeCloudShared |
+        PHAssetSourceTypeiTunesSynced;
+
+    NSUInteger total = [PHAsset fetchAssetsWithOptions:opt].count;
+    NSUInteger k = (NSUInteger)lrintf((float)total * kBlurKeepPercent);
+    k = MAX(kBlurKeepMin, k);
+    k = MIN(kBlurKeepMax, k);
+    return k;
 }
 
 #pragma mark - Public
@@ -528,6 +634,9 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.completionBlock = completion;
     self.cancelled = NO;
 
+    self.blurryPhotosM = [NSMutableArray array];
+    self.otherPhotosM  = [NSMutableArray array];
+
     self.snapshot = [ASScanSnapshot new];
     self.snapshot.state = ASScanStateScanning;
     [self setAllModulesState:ASModuleScanStateScanning];
@@ -536,6 +645,16 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     dispatch_async(self.workQ, ^{
         @autoreleasepool {
             NSError *error = nil;
+            
+            self.blurryImagesSeen = 0;
+            self.blurryBytesRunning = 0;
+            [self.blurryPhotosM removeAllObjects];
+
+            [ASBlurMemo() removeAllObjects];
+            gBlurDebugPrinted = 0;
+
+            self.otherCandidateMap = [NSMutableDictionary dictionary];
+            self.otherCandidateBytes = 0;
 
             self.comparableImagesM = [NSMutableArray array];
             self.comparableVideosM = [NSMutableArray array];
@@ -573,14 +692,11 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                     NSDate *day = ASDayStart(cd);
                     if (!self.currentDay || ![day isEqualToDate:self.currentDay]) {
                         self.currentDay = day;
-
-                        // ✅关键：按天对比，切天就清空索引
                         [self.indexImage removeAllObjects];
                         [self.indexVideo removeAllObjects];
                     }
 
-
-                    ASAssetModel *model = [self buildModelForAsset:asset error:&error];
+                    ASAssetModel *model = [self buildModelForAsset:asset computeCompareBits:YES error:&error];
                     if (!model) { if (error) break; else continue; }
 
                     self.snapshot.scannedCount += 1;
@@ -592,6 +708,23 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                         self.snapshot.screenshotBytes += model.fileSizeBytes;
                         [self emitProgressMaybe];
                         continue;
+                    }
+                    
+                    // ✅ Other：先把普通照片当作候选，扫描中就能实时看到列表/数量/大小
+                    if (asset.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(asset)) {
+                        [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateScanning];
+                        [self otherCandidateAddIfNeeded:model asset:asset];
+                        [self emitProgressMaybe];
+                    }
+
+                    // Blurry：允许和 similar/duplicate 重叠，但不包含 screenshot
+                    if (asset.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(asset)) {
+                        float score = [self blurScoreForAsset:asset];
+                        if (score >= 0.f) {
+                            model.blurScore = score;
+                            [self updateBlurryTopKRealtime:model asset:asset]; // 实时 TopK
+                            [self emitProgressMaybe];
+                        }
                     }
 
                     if (ASIsScreenRecording(asset)) {
@@ -613,16 +746,16 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                         continue;
                     }
 
-                    // 只要开始做相似/重复比对，就把 4 个比对模块置为 Analyzing
                     [self setModule:ASHomeModuleTypeSimilarImage state:ASModuleScanStateAnalyzing];
                     [self setModule:ASHomeModuleTypeSimilarVideo state:ASModuleScanStateAnalyzing];
                     [self setModule:ASHomeModuleTypeDuplicateImage state:ASModuleScanStateAnalyzing];
                     [self setModule:ASHomeModuleTypeDuplicateVideo state:ASModuleScanStateAnalyzing];
 
-                    // ✅ 分组（只做一次）
-                    [self matchAndGroup:model asset:asset];
+                    BOOL grouped = [self matchAndGroup:model asset:asset];
+                    if (grouped && asset.mediaType == PHAssetMediaTypeImage) {
+                        [self otherCandidateRemoveIfExistsLocalId:model.localId];
+                    }
 
-                    // ✅ comparable pool：与增量一致，包含 singleton
                     if (asset.mediaType == PHAssetMediaTypeImage) {
                         [self.comparableImagesM addObject:model];
                     } else if (asset.mediaType == PHAssetMediaTypeVideo) {
@@ -640,6 +773,9 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                 self.snapshot.similarGroupCount = self.simGroupsM.count;
                 self.snapshot.lastUpdated = [NSDate date];
 
+                [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateScanning];
+                self.otherPhotosM = [[self buildOtherPhotosFromAllAssetsFetchResult:result] mutableCopy];
+
                 self.cache.snapshot = self.snapshot;
                 self.cache.duplicateGroups = [self.dupGroupsM copy];
                 self.cache.similarGroups = [self.simGroupsM copy];
@@ -652,18 +788,24 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                 self.cache.comparableImages = [self.comparableImagesM copy];
                 self.cache.comparableVideos = [self.comparableVideosM copy];
 
+                self.cache.blurryPhotos = [self.blurryPhotosM copy];
+                self.cache.otherPhotos  = [self.otherPhotosM copy];
+
                 if ([self needRefreshHomeStat:self.cache.homeStatRefreshDate]) {
                     self.cache.homeStatRefreshDate = [NSDate date];
                 }
 
                 [self saveCache];
+                [self setModule:ASHomeModuleTypeBlurryPhotos state:ASModuleScanStateFinished];
+                [self setModule:ASHomeModuleTypeOtherPhotos  state:ASModuleScanStateFinished];
                 [self setAllModulesState:ASModuleScanStateFinished];
 
-                // ✅ 发布缓存态到公共属性
                 [self applyCacheToPublicStateWithCompletion:^{
+                    self.blurryPhotos = self.cache.blurryPhotos ?: @[];
+                    self.otherPhotos  = self.cache.otherPhotos ?: @[];
                     [self emitProgress];
                 }];
-                
+
                 [self refreshAllAssetsFetchResult];
 
                 if (self.pendingIncremental) {
@@ -679,8 +821,552 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     });
 }
 
+- (void)otherCandidateAddIfNeeded:(ASAssetModel *)model asset:(PHAsset *)asset {
+    if (asset.mediaType != PHAssetMediaTypeImage) return;
+    if (ASIsScreenshot(asset)) return;
+
+    NSString *lid = model.localId ?: @"";
+    if (!lid.length) return;
+
+    if (!self.otherCandidateMap) self.otherCandidateMap = [NSMutableDictionary dictionary];
+    if (self.otherCandidateMap[lid]) return;
+
+    self.otherCandidateMap[lid] = model;
+    self.otherCandidateBytes += model.fileSizeBytes;
+
+    if (!self.otherPhotosM) self.otherPhotosM = [NSMutableArray array];
+    [self.otherPhotosM addObject:model];
+
+    self.snapshot.otherCount = self.otherPhotosM.count;
+    self.snapshot.otherBytes = self.otherCandidateBytes;
+}
+
+- (void)otherCandidateRemoveIfExistsLocalId:(NSString *)lid {
+    if (!lid.length) return;
+    ASAssetModel *old = self.otherCandidateMap[lid];
+    if (!old) return;
+
+    [self.otherCandidateMap removeObjectForKey:lid];
+    if (self.otherCandidateBytes >= old.fileSizeBytes) self.otherCandidateBytes -= old.fileSizeBytes;
+    else self.otherCandidateBytes = 0;
+
+    [self.otherPhotosM removeObject:old];
+
+    self.snapshot.otherCount = self.otherPhotosM.count;
+    self.snapshot.otherBytes = self.otherCandidateBytes;
+}
+
 - (void)cancel {
     self.cancelled = YES;
+}
+
+#pragma mark - Purge deleted assets
+
+- (void)purgeDeletedAssetsAndRecalculate {
+    dispatch_async(self.workQ, ^{
+        // 仅在缓存 finished 时做 purge
+        if (self.cache.snapshot.state != ASScanStateFinished) return;
+
+        // 收集 cache 里出现过的所有 localId
+        NSMutableSet<NSString *> *cachedIds = [NSMutableSet set];
+
+        for (ASAssetGroup *g in self.cache.duplicateGroups)
+            for (ASAssetModel *m in g.assets) if (m.localId.length) [cachedIds addObject:m.localId];
+
+        for (ASAssetGroup *g in self.cache.similarGroups)
+            for (ASAssetModel *m in g.assets) if (m.localId.length) [cachedIds addObject:m.localId];
+
+        for (ASAssetModel *m in self.cache.screenshots) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetModel *m in self.cache.screenRecordings) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetModel *m in self.cache.bigVideos) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetModel *m in self.cache.blurryPhotos) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetModel *m in self.cache.otherPhotos) if (m.localId.length) [cachedIds addObject:m.localId];
+
+        if (cachedIds.count == 0) return;
+
+        // 拉取现存 assets
+        PHFetchResult<PHAsset *> *exist = [PHAsset fetchAssetsWithLocalIdentifiers:cachedIds.allObjects options:nil];
+        NSMutableSet<NSString *> *existIds = [NSMutableSet setWithCapacity:exist.count];
+        for (PHAsset *a in exist) if (a.localIdentifier.length) [existIds addObject:a.localIdentifier];
+
+        // deleted = cached - exist
+        NSMutableSet<NSString *> *deleted = [cachedIds mutableCopy];
+        [deleted minusSet:existIds];
+
+        if (deleted.count == 0) return;
+
+        // 从 cache 可变容器加载并删除
+        self.dupGroupsM = [self deepMutableGroups:self.cache.duplicateGroups];
+        self.simGroupsM = [self deepMutableGroups:self.cache.similarGroups];
+        self.screenshotsM = [self.cache.screenshots mutableCopy] ?: [NSMutableArray array];
+        self.screenRecordingsM = [self.cache.screenRecordings mutableCopy] ?: [NSMutableArray array];
+        self.bigVideosM = [self.cache.bigVideos mutableCopy] ?: [NSMutableArray array];
+        self.comparableImagesM = [self.cache.comparableImages mutableCopy] ?: [NSMutableArray array];
+        self.comparableVideosM = [self.cache.comparableVideos mutableCopy] ?: [NSMutableArray array];
+        self.blurryPhotosM = [self.cache.blurryPhotos mutableCopy] ?: [NSMutableArray array];
+        self.otherPhotosM  = [self.cache.otherPhotos mutableCopy] ?: [NSMutableArray array];
+
+        [self removeModelsByIds:deleted];
+
+        // rebuild index + snapshot
+        [self rebuildIndexFromComparablePools];
+        [self recomputeSnapshotFromCurrentContainers];
+
+        // 写回 cache
+        self.cache.snapshot = self.snapshot;
+        self.cache.duplicateGroups = [self.dupGroupsM copy];
+        self.cache.similarGroups   = [self.simGroupsM copy];
+        self.cache.screenshots     = [self.screenshotsM copy];
+        self.cache.screenRecordings = [self.screenRecordingsM copy];
+        self.cache.bigVideos       = [self.bigVideosM copy];
+        self.cache.comparableImages = [self.comparableImagesM copy];
+        self.cache.comparableVideos = [self.comparableVideosM copy];
+        self.cache.blurryPhotos    = [self.blurryPhotosM copy];
+        self.cache.otherPhotos     = [self.otherPhotosM copy];
+
+        [self saveCache];
+
+        // 发布到公开状态
+        [self applyCacheToPublicStateWithCompletion:^{
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.snapshot.state = ASScanStateFinished;
+                [self emitProgress];
+            });
+        }];
+    });
+}
+
+#pragma mark - Other photos
+
+static inline BOOL ASModelIsScreenshot(ASAssetModel *m) {
+    return (m.mediaType == PHAssetMediaTypeImage) &&
+           ((m.subtypes & PHAssetMediaSubtypePhotoScreenshot) != 0);
+}
+
+- (void)otherCandidateAddModelIfNeeded:(ASAssetModel *)model {
+    if (!model) return;
+    if (model.mediaType != PHAssetMediaTypeImage) return;
+    if (model.subtypes & PHAssetMediaSubtypePhotoScreenshot) return;
+
+    NSString *lid = model.localId ?: @"";
+    if (!lid.length) return;
+
+    if (!self.otherCandidateMap) self.otherCandidateMap = [NSMutableDictionary dictionary];
+    if (self.otherCandidateMap[lid]) return;
+
+    self.otherCandidateMap[lid] = model;
+    self.otherCandidateBytes += model.fileSizeBytes;
+
+    if (!self.otherPhotosM) self.otherPhotosM = [NSMutableArray array];
+    [self.otherPhotosM addObject:model];
+
+    self.snapshot.otherCount = self.otherPhotosM.count;
+    self.snapshot.otherBytes = self.otherCandidateBytes;
+}
+
+- (NSArray<ASAssetModel *> *)buildOtherPhotosFromAllAssetsFetchResult:(PHFetchResult<PHAsset*> *)result {
+    NSMutableSet<NSString*> *exclude = [NSMutableSet set];
+
+    for (ASAssetGroup *g in self.dupGroupsM)
+        for (ASAssetModel *m in g.assets) if(m.localId.length) [exclude addObject:m.localId];
+    for (ASAssetGroup *g in self.simGroupsM)
+        for (ASAssetModel *m in g.assets) if(m.localId.length) [exclude addObject:m.localId];
+    for (ASAssetModel *m in self.screenshotsM) if(m.localId.length) [exclude addObject:m.localId];
+    for (ASAssetModel *m in self.blurryPhotosM) if(m.localId.length) [exclude addObject:m.localId];
+
+    NSMutableArray<ASAssetModel*> *out = [NSMutableArray array];
+
+    for (PHAsset *a in result) {
+        if (a.mediaType != PHAssetMediaTypeImage) continue;
+        if (ASIsScreenshot(a)) continue;
+        NSString *lid = a.localIdentifier ?: @"";
+        if (!lid.length) continue;
+        if ([exclude containsObject:lid]) continue;
+
+        NSError *err = nil;
+        ASAssetModel *m = [self buildModelForAsset:a computeCompareBits:NO error:&err];
+        if (!m) continue;
+
+        [out addObject:m];
+    }
+    return out;
+}
+
+// --- Blur config ---
+
+- (void)updateBlurryTopKRealtime:(ASAssetModel *)m asset:(PHAsset *)asset {
+    if (m.blurScore < 0.f) return;
+
+    self.blurryImagesSeen += 1;
+    if (self.blurryImagesSeen < kBlurWarmup) return;
+
+    NSUInteger desiredK = (NSUInteger)lrintf((float)self.blurryImagesSeen * kBlurKeepPercent);
+    desiredK = MAX(kBlurKeepMin, desiredK);
+    desiredK = MIN(kBlurKeepMax, desiredK);
+
+    if (!self.blurryPhotosM) self.blurryPhotosM = [NSMutableArray array];
+
+    // 榜满：只有更糊才进（score 越小越糊）
+    if (self.blurryPhotosM.count >= desiredK) {
+        ASAssetModel *leastBlurry = self.blurryPhotosM.lastObject; // 升序：last 最不糊
+        if (!(m.blurScore < leastBlurry.blurScore)) return;
+
+        // 踢出一个
+        [self.blurryPhotosM removeLastObject];
+        if (self.blurryBytesRunning >= leastBlurry.fileSizeBytes) self.blurryBytesRunning -= leastBlurry.fileSizeBytes;
+        else self.blurryBytesRunning = 0;
+
+        // ✅ 踢出的那张，加回 other（必须用 model-only，不能用当前 asset）
+        [self otherCandidateAddModelIfNeeded:leastBlurry];
+    }
+
+    // 二分插入，保持升序（小=更糊）
+    NSUInteger lo = 0, hi = self.blurryPhotosM.count;
+    while (lo < hi) {
+        NSUInteger mid = (lo + hi) >> 1;
+        ASAssetModel *x = self.blurryPhotosM[mid];
+        if (m.blurScore < x.blurScore) hi = mid;
+        else lo = mid + 1;
+    }
+    [self.blurryPhotosM insertObject:m atIndex:lo];
+    self.blurryBytesRunning += m.fileSizeBytes;
+
+    // 进了 blurry，从 other 移除
+    [self otherCandidateRemoveIfExistsLocalId:m.localId];
+
+    self.snapshot.blurryCount = self.blurryPhotosM.count;
+    self.snapshot.blurryBytes = self.blurryBytesRunning;
+}
+
+static const float kASBlur_MinMeanLuma   = 35.f;
+static const float kASBlur_MaxVarLap     = 140.f;
+static const float kASBlur_MinTenengrad  = 14.0f;
+static const float kASBlur_ROIFrac       = 0.60f;
+
+- (float)blurScoreForAsset:(PHAsset *)asset {
+    if (asset.mediaType != PHAssetMediaTypeImage) return -1.f;
+    if (ASIsScreenshot(asset)) return -1.f;
+
+    UIImage *thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(1024, 1024)];
+    if (!thumb.CGImage) return -1.f;
+
+    vImage_Buffer gray = {0};
+    if (![self vImageGrayFromCGImage:thumb.CGImage outGray:&gray] || !gray.data) return -1.f;
+
+    vImage_Buffer roi = [self vImageCenterROIFromGray:gray frac:0.70f];
+    vImage_Buffer roi8 = [self copyROIToContiguousPlanar8:roi];
+
+    // 过滤极暗/极平（不然夜景/纯色容易被当模糊）
+    uint8_t *p = (uint8_t *)roi8.data;
+    uint64_t n = (uint64_t)roi8.width * (uint64_t)roi8.height;
+    double sum=0, sum2=0;
+    for (uint64_t i=0;i<n;i++){ double v=p[i]; sum+=v; sum2+=v*v; }
+    double mean = sum / (double)MAX(n,1);
+    double var  = sum2/(double)MAX(n,1) - mean*mean;
+    if (var < 0) var = 0;
+    double std  = sqrt(var);
+
+    float score = -1.f;
+    if (mean > 20.0 && std > 8.0) { // ✅ 可微调，但不会再“一刀切”
+        score = [self tenengradFloatOnROI8:roi8]; // 越小越模糊
+    }
+
+    free(roi8.data);
+    free(gray.data);
+    return score;
+}
+
+#pragma mark - vImage helpers
+
+- (vImage_Buffer)copyROIToContiguousPlanar8:(vImage_Buffer)roi {
+    vImage_Buffer out = {0};
+    out.width = roi.width;
+    out.height = roi.height;
+    out.rowBytes = roi.width; // 连续
+    out.data = malloc(out.rowBytes * out.height);
+    if (!out.data) return (vImage_Buffer){0};
+
+    for (uint32_t y = 0; y < out.height; y++) {
+        memcpy((uint8_t *)out.data + y*out.rowBytes,
+               (uint8_t *)roi.data + y*roi.rowBytes,
+               out.width);
+    }
+    return out;
+}
+
+
+- (float)tenengradFloatOnROI8:(vImage_Buffer)roi8 {
+    // roi8: Planar8, rowBytes == width（连续）
+    const uint32_t w = (uint32_t)roi8.width, h = (uint32_t)roi8.height;
+    if (w < 5 || h < 5) return 0.f;
+
+    // 1) Planar8 -> PlanarF
+    vImage_Buffer f = {0};
+    f.width = w; f.height = h; f.rowBytes = w * sizeof(float);
+    f.data = malloc(f.rowBytes * h);
+    if (!f.data) return 0.f;
+
+    // 归一化到 0~1（更稳定）
+    vImageConvert_Planar8toPlanarF(&roi8, &f, 1.0f/255.0f, 0.0f, kvImageNoFlags);
+
+    // 2) Sobel on PlanarF
+    static const float kx[9] = {
+        -1, 0, 1,
+        -2, 0, 2,
+        -1, 0, 1
+    };
+    static const float ky[9] = {
+        -1, -2, -1,
+         0,  0,  0,
+         1,  2,  1
+    };
+
+    vImage_Buffer gx = {0}, gy = {0};
+    gx.width = gy.width = w;
+    gx.height = gy.height = h;
+    gx.rowBytes = gy.rowBytes = w * sizeof(float);
+    gx.data = malloc(gx.rowBytes * h);
+    gy.data = malloc(gy.rowBytes * h);
+
+    if (!gx.data || !gy.data) {
+        if (gx.data) free(gx.data);
+        if (gy.data) free(gy.data);
+        free(f.data);
+        return 0.f;
+    }
+
+    vImageConvolve_PlanarF(&f, &gx, NULL, 0, 0, kx, 3, 3, 0.0f, kvImageEdgeExtend);
+    vImageConvolve_PlanarF(&f, &gy, NULL, 0, 0, ky, 3, 3, 0.0f, kvImageEdgeExtend);
+
+    // 3) Tenengrad = sqrt(mean(gx^2 + gy^2))
+    float *px = (float *)gx.data;
+    float *py = (float *)gy.data;
+    uint64_t n = (uint64_t)w * (uint64_t)h;
+
+    double sum = 0.0;
+    for (uint64_t i=0; i<n; i++) {
+        double x = px[i], y = py[i];
+        sum += (x*x + y*y);
+    }
+    double mean = sum / (double)MAX(n, 1);
+
+    free(f.data);
+    free(gx.data);
+    free(gy.data);
+
+    return (float)sqrt(mean);
+}
+
+- (BOOL)vImageGrayFromCGImage:(CGImageRef)cg outGray:(vImage_Buffer *)outGray {
+    if (!cg || !outGray) return NO;
+
+    const size_t w = CGImageGetWidth(cg);
+    const size_t h = CGImageGetHeight(cg);
+    if (w == 0 || h == 0) return NO;
+
+    vImage_Buffer rgba = {0};
+    rgba.width = w;
+    rgba.height = h;
+    rgba.rowBytes = w * 4;
+    rgba.data = malloc(rgba.rowBytes * h);
+    if (!rgba.data) return NO;
+
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(
+        rgba.data, w, h, 8, rgba.rowBytes, cs,
+        (CGBitmapInfo)kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big
+    );
+    CGColorSpaceRelease(cs);
+    if (!ctx) { free(rgba.data); return NO; }
+    CGContextDrawImage(ctx, CGRectMake(0, 0, w, h), cg);
+    CGContextRelease(ctx);
+
+    outGray->width = w;
+    outGray->height = h;
+    outGray->rowBytes = w;
+    outGray->data = malloc(outGray->rowBytes * h);
+    if (!outGray->data) { free(rgba.data); return NO; }
+
+    vImage_Buffer argb = {0};
+    argb.width = w;
+    argb.height = h;
+    argb.rowBytes = w * 4;
+    argb.data = malloc(argb.rowBytes * h);
+    if (!argb.data) { free(rgba.data); free(outGray->data); outGray->data=NULL; return NO; }
+
+    const uint8_t permuteMap[4] = {3, 0, 1, 2};
+    vImage_Error e = vImagePermuteChannels_ARGB8888(&rgba, &argb, permuteMap, kvImageNoFlags);
+    free(rgba.data);
+    if (e != kvImageNoError) { free(argb.data); free(outGray->data); outGray->data=NULL; return NO; }
+
+    const int16_t mtx[4] = {0, 77, 150, 29};  // *256
+    const int32_t divisor = 256;
+    e = vImageMatrixMultiply_ARGB8888ToPlanar8(&argb, outGray, mtx, divisor, NULL, 0, kvImageNoFlags);
+
+    free(argb.data);
+
+    if (e != kvImageNoError) {
+        free(outGray->data);
+        outGray->data = NULL;
+        return NO;
+    }
+    return YES;
+}
+
+- (float)edgeDensityOnGrayROI_Planar8:(vImage_Buffer)roi edgeThreshold:(int)thr {
+    const uint32_t w = (uint32_t)roi.width;
+    const uint32_t h = (uint32_t)roi.height;
+    if (w < 5 || h < 5) return 0.f;
+
+    const int16_t kx[9] = {
+        -1, 0, 1,
+        -2, 0, 2,
+        -1, 0, 1
+    };
+    const int16_t ky[9] = {
+        -1, -2, -1,
+         0,  0,  0,
+         1,  2,  1
+    };
+
+    vImage_Buffer gx8 = {0}, gy8 = {0};
+    gx8.width = gy8.width = w;
+    gx8.height = gy8.height = h;
+    gx8.rowBytes = gy8.rowBytes = w;
+    gx8.data = malloc((size_t)w * (size_t)h);
+    gy8.data = malloc((size_t)w * (size_t)h);
+    if (!gx8.data || !gy8.data) {
+        if (gx8.data) free(gx8.data);
+        if (gy8.data) free(gy8.data);
+        return 0.f;
+    }
+
+    // 关键点：Planar8 卷积需要 bias，把结果平移到 0~255
+    // 我们用 bias=128，然后用 (p-128) 当 signed 值
+    vImage_Error ex = vImageConvolve_Planar8(&roi, &gx8, NULL, 0, 0, kx, 3, 3, 1, 128, kvImageEdgeExtend);
+    vImage_Error ey = vImageConvolve_Planar8(&roi, &gy8, NULL, 0, 0, ky, 3, 3, 1, 128, kvImageEdgeExtend);
+
+    if (ex != kvImageNoError || ey != kvImageNoError) {
+        free(gx8.data); free(gy8.data);
+        return 0.f;
+    }
+
+    uint64_t strong = 0;
+    uint64_t n = (uint64_t)w * (uint64_t)h;
+
+    uint8_t *px = (uint8_t *)gx8.data;
+    uint8_t *py = (uint8_t *)gy8.data;
+
+    for (uint64_t i = 0; i < n; i++) {
+        int gx = (int)px[i] - 128;
+        int gy = (int)py[i] - 128;
+        int mag = abs(gx) + abs(gy);   // 近似梯度幅值
+        if (mag > thr) strong++;
+    }
+
+    free(gx8.data); free(gy8.data);
+    return (float)strong / (float)MAX(n, 1);
+}
+
+- (vImage_Buffer)vImageCenterROIFromGray:(vImage_Buffer)gray frac:(float)frac {
+    frac = fmaxf(0.1f, fminf(frac, 1.0f));
+    uint32_t rw = (uint32_t)lrintf((float)gray.width * frac);
+    uint32_t rh = (uint32_t)lrintf((float)gray.height * frac);
+    rw = MAX(16, rw); rh = MAX(16, rh);
+
+    uint32_t x0 = (uint32_t)((gray.width  - rw) / 2);
+    uint32_t y0 = (uint32_t)((gray.height - rh) / 2);
+
+    vImage_Buffer roi = {0};
+    roi.width = rw;
+    roi.height = rh;
+    roi.rowBytes = gray.rowBytes;
+    roi.data = (uint8_t *)gray.data + y0 * gray.rowBytes + x0;
+    return roi;
+}
+
+- (float)varOfLaplacianOnGrayROI:(vImage_Buffer)roi {
+    const int16_t kernel[9] = {
+         0,  1, 0,
+         1, -4, 1,
+         0,  1, 0
+    };
+
+    vImage_Buffer lap8 = {0};
+    lap8.width = roi.width;
+    lap8.height = roi.height;
+    lap8.rowBytes = roi.width;
+    lap8.data = malloc(lap8.rowBytes * lap8.height);
+    if (!lap8.data) return FLT_MAX;
+
+    vImage_Error e = vImageConvolve_Planar8(&roi, &lap8, NULL, 0, 0,
+                                           kernel, 3, 3,
+                                           1, 128, kvImageEdgeExtend);
+    if (e != kvImageNoError) { free(lap8.data); return FLT_MAX; }
+
+    uint8_t *p = (uint8_t *)lap8.data;
+    uint64_t n = (uint64_t)lap8.width * (uint64_t)lap8.height;
+
+    double sum = 0.0, sum2 = 0.0;
+    for (uint64_t i=0; i<n; i++) {
+        double v = (double)((int)p[i] - 128);
+        sum += v;
+        sum2 += v*v;
+    }
+    free(lap8.data);
+
+    double mean = sum / (double)n;
+    double var = (sum2 / (double)n) - mean*mean;
+    if (var < 0) var = 0;
+    return (float)var;
+}
+
+- (float)tenengradOnGrayROI:(vImage_Buffer)roi {
+    const int16_t kx[9] = {
+        -1, 0, 1,
+        -2, 0, 2,
+        -1, 0, 1
+    };
+    const int16_t ky[9] = {
+        -1, -2, -1,
+         0,  0,  0,
+         1,  2,  1
+    };
+
+    vImage_Buffer gx8 = {0}, gy8 = {0};
+    gx8.width = gy8.width = roi.width;
+    gx8.height = gy8.height = roi.height;
+    gx8.rowBytes = gy8.rowBytes = roi.width;
+    gx8.data = malloc(gx8.rowBytes * gx8.height);
+    gy8.data = malloc(gy8.rowBytes * gy8.height);
+    if (!gx8.data || !gy8.data) {
+        if (gx8.data) free(gx8.data);
+        if (gy8.data) free(gy8.data);
+        return FLT_MAX;
+    }
+
+    vImage_Error ex = vImageConvolve_Planar8(&roi, &gx8, NULL, 0, 0, kx, 3, 3, 1, 128, kvImageEdgeExtend);
+    vImage_Error ey = vImageConvolve_Planar8(&roi, &gy8, NULL, 0, 0, ky, 3, 3, 1, 128, kvImageEdgeExtend);
+    if (ex != kvImageNoError || ey != kvImageNoError) {
+        free(gx8.data); free(gy8.data);
+        return FLT_MAX;
+    }
+
+    uint8_t *px = (uint8_t *)gx8.data;
+    uint8_t *py = (uint8_t *)gy8.data;
+    uint64_t n = (uint64_t)roi.width * (uint64_t)roi.height;
+
+    double sum = 0.0;
+    for (uint64_t i=0; i<n; i++) {
+        double x = (double)((int)px[i] - 128);
+        double y = (double)((int)py[i] - 128);
+        sum += (x*x + y*y);
+    }
+
+    free(gx8.data);
+    free(gy8.data);
+    double mean = sum / (double)n;
+    return (float)sqrt(mean);
 }
 
 #pragma mark - Selection helpers
@@ -698,7 +1384,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 - (NSArray<ASAssetModel *> *)allScreenshotAssets { return self.screenshots ?: @[]; }
 - (NSArray<ASAssetModel *> *)allScreenRecordingAssets { return self.screenRecordings ?: @[]; }
 - (NSArray<ASAssetModel *> *)allBigVideoAssets { return self.bigVideos ?: @[]; }
-
 #pragma mark - PHPhotoLibraryChangeObserver
 
 - (void)photoLibraryDidChange:(PHChange *)changeInstance {
@@ -715,17 +1400,16 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
     if (changes.hasIncrementalChanges) {
         NSArray<PHAsset*> *insertedRaw = changes.insertedObjects ?: @[];
+        NSArray<PHAsset*> *changedRaw  = changes.changedObjects  ?: @[];
         NSArray<PHAsset*> *removedRaw  = changes.removedObjects  ?: @[];
 
-        NSArray<PHAsset*> *inserted = insertedRaw ?: @[];
-        NSArray<PHAsset*> *removed  = removedRaw  ?: @[];
+        NSMutableArray<PHAsset*> *upserts = [NSMutableArray arrayWithArray:insertedRaw];
+        [upserts addObjectsFromArray:changedRaw];
 
-        if (inserted.count == 0 && removed.count == 0) return;
+        if (upserts.count == 0 && removedRaw.count == 0) return;
 
-        // 走“删 + 重建 affectedDays”
-        [self scheduleIncrementalRebuildWithInserted:inserted removed:removed];
+        [self scheduleIncrementalRebuildWithInserted:upserts removed:removedRaw];
     } else {
-        // 无增量细节 → 你可以保留原来的 anchor sync（或做一次全库 diff）
         [self scheduleIncrementalCheck];
     }
 }
@@ -798,11 +1482,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 {
     NSDate *newAnchor = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
 
-    // ✅ 先把 comparable pools 从 cache 载入（否则 rebuildDays 里会不断 append / 或者丢失）
-    self.comparableImagesM = [self.cache.comparableImages mutableCopy] ?: [NSMutableArray array];
-    self.comparableVideosM = [self.cache.comparableVideos mutableCopy] ?: [NSMutableArray array];
-
-    // 1) 从缓存态加载 mutable 容器（先做这个）
+    // 1) 从缓存态加载 mutable 容器
     self.comparableImagesM = [self.cache.comparableImages mutableCopy] ?: [NSMutableArray array];
     self.comparableVideosM = [self.cache.comparableVideos mutableCopy] ?: [NSMutableArray array];
 
@@ -812,18 +1492,23 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.screenRecordingsM = [self.cache.screenRecordings mutableCopy] ?: [NSMutableArray array];
     self.bigVideosM = [self.cache.bigVideos mutableCopy] ?: [NSMutableArray array];
 
-    // 0) UI scanning（统一在 main）
-    [self publishSnapshotStateOnMain:ASScanStateScanning];
-    
-    // ✅ 增量开始：模块状态
-    [self setAllModulesState:ASModuleScanStateIdle];
+    self.blurryPhotosM = [self.cache.blurryPhotos mutableCopy] ?: [NSMutableArray array];
+    self.otherPhotosM  = [self.cache.otherPhotos  mutableCopy] ?: [NSMutableArray array];
 
-    // 先把三类统计模块标记 scanning（因为 rebuildDays 里会重新填）
+    // ✅ 重建 blurryBytesRunning
+    self.blurryBytesRunning = 0;
+    for (ASAssetModel *bm in self.blurryPhotosM) self.blurryBytesRunning += bm.fileSizeBytes;
+
+    // 0) UI scanning
+    [self publishSnapshotStateOnMain:ASScanStateScanning];
+
+    [self setAllModulesState:ASModuleScanStateIdle];
+    [self setModule:ASHomeModuleTypeBlurryPhotos state:ASModuleScanStateScanning];
+    [self setModule:ASHomeModuleTypeOtherPhotos  state:ASModuleScanStateScanning];
     [self setModule:ASHomeModuleTypeScreenshots       state:ASModuleScanStateScanning];
     [self setModule:ASHomeModuleTypeScreenRecordings  state:ASModuleScanStateScanning];
     [self setModule:ASHomeModuleTypeBigVideos         state:ASModuleScanStateScanning];
 
-    // 如果 inserted 里有可比对项，再把四个比对模块标 analyzing
     __block BOOL hasComparable = NO;
     for (PHAsset *a in inserted) {
         if (ASAllowedForCompare(a)) { hasComparable = YES; break; }
@@ -834,52 +1519,53 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         [self setModule:ASHomeModuleTypeDuplicateImage  state:ASModuleScanStateAnalyzing];
         [self setModule:ASHomeModuleTypeDuplicateVideo  state:ASModuleScanStateAnalyzing];
     }
-
-    [self emitProgress]; // 让首页 title 立刻看到状态变化（可选）
+    [self emitProgress];
 
     // 2) 删除：剔除 removed IDs
     NSMutableSet<NSString*> *deletedIDs = [NSMutableSet setWithArray:(removedIDs ?: @[])];
     if (deletedIDs.count) {
         [self removeModelsByIds:deletedIDs];
 
-        // 可选：清 memo，避免旧缓存误判
         for (NSString *lid in deletedIDs) {
-            if (lid.length) {
-                [self.visionMemo removeObjectForKey:lid];
-            }
+            if (lid.length) [self.visionMemo removeObjectForKey:lid];
+        }
+        for (NSString *lid in deletedIDs) {
+            if (lid.length) [ASScreenRecordingMemo() removeObjectForKey:lid];
         }
 
-        // 正确清 screenRecording memo（它本身就是 NSCache，直接 remove 即可）
-        for (NSString *lid in deletedIDs) {
-            if (lid.length) {
-                [ASScreenRecordingMemo() removeObjectForKey:lid];
-            }
-        }
+        // ✅ 删除后再校准 blurryBytesRunning
+        self.blurryBytesRunning = 0;
+        for (ASAssetModel *bm in self.blurryPhotosM) self.blurryBytesRunning += bm.fileSizeBytes;
     }
 
-    // 3) affectedDays：只取 inserted 的创建日期
+    // 3) affectedDays：只取 inserted 的创建/修改日期
     NSMutableSet<NSDate*> *affectedDayStarts = [NSMutableSet set];
-
     for (PHAsset *a in inserted) {
         NSDate *cd = a.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
         NSDate *md = a.modificationDate ?: cd;
-
         [affectedDayStarts addObject:ASDayStart(cd)];
         [affectedDayStarts addObject:ASDayStart(md)];
     }
 
-    // 4) 重建这些天：✅先删旧，再重建
+    // 4) 重建这些天：先删旧，再重建
     if (affectedDayStarts.count) {
-        [self removeModelsByDayStarts:affectedDayStarts];   // ✅ 必须加，不然叠加
+        [self removeModelsByDayStarts:affectedDayStarts];
+        // ✅ remove by day 后再校准一次
+        self.blurryBytesRunning = 0;
+        for (ASAssetModel *bm in self.blurryPhotosM) self.blurryBytesRunning += bm.fileSizeBytes;
+
         newAnchor = [self rebuildDaysObjC:affectedDayStarts];
     }
 
-    // ✅重建完：用 comparable pools rebuild index（否则后续命中会怪）
+    // ✅ rebuild index
     [self rebuildIndexFromComparablePools];
 
-    // 5) 统一发布：重新计算 snapshot + 写 cache + publish
+    // 5) snapshot + other 重建（最稳：从全库算 other）
     [self recomputeSnapshotFromCurrentContainers];
 
+    self.otherPhotosM = [[self buildOtherPhotosFromAllAssetsFetchResult:self.allAssetsFetchResult] mutableCopy];
+
+    // 6) 写 cache
     self.cache.snapshot = self.snapshot;
     self.cache.duplicateGroups = [self.dupGroupsM copy];
     self.cache.similarGroups   = [self.simGroupsM copy];
@@ -887,11 +1573,15 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.cache.screenRecordings = [self.screenRecordingsM copy];
     self.cache.bigVideos       = [self.bigVideosM copy];
 
-    // ✅别忘了把 comparable pools 写回 cache
     self.cache.comparableImages = [self.comparableImagesM copy];
     self.cache.comparableVideos = [self.comparableVideosM copy];
 
+    // ✅ 补全：blurry / other
+    self.cache.blurryPhotos = [self.blurryPhotosM copy];
+    self.cache.otherPhotos  = [self.otherPhotosM  copy];
+
     self.cache.anchorDate = newAnchor;
+
     [self saveCache];
     [self setAllModulesState:ASModuleScanStateFinished];
 
@@ -985,10 +1675,13 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.bigVideosM = [[self.bigVideosM filteredArrayUsingPredicate:keep] mutableCopy];
     self.comparableImagesM = [[self.comparableImagesM filteredArrayUsingPredicate:keep] mutableCopy];
     self.comparableVideosM = [[self.comparableVideosM filteredArrayUsingPredicate:keep] mutableCopy];
+    self.blurryPhotosM = [[self.blurryPhotosM filteredArrayUsingPredicate:keep] mutableCopy];
+    self.otherPhotosM  = [[self.otherPhotosM  filteredArrayUsingPredicate:keep] mutableCopy];
 }
 
 - (NSDate *)rebuildDaysObjC:(NSSet<NSDate*> *)dayStarts {
     NSDate *maxA = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+    NSUInteger desiredK = [self blurryDesiredKForLibraryQuick];
 
     NSCalendar *cal = [NSCalendar currentCalendar];
     for (NSDate *dayStart in dayStarts) {
@@ -1006,24 +1699,34 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         [self.indexVideo removeAllObjects];
 
         for (PHAsset *asset in fr) {
-            // ✅ 更新 maxA
             NSDate *cd = asset.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
             NSDate *md = asset.modificationDate ?: cd;
             if ([cd compare:maxA] == NSOrderedDescending) maxA = cd;
             if ([md compare:maxA] == NSOrderedDescending) maxA = md;
 
             NSError *err = nil;
-            ASAssetModel *m = [self buildModelForAsset:asset error:&err];
+            ASAssetModel *m = [self buildModelForAsset:asset computeCompareBits:YES error:&err];
             if (!m) continue;
 
             if (ASIsScreenshot(asset)) {
                 [self.screenshotsM addObject:m];
                 continue;
             }
+
+            // ✅ blurry：用 score + 增量TopK
+            if (asset.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(asset)) {
+                float score = [self blurScoreForAsset:asset];
+                if (score >= 0.f) {
+                    m.blurScore = score;
+                    [self updateBlurryTopKIncremental:m desiredK:desiredK];
+                }
+            }
+
             if (ASIsScreenRecording(asset)) {
                 [self.screenRecordingsM addObject:m];
                 continue;
             }
+
             if (asset.mediaType == PHAssetMediaTypeVideo && m.fileSizeBytes >= kBigVideoMinBytes) {
                 [self.bigVideosM addObject:m];
             }
@@ -1041,6 +1744,17 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
             }
         }
     }
+
+    // ✅ 防守：确保不超过 desiredK
+    while (self.blurryPhotosM.count > desiredK) {
+        ASAssetModel *tail = self.blurryPhotosM.lastObject;
+        [self.blurryPhotosM removeLastObject];
+        if (self.blurryBytesRunning >= tail.fileSizeBytes) self.blurryBytesRunning -= tail.fileSizeBytes;
+        else self.blurryBytesRunning = 0;
+    }
+    self.snapshot.blurryCount = self.blurryPhotosM.count;
+    self.snapshot.blurryBytes = self.blurryBytesRunning;
+
     return maxA;
 }
 
@@ -1078,28 +1792,26 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         ];
         PHFetchResult<PHAsset *> *delta = [PHAsset fetchAssetsWithOptions:opt];
 
-        // 2) delete check (only when delta has changes)
+        // 2) delete check
         NSMutableSet<NSString *> *deleted = [NSMutableSet set];
-        BOOL needDeleteCheck = YES;
+        NSMutableSet<NSString *> *cachedIds = [NSMutableSet set];
 
-        if (needDeleteCheck) {
-            NSMutableSet<NSString *> *cachedIds = [NSMutableSet set];
+        for (ASAssetGroup *g in self.cache.duplicateGroups) for (ASAssetModel *m in g.assets) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetGroup *g in self.cache.similarGroups)   for (ASAssetModel *m in g.assets) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetModel *m in self.cache.screenshots) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetModel *m in self.cache.screenRecordings) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetModel *m in self.cache.bigVideos) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetModel *m in self.cache.blurryPhotos) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetModel *m in self.cache.otherPhotos) if (m.localId.length) [cachedIds addObject:m.localId];
 
-            for (ASAssetGroup *g in self.cache.duplicateGroups) for (ASAssetModel *m in g.assets) if (m.localId.length) [cachedIds addObject:m.localId];
-            for (ASAssetGroup *g in self.cache.similarGroups)   for (ASAssetModel *m in g.assets) if (m.localId.length) [cachedIds addObject:m.localId];
-            for (ASAssetModel *m in self.cache.screenshots) if (m.localId.length) [cachedIds addObject:m.localId];
-            for (ASAssetModel *m in self.cache.screenRecordings) if (m.localId.length) [cachedIds addObject:m.localId];
-            for (ASAssetModel *m in self.cache.bigVideos) if (m.localId.length) [cachedIds addObject:m.localId];
+        const NSUInteger kDeleteCheckMax = 5000;
+        if (cachedIds.count > 0 && cachedIds.count <= kDeleteCheckMax) {
+            PHFetchResult<PHAsset *> *exist = [PHAsset fetchAssetsWithLocalIdentifiers:cachedIds.allObjects options:nil];
+            NSMutableSet<NSString *> *existIds = [NSMutableSet setWithCapacity:exist.count];
+            for (PHAsset *a in exist) if (a.localIdentifier.length) [existIds addObject:a.localIdentifier];
 
-            const NSUInteger kDeleteCheckMax = 5000;
-            if (cachedIds.count <= kDeleteCheckMax) {
-                PHFetchResult<PHAsset *> *exist = [PHAsset fetchAssetsWithLocalIdentifiers:cachedIds.allObjects options:nil];
-                NSMutableSet<NSString *> *existIds = [NSMutableSet setWithCapacity:exist.count];
-                for (PHAsset *a in exist) if (a.localIdentifier.length) [existIds addObject:a.localIdentifier];
-
-                [deleted unionSet:cachedIds];
-                [deleted minusSet:existIds];
-            }
+            [deleted unionSet:cachedIds];
+            [deleted minusSet:existIds];
         }
 
         // 3) no changes -> restore state
@@ -1121,18 +1833,30 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
         self.comparableImagesM = [self.cache.comparableImages mutableCopy] ?: [NSMutableArray array];
         self.comparableVideosM = [self.cache.comparableVideos mutableCopy] ?: [NSMutableArray array];
+        self.blurryPhotosM = [self.cache.blurryPhotos mutableCopy] ?: [NSMutableArray array];
+        self.otherPhotosM  = [self.cache.otherPhotos  mutableCopy] ?: [NSMutableArray array];
 
-        // rebuild index from comparable pools
+        // ✅ rebuild index from comparable pools
         [self rebuildIndexFromComparablePools];
+
+        // ✅ rebuild blurryBytesRunning
+        self.blurryBytesRunning = 0;
+        for (ASAssetModel *bm in self.blurryPhotosM) self.blurryBytesRunning += bm.fileSizeBytes;
 
         // 5) delete
         if (deleted.count > 0) {
             [self removeModelsByIds:deleted];
+
+            // 校准 blurryBytesRunning
+            self.blurryBytesRunning = 0;
+            for (ASAssetModel *bm in self.blurryPhotosM) self.blurryBytesRunning += bm.fileSizeBytes;
         }
 
         // 6) apply delta
         NSDate *newAnchor = anchor;
         NSInteger processed = 0;
+
+        NSUInteger desiredK = [self blurryDesiredKForLibraryQuick];
 
         for (PHAsset *a in delta) {
             @autoreleasepool {
@@ -1141,7 +1865,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                     [self removeModelByIdEverywhere:lid]; // ✅ 先删旧
                 }
 
-                ASAssetModel *m = [self buildModelForAsset:a error:&err];
+                ASAssetModel *m = [self buildModelForAsset:a computeCompareBits:YES error:&err];
                 if (!m) continue;
 
                 NSDate *cd = a.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
@@ -1154,6 +1878,15 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                 } else if (ASIsScreenRecording(a)) {
                     [self.screenRecordingsM addObject:m];
                 } else {
+                    // ✅ blurry：score + 增量TopK（不要再 isBlurryModel 直接 append）
+                    if (a.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(a)) {
+                        float score = [self blurScoreForAsset:a];
+                        if (score >= 0.f) {
+                            m.blurScore = score;
+                            [self updateBlurryTopKIncremental:m desiredK:desiredK];
+                        }
+                    }
+
                     if (a.mediaType == PHAssetMediaTypeVideo && m.fileSizeBytes >= kBigVideoMinBytes) {
                         [self.bigVideosM addObject:m];
                     }
@@ -1161,7 +1894,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                     if (ASAllowedForCompare(a)) {
                         [self matchAndGroup:m asset:a];
 
-                        // ✅ comparable pool（与全量一致）
                         if (a.mediaType == PHAssetMediaTypeImage) {
                             [self.comparableImagesM addObject:m];
                         } else if (a.mediaType == PHAssetMediaTypeVideo) {
@@ -1172,17 +1904,30 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
                 processed++;
                 if (processed % 200 == 0) {
+                    [self rebuildIndexFromComparablePools];
                     [self recomputeSnapshotFromCurrentContainers];
                     [self applyCacheToPublicStateWithCompletion:^{ [self emitProgress]; }];
                 }
             }
         }
 
-        // 统一 rebuildIndex
+        // ✅ 防守：确保不超过 desiredK
+        while (self.blurryPhotosM.count > desiredK) {
+            ASAssetModel *tail = self.blurryPhotosM.lastObject;
+            [self.blurryPhotosM removeLastObject];
+            if (self.blurryBytesRunning >= tail.fileSizeBytes) self.blurryBytesRunning -= tail.fileSizeBytes;
+            else self.blurryBytesRunning = 0;
+        }
+        self.snapshot.blurryCount = self.blurryPhotosM.count;
+        self.snapshot.blurryBytes = self.blurryBytesRunning;
+
+        // 统一 rebuild index
         [self rebuildIndexFromComparablePools];
 
-        // 7) finish: recompute + save + publish
+        // 7) finish: recompute + rebuild other + save + publish
         [self recomputeSnapshotFromCurrentContainers];
+
+        self.otherPhotosM = [[self buildOtherPhotosFromAllAssetsFetchResult:self.allAssetsFetchResult] mutableCopy];
 
         self.cache.anchorDate = newAnchor;
         self.cache.snapshot = self.snapshot;
@@ -1195,6 +1940,10 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         self.cache.comparableImages = [self.comparableImagesM copy];
         self.cache.comparableVideos = [self.comparableVideosM copy];
 
+        // ✅ 写回 blurry / other
+        self.cache.blurryPhotos = [self.blurryPhotosM copy];
+        self.cache.otherPhotos  = [self.otherPhotosM  copy];
+
         [self saveCache];
 
         [self applyCacheToPublicStateWithCompletion:^{
@@ -1206,10 +1955,28 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     });
 }
 
+- (void)removeFromIndexByLocalId:(NSString *)localId {
+    if (!localId.length) return;
+
+    void (^filterIndex)(NSMutableDictionary<NSNumber*, NSMutableArray<ASAssetModel*>*> *) =
+    ^(NSMutableDictionary *idx){
+        for (NSNumber *k in idx.allKeys) {
+            NSMutableArray *pool = idx[k];
+            NSIndexSet *rm = [pool indexesOfObjectsPassingTest:^BOOL(ASAssetModel *obj, NSUInteger i, BOOL *stop) {
+                return [obj.localId isEqualToString:localId];
+            }];
+            if (rm.count) [pool removeObjectsAtIndexes:rm];
+            if (pool.count == 0) [idx removeObjectForKey:k];
+        }
+    };
+
+    filterIndex(self.indexImage);
+    filterIndex(self.indexVideo);
+}
+
 - (void)removeModelByIdEverywhere:(NSString *)localId {
     if (!localId.length) return;
-    NSSet *ids = [NSSet setWithObject:localId];
-    [self removeModelsByIds:ids];
+    [self removeModelsByIds:[NSSet setWithObject:localId]];
 
     NSPredicate *keep = [NSPredicate predicateWithBlock:^BOOL(ASAssetModel *m, NSDictionary *_) {
         return ![m.localId isEqualToString:localId];
@@ -1217,6 +1984,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
     self.comparableImagesM = [[self.comparableImagesM filteredArrayUsingPredicate:keep] mutableCopy];
     self.comparableVideosM = [[self.comparableVideosM filteredArrayUsingPredicate:keep] mutableCopy];
+    [self removeFromIndexByLocalId:localId]; // 把 index 里的旧 model 也移除
 }
 
 #pragma mark - Vision memo (light)
@@ -1275,7 +2043,9 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 #pragma mark - Build model (size + phash256 + vision)
 
-- (ASAssetModel *)buildModelForAsset:(PHAsset *)asset error:(NSError **)err {
+- (ASAssetModel *)buildModelForAsset:(PHAsset *)asset
+                 computeCompareBits:(BOOL)computeCompareBits
+                              error:(NSError **)err {
     ASAssetModel *m = [ASAssetModel new];
     m.localId = asset.localIdentifier ?: @"";
     m.mediaType = asset.mediaType;
@@ -1285,7 +2055,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
     m.fileSizeBytes = [self fetchFileSizeForAsset:asset];
 
-    if (ASAllowedForCompare(asset)) {
+    if (computeCompareBits && ASAllowedForCompare(asset)) {
         UIImage *thumb = nil;
 
         if (asset.mediaType == PHAssetMediaTypeVideo) {
@@ -1305,7 +2075,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
         if (thumb) {
             m.phash256Data = [self computeColorPHash256Data:thumb];
-//            m.visionPrintData = [self computeVisionPrintDataFromImage:thumb];
+            // m.visionPrintData = ...
         }
     }
 
@@ -1324,20 +2094,25 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 - (UIImage *)requestThumbnailSyncForAsset:(PHAsset *)asset target:(CGSize)target {
     __block UIImage *img = nil;
-    PHImageRequestOptions *opt = [PHImageRequestOptions new];
-    opt.synchronous = YES;
-    opt.networkAccessAllowed = NO;
-    opt.resizeMode = PHImageRequestOptionsResizeModeExact;              // ✅ exact
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat; // ✅ high quality
 
-    [self.imageManager requestImageForAsset:asset
-                                 targetSize:target
-                                contentMode:PHImageContentModeAspectFill // ✅ aspectFill
-                                    options:opt
-                              resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
-        img = result;
-    }];
-    return img;
+        PHImageRequestOptions *opt = [PHImageRequestOptions new];
+        opt.synchronous = YES;
+        opt.networkAccessAllowed = NO;
+        opt.resizeMode = PHImageRequestOptionsResizeModeFast;
+        opt.deliveryMode = PHImageRequestOptionsDeliveryModeFastFormat;
+        opt.version = PHImageRequestOptionsVersionCurrent;
+
+        [self.imageManager requestImageForAsset:asset
+                                     targetSize:target
+                                    contentMode:PHImageContentModeAspectFill
+                                        options:opt
+                                  resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+            if ([info[PHImageResultIsDegradedKey] boolValue]) return;
+            if (info[PHImageCancelledKey]) return;
+            if (info[PHImageErrorKey]) return;
+            img = result;
+        }];
+        return img;
 }
 
 - (UIImage *)requestVideoFrameSyncForAsset:(PHAsset *)asset seconds:(Float64)seconds target:(CGSize)target {
@@ -1592,8 +2367,8 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
 
 #pragma mark - Grouping
 
-- (void)matchAndGroup:(ASAssetModel *)model asset:(PHAsset *)asset {
-    if (!model.phash256Data || model.phash256Data.length < 32) return;
+- (BOOL)matchAndGroup:(ASAssetModel *)model asset:(PHAsset *)asset {
+    if (!model.phash256Data || model.phash256Data.length < 32) return NO;
 
     BOOL isImage = (asset.mediaType == PHAssetMediaTypeImage);
     NSMutableDictionary<NSNumber *, NSMutableArray<ASAssetModel *> *> *index = isImage ? self.indexImage : self.indexVideo;
@@ -1609,30 +2384,27 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
     ASGroupType dupType = isImage ? ASGroupTypeDuplicateImage : ASGroupTypeDuplicateVideo;
 
     for (ASAssetModel *cand in pool) {
+        if ([cand.localId isEqualToString:model.localId]) continue;
         if (!cand.phash256Data || cand.phash256Data.length < 32) continue;
 
         int hd = ASHamming256(model.phash256Data, cand.phash256Data);
-        if (hd > kPolicySimilar.phashThreshold) continue;          // pHash gate
+        if (hd > kPolicySimilar.phashThreshold) continue;
 
         float vd = [self visionDistanceBetweenLocalId:model.localId and:cand.localId];
         if (vd == FLT_MAX) continue;
+        if (vd > kPolicySimilar.visionThreshold) continue;
 
-        if (vd > kPolicySimilar.visionThreshold) continue;         // 相似门槛（包含重复）
-
-        // 命中：相似
         hit = cand;
-
-        // 是否重复（更严格门槛）
         hitIsDup = (hd <= kPolicyDuplicate.phashThreshold && vd <= kPolicyDuplicate.visionThreshold);
         break;
     }
 
     if (!hit) {
         [pool addObject:model];
-        return;
+        return NO; // ✅未命中，不在任何组
     }
 
-    // ✅ 相似：必入（相似包含重复）
+    // ✅相似组
     if (![self appendModel:model toExistingGroupByAnyMemberId:hit.localId groupType:simType]) {
         ASAssetGroup *g = [ASAssetGroup new];
         g.type = simType;
@@ -1640,7 +2412,7 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
         [self.simGroupsM addObject:g];
     }
 
-    // ✅ 重复：可选入（镜像一份）
+    // ✅重复组（更严格）
     if (hitIsDup) {
         if (![self appendModel:model toExistingGroupByAnyMemberId:hit.localId groupType:dupType]) {
             ASAssetGroup *g2 = [ASAssetGroup new];
@@ -1651,6 +2423,7 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
     }
 
     [pool addObject:model];
+    return YES; // ✅命中并入组（相似/重复至少其一）
 }
 
 - (BOOL)appendModel:(ASAssetModel *)model toExistingGroupByAnyMemberId:(NSString *)memberId groupType:(ASGroupType)type {
@@ -1708,6 +2481,8 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
     addArr(self.screenshotsM);
     addArr(self.screenRecordingsM);
     addArr(self.bigVideosM);
+    addArr(self.blurryPhotosM);
+    addArr(self.otherPhotosM);
 
     s.scannedCount = ids.count;
     s.scannedBytes = scannedBytes;
@@ -1721,6 +2496,12 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
     s.bigVideoCount = self.bigVideosM.count;
     for (ASAssetModel *m in self.bigVideosM) s.bigVideoBytes += m.fileSizeBytes;
 
+    s.blurryCount = self.blurryPhotosM.count;
+    for (ASAssetModel *m in self.blurryPhotosM) s.blurryBytes += m.fileSizeBytes;
+
+    s.otherCount = self.otherPhotosM.count;
+    for (ASAssetModel *m in self.otherPhotosM) s.otherBytes += m.fileSizeBytes;
+    
     self.snapshot = s;
     [self recomputeCleanableStatsFast];
 }
@@ -1756,6 +2537,8 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
     self.screenshotsM = [[self.screenshotsM filteredArrayUsingPredicate:keep] mutableCopy];
     self.screenRecordingsM = [[self.screenRecordingsM filteredArrayUsingPredicate:keep] mutableCopy];
     self.bigVideosM = [[self.bigVideosM filteredArrayUsingPredicate:keep] mutableCopy];
+    self.blurryPhotosM = [[self.blurryPhotosM filteredArrayUsingPredicate:keep] mutableCopy];
+    self.otherPhotosM  = [[self.otherPhotosM  filteredArrayUsingPredicate:keep] mutableCopy];
 }
 
 #pragma mark - Index rebuild
@@ -1822,6 +2605,8 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
         self.screenshots = self.cache.screenshots ?: @[];
         self.screenRecordings = self.cache.screenRecordings ?: @[];
         self.bigVideos = self.cache.bigVideos ?: @[];
+        self.blurryPhotos = self.cache.blurryPhotos ?: @[];
+        self.otherPhotos  = self.cache.otherPhotos  ?: @[];
         if (completion) completion();
     };
 
@@ -1838,6 +2623,8 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
         self.screenshots = self.cache.screenshots ?: @[];
         self.screenRecordings = self.cache.screenRecordings ?: @[];
         self.bigVideos = self.cache.bigVideos ?: @[];
+        self.blurryPhotos = self.cache.blurryPhotos ?: @[];
+        self.otherPhotos  = self.cache.otherPhotos ?: @[];
     };
 
     if ([NSThread isMainThread]) assign();
@@ -1865,6 +2652,8 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
 
     ASScanSnapshot *snap = self.snapshot; // 同一个对象也行，这里只是引用一下
 
+    NSArray<ASAssetModel *> *blurryCopy = [self.blurryPhotosM copy] ?: self.cache.blurryPhotos ?: @[];
+    NSArray<ASAssetModel *> *otherCopy  = [self.otherPhotosM copy]  ?: self.cache.otherPhotos  ?: @[];
     //关键：在同一次 main dispatch 中，先更新公开容器，再回调 UI
     dispatch_async(dispatch_get_main_queue(), ^{
         self.duplicateGroups = dupCopy;
@@ -1875,6 +2664,8 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
         self.screenshots = shotCopy;
         self.screenRecordings = recCopy;
         self.bigVideos = bigCopy;
+        self.blurryPhotos = blurryCopy;
+        self.otherPhotos  = otherCopy;
         if (self.progressBlock) self.progressBlock(snap);
     });
 }

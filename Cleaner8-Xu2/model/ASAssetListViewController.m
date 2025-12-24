@@ -402,6 +402,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         case ASAssetListModeScreenshots: return @"截屏";
         case ASAssetListModeScreenRecordings: return @"录屏";
         case ASAssetListModeBigVideos: return @">20MB 视频";
+        case ASAssetListModeBlurryPhotos: return @"模糊照片";
+        case ASAssetListModeOtherPhotos: return @"其他照片";
     }
     return @"列表";
 }
@@ -482,6 +484,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             case ASAssetListModeScreenshots:       arr = self.scanMgr.screenshots ?: @[]; break;
             case ASAssetListModeScreenRecordings:  arr = self.scanMgr.screenRecordings ?: @[]; break;
             case ASAssetListModeBigVideos:         arr = self.scanMgr.bigVideos ?: @[]; break;
+            case ASAssetListModeBlurryPhotos:      arr = self.scanMgr.blurryPhotos ?: @[]; break;
+            case ASAssetListModeOtherPhotos:       arr = self.scanMgr.otherPhotos ?: @[]; break;
             default: break;
         }
 

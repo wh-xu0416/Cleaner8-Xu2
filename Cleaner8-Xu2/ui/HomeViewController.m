@@ -16,8 +16,11 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     ASHomeModuleTypeScreenshots,
     ASHomeModuleTypeScreenRecordings,
     ASHomeModuleTypeBigVideos,
+    ASHomeModuleTypeBlurryPhotos,
+    ASHomeModuleTypeOtherPhotos,
     ASHomeModuleTypeContacts,
 };
+
 
 @interface ASHomeModuleVM : NSObject
 @property (nonatomic) ASHomeModuleType type;
@@ -96,7 +99,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     CGFloat h = self.contentView.bounds.size.height;
 
     self.titleLabel.frame = CGRectMake(pad, pad, w - pad*2, 20);
-    NSLog(@"titleLabel frame: %@", NSStringFromCGRect(self.titleLabel.frame));  // Debug log for titleLabel frame
     self.countLabel.frame = CGRectMake(pad, CGRectGetMaxY(self.titleLabel.frame) + 6, w - pad*2, 18);
     self.sizeLabel.frame  = CGRectMake(pad, CGRectGetMaxY(self.countLabel.frame) + 2, w - pad*2, 18);
 
@@ -118,8 +120,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 }
 
 - (void)applyVM:(ASHomeModuleVM *)vm {
-    NSLog(@"Setting title: %@", vm.title); // 检查 title 是否为空
-
     NSString *st = vm.statusText ?: @"";
     if (st.length > 0) {
         // 方案1：纯拼接
@@ -140,8 +140,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         self.titleLabel.text = vm.title;
         self.titleLabel.attributedText = nil;
     }
-    NSLog(@"titleLabel text: %@", self.titleLabel.text);  // Check what title is being set
-
     self.countLabel.text = [NSString stringWithFormat:@"数量：%lu", (unsigned long)vm.totalCount];
     self.sizeLabel.text  = [NSString stringWithFormat:@"大小：%@", [HomeModuleCell humanSize:vm.totalBytes]];
 }
@@ -397,6 +395,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     NSArray<ASAssetModel *> *shots = self.scanMgr.screenshots ?: @[];
     NSArray<ASAssetModel *> *recs  = self.scanMgr.screenRecordings ?: @[];
     NSArray<ASAssetModel *> *bigs  = self.scanMgr.bigVideos ?: @[];
+    NSArray<ASAssetModel *> *blurs = self.scanMgr.blurryPhotos ?: @[];
+    NSArray<ASAssetModel *> *others = self.scanMgr.otherPhotos ?: @[];
 
     BOOL needExistCheck = (self.scanMgr.snapshot.state == ASScanStateFinished);
 
@@ -420,6 +420,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         collectIdsFromModels(shots);
         collectIdsFromModels(recs);
         collectIdsFromModels(bigs);
+        collectIdsFromModels(blurs);
+        collectIdsFromModels(others);
 
         PHFetchResult<PHAsset *> *existFR = [PHAsset fetchAssetsWithLocalIdentifiers:candidateIds options:nil];
         existIdSet = [NSMutableSet setWithCapacity:existFR.count];
@@ -447,6 +449,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     shots = filterValidModels(shots);
     recs  = filterValidModels(recs);
     bigs  = filterValidModels(bigs);
+    blurs  = filterValidModels(blurs);
+    others = filterValidModels(others);
 
     // flatten groups（过滤 invalid，且 >=2 才算分组）
     NSArray<ASAssetModel *> *(^flattenGroups)(NSArray<ASAssetGroup *> *, ASGroupType) =
@@ -507,8 +511,15 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         }
     };
 
-    collectUniq(simImg); collectUniq(simVid); collectUniq(dupImg); collectUniq(dupVid);
-    collectUniq(shots); collectUniq(recs); collectUniq(bigs);
+    collectUniq(simImg);
+    collectUniq(simVid);
+    collectUniq(dupImg);
+    collectUniq(dupVid);
+    collectUniq(shots);
+    collectUniq(recs);
+    collectUniq(bigs);
+    collectUniq(blurs);
+    collectUniq(others);
 
     uint64_t uniqBytes = 0;
     for (NSNumber *n in bytesById.allValues) uniqBytes += n.unsignedLongLongValue;
@@ -535,7 +546,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     NSArray<NSNumber *> *states = self.scanMgr.snapshot.moduleStates;
 
     NSString *(^statusTextForType)(ASHomeModuleType) = ^NSString *(ASHomeModuleType t) {
-        if (states.count != 7) return @""; // 没有模块状态就不显示
+        if (states.count != 9) return @"";
+        if (t >= 9) return @"";
         NSInteger st = states[t].integerValue;
         switch (st) {
             case 0: return @"(等待)";
@@ -545,7 +557,6 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
             default: return @"";
         }
     };
-
     ASHomeModuleVM *(^makeVM)(ASHomeModuleType, NSString *, NSArray<ASAssetModel *> *) =
     ^ASHomeModuleVM *(ASHomeModuleType type, NSString *title, NSArray<ASAssetModel *> *arr) {
         ASHomeModuleVM *vm = [ASHomeModuleVM new];
@@ -600,6 +611,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         makeVM(ASHomeModuleTypeScreenshots,        @"截屏", shots),
         makeVM(ASHomeModuleTypeScreenRecordings,   @"录屏", recs),
         makeVM(ASHomeModuleTypeBigVideos,          @"大视频", bigs),
+        makeVM(ASHomeModuleTypeBlurryPhotos,       @"模糊照片", blurs),
+        makeVM(ASHomeModuleTypeOtherPhotos,        @"其他照片", others),
         contactsVM,
     ];
 }
@@ -613,8 +626,7 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
 
     ASHomeModuleVM *vm = self.modules[indexPath.item];
 
-    UINavigationController *rootNav =
-        (UINavigationController *)self.view.window.rootViewController;
+    UINavigationController *rootNav = (UINavigationController *)self.view.window.rootViewController;
 
     // ✅ 联系人模块：保持同一套 rootNav push
     if (vm.type == ASHomeModuleTypeContacts) {
@@ -646,6 +658,8 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
         case ASHomeModuleTypeScreenshots:       *outMode = ASAssetListModeScreenshots; return YES;
         case ASHomeModuleTypeScreenRecordings:  *outMode = ASAssetListModeScreenRecordings; return YES;
         case ASHomeModuleTypeBigVideos:         *outMode = ASAssetListModeBigVideos; return YES;
+        case ASHomeModuleTypeBlurryPhotos:   *outMode = ASAssetListModeBlurryPhotos; return YES;
+        case ASHomeModuleTypeOtherPhotos:    *outMode = ASAssetListModeOtherPhotos;  return YES;
         case ASHomeModuleTypeContacts:          return NO;
     }
     return NO;

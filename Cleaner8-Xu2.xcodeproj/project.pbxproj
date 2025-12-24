@@ -24,6 +24,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		614C3FDB2EFB9617001CF346 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		614C3FE02EFB98A8001CF346 /* Accessibility.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accessibility.framework; path = System/Library/Frameworks/Accessibility.framework; sourceTree = SDKROOT; };
 		6162DB3F2EEFE7550006CBF8 /* Cleaner8-Xu2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cleaner8-Xu2.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6162DB5A2EEFE7570006CBF8 /* Cleaner8-Xu2Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Cleaner8-Xu2Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6162DB642EEFE7570006CBF8 /* Cleaner8-Xu2UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Cleaner8-Xu2UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -85,12 +87,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		614C3FDA2EFB9616001CF346 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				614C3FE02EFB98A8001CF346 /* Accessibility.framework */,
+				614C3FDB2EFB9617001CF346 /* Accelerate.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		6162DB362EEFE7550006CBF8 = {
 			isa = PBXGroup;
 			children = (
 				6162DB412EEFE7550006CBF8 /* Cleaner8-Xu2 */,
 				6162DB5D2EEFE7570006CBF8 /* Cleaner8-Xu2Tests */,
 				6162DB672EEFE7570006CBF8 /* Cleaner8-Xu2UITests */,
+				614C3FDA2EFB9616001CF346 /* Frameworks */,
 				6162DB402EEFE7550006CBF8 /* Products */,
 			);
 			sourceTree = "<group>";

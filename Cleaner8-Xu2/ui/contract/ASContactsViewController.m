@@ -1,9 +1,16 @@
 #import "ASContactsViewController.h"
+#import "AllContactsViewController.h"      // 所有联系人列表
+#import "DuplicateContactsViewController.h" // 重复联系人列表
+#import "BackupContactsViewController.h"    // 备份联系人列表
 #import "ASCustomNavBar.h"
 
-@interface ASContactsViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
-@property (nonatomic, strong) UICollectionView *cv;
+@interface ASContactsViewController ()
+
 @property (nonatomic, strong) ASCustomNavBar *navBar;  // 自定义导航栏
+@property (nonatomic, strong) UIButton *allContactsButton;     // 所有联系人按钮
+@property (nonatomic, strong) UIButton *duplicateContactsButton; // 重复联系人按钮
+@property (nonatomic, strong) UIButton *backupContactsButton;    // 备份联系人按钮
+
 @end
 
 @implementation ASContactsViewController
@@ -16,58 +23,84 @@
     // 设置自定义导航栏
     [self setupNavBar];
     
-    // 设置其他UI（例如：collection view）
-    [self setupUI];
+    // 设置UI（按钮）
+    [self setupButtons];
 }
 
 - (void)setupNavBar {
-    // 创建自定义导航栏并设置标题
     self.navBar = [[ASCustomNavBar alloc] initWithTitle:@"联系人"];
     
     __weak typeof(self) weakSelf = self;
     self.navBar.onBack = ^{
-        // 处理返回按钮的点击事件
         [weakSelf.navigationController popViewControllerAnimated:YES];
     };
     
-    // 不显示全选按钮
+    // 隐藏右侧按钮
     [self.navBar setShowRightButton:NO];
-
-    // 将导航栏添加到视图中
     [self.view addSubview:self.navBar];
 }
 
-- (void)setupUI {
-    UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
-    layout.minimumInteritemSpacing = 8;
-    layout.minimumLineSpacing = 8;
-    layout.sectionInset = UIEdgeInsetsMake(0, 12, 0, 12);
-
-    self.cv = [[UICollectionView alloc] initWithFrame:self.view.bounds collectionViewLayout:layout];
-    self.cv.backgroundColor = UIColor.whiteColor;
-    self.cv.dataSource = self;
-    self.cv.delegate = self;
-    [self.view addSubview:self.cv];
+- (void)setupButtons {
+    CGFloat buttonWidth = 200;
+    CGFloat buttonHeight = 44;
+    CGFloat spacing = 20;
+    
+    // 所有联系人按钮
+    self.allContactsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.allContactsButton setTitle:@"所有联系人" forState:UIControlStateNormal];
+    self.allContactsButton.frame = CGRectMake((self.view.bounds.size.width - buttonWidth) / 2, 100, buttonWidth, buttonHeight);
+    [self.allContactsButton addTarget:self action:@selector(goToAllContacts) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.allContactsButton];
+    
+    // 重复联系人按钮
+    self.duplicateContactsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.duplicateContactsButton setTitle:@"重复联系人" forState:UIControlStateNormal];
+    self.duplicateContactsButton.frame = CGRectMake((self.view.bounds.size.width - buttonWidth) / 2, CGRectGetMaxY(self.allContactsButton.frame) + spacing, buttonWidth, buttonHeight);
+    [self.duplicateContactsButton addTarget:self action:@selector(goToDuplicateContacts) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.duplicateContactsButton];
+    
+    // 备份联系人按钮
+    self.backupContactsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.backupContactsButton setTitle:@"备份联系人" forState:UIControlStateNormal];
+    self.backupContactsButton.frame = CGRectMake((self.view.bounds.size.width - buttonWidth) / 2, CGRectGetMaxY(self.duplicateContactsButton.frame) + spacing, buttonWidth, buttonHeight);
+    [self.backupContactsButton addTarget:self action:@selector(goToBackupContacts) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.backupContactsButton];
 }
 
-- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    return 0; // 实现来显示联系人
+// 跳转到所有联系人页面
+- (void)goToAllContacts {
+    AllContactsViewController *vc =
+    [[AllContactsViewController alloc] initWithMode:AllContactsModeDelete backupId:nil];
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
-- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    // 实现联系人信息的显示
-    return nil;
+// 跳转到重复联系人页面
+- (void)goToDuplicateContacts {
+    DuplicateContactsViewController *duplicateContactsVC = [[DuplicateContactsViewController alloc] init];
+    [self.navigationController pushViewController:duplicateContactsVC animated:YES];
+}
+
+// 跳转到备份联系人页面
+- (void)goToBackupContacts {
+    BackupContactsViewController *backupContactsVC = [[BackupContactsViewController alloc] init];
+    [self.navigationController pushViewController:backupContactsVC animated:YES];
 }
 
 // 调整布局，确保导航栏和底部栏不会遮挡内容
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-
+    
     CGFloat navH = 44 + self.view.safeAreaInsets.top;  // 考虑安全区
     self.navBar.frame = CGRectMake(0, 0, self.view.bounds.size.width, navH);
-
-    // 调整 collection view 的布局
-    self.cv.frame = CGRectMake(0, navH, self.view.bounds.size.width, self.view.bounds.size.height - navH);
+    
+    // 调整按钮的位置
+    CGFloat buttonWidth = 200;
+    CGFloat buttonHeight = 44;
+    CGFloat spacing = 20;
+    
+    self.allContactsButton.frame = CGRectMake((self.view.bounds.size.width - buttonWidth) / 2, navH + 20, buttonWidth, buttonHeight);
+    self.duplicateContactsButton.frame = CGRectMake((self.view.bounds.size.width - buttonWidth) / 2, CGRectGetMaxY(self.allContactsButton.frame) + spacing, buttonWidth, buttonHeight);
+    self.backupContactsButton.frame = CGRectMake((self.view.bounds.size.width - buttonWidth) / 2, CGRectGetMaxY(self.duplicateContactsButton.frame) + spacing, buttonWidth, buttonHeight);
 }
 
 @end

@@ -1,6 +1,5 @@
 #import <UIKit/UIKit.h>
 
-
 typedef NS_ENUM(NSUInteger, ASAssetListMode) {
     ASAssetListModeSimilarImage = 0,
     ASAssetListModeSimilarVideo,
@@ -9,6 +8,8 @@ typedef NS_ENUM(NSUInteger, ASAssetListMode) {
     ASAssetListModeScreenshots,
     ASAssetListModeScreenRecordings,
     ASAssetListModeBigVideos,
+    ASAssetListModeBlurryPhotos,
+    ASAssetListModeOtherPhotos,
 };
 
 @interface ASAssetListViewController : UIViewController
