@@ -4,6 +4,13 @@
 static const void *kASIconViewKey = &kASIconViewKey;
 static const void *kASTitleLabelKey = &kASTitleLabelKey;
 
+static inline UIColor *ASColorHex(uint32_t rgb, CGFloat alpha) {
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                           green:((rgb >> 8)  & 0xFF) / 255.0
+                            blue:((rgb >> 0)  & 0xFF) / 255.0
+                           alpha:alpha];
+}
+
 @implementation ASFloatingTabBarItem
 + (instancetype)itemWithTitle:(NSString *)title normal:(NSString *)n selected:(NSString *)s {
     ASFloatingTabBarItem *it = [ASFloatingTabBarItem new];
@@ -25,13 +32,13 @@ static const void *kASTitleLabelKey = &kASTitleLabelKey;
     if (self = [super initWithFrame:CGRectZero]) {
         self.items = items;
 
-        self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.7];
+        self.backgroundColor = ASColorHex(0xFFFFFF, 0xCC / 255.0);
         self.layer.masksToBounds = NO;
 
-        self.layer.shadowColor = [UIColor blackColor].CGColor;
-        self.layer.shadowOpacity = 0.25;
-        self.layer.shadowRadius = 12;
-        self.layer.shadowOffset = CGSizeMake(0, 6);
+        self.layer.shadowColor = ASColorHex(0x000000, 0x1A / 255.0).CGColor;
+        self.layer.shadowOpacity = 1.0;
+        self.layer.shadowOffset = CGSizeMake(0, 0);
+        self.layer.shadowRadius = 10.0;
 
         NSMutableArray *arr = [NSMutableArray array];
 
@@ -42,7 +49,6 @@ static const void *kASTitleLabelKey = &kASTitleLabelKey;
             b.tag = i;
             [b addTarget:self action:@selector(tap:) forControlEvents:UIControlEventTouchUpInside];
 
-            // 让按钮自己不渲染 title/image（避免 inset 问题）
             [b setTitle:nil forState:UIControlStateNormal];
             [b setImage:nil forState:UIControlStateNormal];
 
@@ -50,15 +56,15 @@ static const void *kASTitleLabelKey = &kASTitleLabelKey;
             iv.contentMode = UIViewContentModeScaleAspectFit;
             iv.translatesAutoresizingMaskIntoConstraints = NO;
             [NSLayoutConstraint activateConstraints:@[
-                [iv.widthAnchor constraintEqualToConstant:22],
-                [iv.heightAnchor constraintEqualToConstant:22],
+                [iv.widthAnchor constraintEqualToConstant:31],
+                [iv.heightAnchor constraintEqualToConstant:31],
             ]];
 
             UILabel *lb = [UILabel new];
             lb.text = it.title;
-            lb.font = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
+            lb.font = [UIFont systemFontOfSize:10 weight:UIFontWeightSemibold];
             lb.textAlignment = NSTextAlignmentCenter;
-            lb.textColor = [UIColor colorWithWhite:1 alpha:0.55];
+            lb.textColor = ASColorHex(0x454545, 1.0);
 
             UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[iv, lb]];
             stack.axis = UILayoutConstraintAxisVertical;
@@ -95,40 +101,15 @@ static const void *kASTitleLabelKey = &kASTitleLabelKey;
     NSInteger c = self.buttons.count;
     if (c <= 0) return;
 
-    self.layer.cornerRadius = h / 2.0;
-    self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:self.layer.cornerRadius].CGPath;
+    self.layer.cornerRadius = 35.0;
+
+    self.layer.shadowPath =
+        [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:self.layer.cornerRadius].CGPath;
 
     CGFloat bw = w / c;
-
     for (NSInteger i = 0; i < c; i++) {
         UIButton *b = self.buttons[i];
         b.frame = CGRectMake(i * bw, 0, bw, h);
-
-        // 关键：让图在上、字在下（手动算 inset）
-        CGSize imgSize = CGSizeMake(22, 22);
-        CGFloat spacing = 4;
-
-        // 设置 imageView 大小（仅用于 inset 计算）
-        b.imageEdgeInsets = UIEdgeInsetsZero;
-        b.titleEdgeInsets = UIEdgeInsetsZero;
-        b.contentEdgeInsets = UIEdgeInsetsZero;
-
-        // 先确保 image/title 都有
-        NSString *title = [b titleForState:UIControlStateNormal] ?: @"";
-        CGSize titleSize = [title sizeWithAttributes:@{NSFontAttributeName:b.titleLabel.font}];
-
-        CGFloat totalH = imgSize.height + spacing + titleSize.height;
-
-        CGFloat imgTop = (h - totalH) / 2.0;
-        CGFloat titleTop = imgTop + imgSize.height + spacing;
-
-        // 通过 inset 把 image/title 放到目标位置
-        // 这里用“相对中心”偏移技巧
-        CGFloat imgOffsetY = imgTop - (h - imgSize.height) / 2.0;
-        CGFloat titleOffsetY = titleTop - (h - titleSize.height) / 2.0;
-
-        b.imageEdgeInsets = UIEdgeInsetsMake(imgOffsetY, 0, -imgOffsetY, -titleSize.width);
-        b.titleEdgeInsets = UIEdgeInsetsMake(titleOffsetY, -imgSize.width, -titleOffsetY, 0);
     }
 }
 
@@ -148,7 +129,7 @@ static const void *kASTitleLabelKey = &kASTitleLabelKey;
         BOOL sel = (idx == self.selectedIndex);
 
         iv.image = [UIImage imageNamed:(sel ? it.selectedImageName : it.normalImageName)];
-        lb.textColor = sel ? UIColor.whiteColor : [UIColor colorWithWhite:1 alpha:0.55];
+        lb.textColor = sel ? ASColorHex(0x000000, 1.0) : ASColorHex(0x454545, 0.5);
     }
 }
 

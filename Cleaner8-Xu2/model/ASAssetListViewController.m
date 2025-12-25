@@ -647,39 +647,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 }
 
-#pragma mark - Select all (nav)
-
-//- (void)onSelectAllToggle {
-//    NSMutableSet<NSString *> *shouldAll = [NSMutableSet set];
-//
-//    if ([self isGroupMode]) {
-//        for (ASAssetSection *sec in self.sections) {
-//            for (NSInteger i = 1; i < sec.assets.count; i++) {
-//                ASAssetModel *m = sec.assets[i];
-//                if (m.localId.length) [shouldAll addObject:m.localId];
-//            }
-//        }
-//    } else {
-//        for (ASAssetSection *sec in self.sections) {
-//            for (ASAssetModel *m in sec.assets) if (m.localId.length) [shouldAll addObject:m.localId];
-//        }
-//    }
-//
-//    BOOL alreadyAll = YES;
-//    for (NSString *lid in shouldAll) {
-//        if (![self.selectedIds containsObject:lid]) { alreadyAll = NO; break; }
-//    }
-//
-//    if (alreadyAll) {
-//        [self.selectedIds removeAllObjects];
-//    } else {
-//        [self.selectedIds unionSet:shouldAll];
-//    }
-//
-//    [self recomputeBytesAndRefreshUI];
-//    [self syncNavSelectAllState];
-//}
-
 #pragma mark - Per section select all
 
 - (void)toggleSectionAll:(NSInteger)sectionIndex {

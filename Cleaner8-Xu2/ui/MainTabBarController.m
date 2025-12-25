@@ -4,6 +4,7 @@
 #import "CutViewController.h"
 #import "SecretViewController.h"
 #import "SetViewController.h"
+#import "SwipeViewController.h"
 
 @interface MainTabBarController ()
 <
@@ -30,22 +31,24 @@ UIGestureRecognizerDelegate
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 设置底部四个页面
+    // 设置底部五个页面
     self.viewControllers = @[
-        [self navWithVC:[HomeViewController new]   title:@"首页" image:@"Frame 383"],
-        [self navWithVC:[CutViewController new]    title:@"切换" image:@"Frame 383"],
-        [self navWithVC:[SecretViewController new] title:@"私密" image:@"Frame 383"],
-        [self navWithVC:[SetViewController new]    title:@"设置" image:@"Frame 383"],
+        [self navWithVC:[HomeViewController new]   title:@"Cleaner" image:@""],
+        [self navWithVC:[CutViewController new]    title:@"Video" image:@""],
+        [self navWithVC:[SwipeViewController new]    title:@"Swipe" image:@""],
+        [self navWithVC:[SecretViewController new] title:@"Private" image:@""],
+        [self navWithVC:[SetViewController new]    title:@"More" image:@""],
     ];
 
-    self.tabBar.hidden = YES;  // 隐藏系统的 tabBar
+    self.tabBar.hidden = YES;
 
     // 创建浮动 tab
     self.floatingTab = [[ASFloatingTabBar alloc] initWithItems:@[
-        [ASFloatingTabBarItem itemWithTitle:@"首页" normal:@"tab_home_n" selected:@"tab_home_s"],
-        [ASFloatingTabBarItem itemWithTitle:@"切换" normal:@"tab_cut_n"  selected:@"tab_cut_s"],
-        [ASFloatingTabBarItem itemWithTitle:@"私密" normal:@"tab_secret_n" selected:@"tab_secret_s"],
-        [ASFloatingTabBarItem itemWithTitle:@"设置" normal:@"tab_set_n" selected:@"tab_set_s"],
+        [ASFloatingTabBarItem itemWithTitle:@"Cleaner" normal:@"ic_cleaner_n" selected:@"ic_cleaner_s"],
+        [ASFloatingTabBarItem itemWithTitle:@"Video" normal:@"ic_video_n"  selected:@"ic_video_s"],
+        [ASFloatingTabBarItem itemWithTitle:@"Swipe" normal:@"ic_swipe_n" selected:@"ic_swipe_s"],
+        [ASFloatingTabBarItem itemWithTitle:@"Private" normal:@"ic_private_n" selected:@"ic_private_s"],
+        [ASFloatingTabBarItem itemWithTitle:@"More" normal:@"ic_more_n" selected:@"ic_more_s"],
     ]];
 
     __weak typeof(self) weakSelf = self;
@@ -81,9 +84,9 @@ UIGestureRecognizerDelegate
     [super viewDidLayoutSubviews];
 
     CGFloat w = self.view.bounds.size.width;
-    CGFloat h = 64;
-    CGFloat side = 20;
-    CGFloat bottom = 20 + self.view.safeAreaInsets.bottom;
+    CGFloat h = 70;
+    CGFloat side = 15;
+    CGFloat bottom = self.view.safeAreaInsets.bottom;
 
     self.floatingTab.frame = CGRectMake(side,
                                         self.view.bounds.size.height - h - bottom,

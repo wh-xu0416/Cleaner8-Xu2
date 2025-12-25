@@ -1774,12 +1774,6 @@ static const float kASBlur_ROIFrac       = 0.60f;
     dispatch_async(self.workQ, ^{
         if (self.cache.snapshot.state != ASScanStateFinished) return;
 
-        // 0) UI: scanning
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.snapshot.state = ASScanStateScanning;
-            if (self.progressBlock) self.progressBlock(self.snapshot);
-        });
-
         NSDate *anchor = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
 
         // 1) delta (new/modified)
@@ -1796,26 +1790,45 @@ static const float kASBlur_ROIFrac       = 0.60f;
         NSMutableSet<NSString *> *deleted = [NSMutableSet set];
         NSMutableSet<NSString *> *cachedIds = [NSMutableSet set];
 
-        for (ASAssetGroup *g in self.cache.duplicateGroups) for (ASAssetModel *m in g.assets) if (m.localId.length) [cachedIds addObject:m.localId];
-        for (ASAssetGroup *g in self.cache.similarGroups)   for (ASAssetModel *m in g.assets) if (m.localId.length) [cachedIds addObject:m.localId];
-        for (ASAssetModel *m in self.cache.screenshots) if (m.localId.length) [cachedIds addObject:m.localId];
-        for (ASAssetModel *m in self.cache.screenRecordings) if (m.localId.length) [cachedIds addObject:m.localId];
-        for (ASAssetModel *m in self.cache.bigVideos) if (m.localId.length) [cachedIds addObject:m.localId];
-        for (ASAssetModel *m in self.cache.blurryPhotos) if (m.localId.length) [cachedIds addObject:m.localId];
-        for (ASAssetModel *m in self.cache.otherPhotos) if (m.localId.length) [cachedIds addObject:m.localId];
+        for (ASAssetGroup *g in self.cache.duplicateGroups)
+            for (ASAssetModel *m in g.assets)
+                if (m.localId.length) [cachedIds addObject:m.localId];
+
+        for (ASAssetGroup *g in self.cache.similarGroups)
+            for (ASAssetModel *m in g.assets)
+                if (m.localId.length) [cachedIds addObject:m.localId];
+
+        for (ASAssetModel *m in self.cache.screenshots)
+            if (m.localId.length) [cachedIds addObject:m.localId];
+
+        for (ASAssetModel *m in self.cache.screenRecordings)
+            if (m.localId.length) [cachedIds addObject:m.localId];
+
+        for (ASAssetModel *m in self.cache.bigVideos)
+            if (m.localId.length) [cachedIds addObject:m.localId];
+
+        for (ASAssetModel *m in self.cache.blurryPhotos)
+            if (m.localId.length) [cachedIds addObject:m.localId];
+
+        for (ASAssetModel *m in self.cache.otherPhotos)
+            if (m.localId.length) [cachedIds addObject:m.localId];
 
         const NSUInteger kDeleteCheckMax = 5000;
         if (cachedIds.count > 0 && cachedIds.count <= kDeleteCheckMax) {
-            PHFetchResult<PHAsset *> *exist = [PHAsset fetchAssetsWithLocalIdentifiers:cachedIds.allObjects options:nil];
+            PHFetchResult<PHAsset *> *exist =
+                [PHAsset fetchAssetsWithLocalIdentifiers:cachedIds.allObjects options:nil];
+
             NSMutableSet<NSString *> *existIds = [NSMutableSet setWithCapacity:exist.count];
-            for (PHAsset *a in exist) if (a.localIdentifier.length) [existIds addObject:a.localIdentifier];
+            for (PHAsset *a in exist)
+                if (a.localIdentifier.length) [existIds addObject:a.localIdentifier];
 
             [deleted unionSet:cachedIds];
             [deleted minusSet:existIds];
         }
 
-        // 3) no changes -> restore state
+        // ✅ 3) no changes -> 直接退出，不要把 state 改成 Scanning
         if (delta.count == 0 && deleted.count == 0) {
+            // 保持 finished；你如果希望 UI 也“确认一下”，可以回调一次 progress（可选）
             dispatch_async(dispatch_get_main_queue(), ^{
                 self.snapshot.state = ASScanStateFinished;
                 if (self.progressBlock) self.progressBlock(self.snapshot);
@@ -1823,8 +1836,15 @@ static const float kASBlur_ROIFrac       = 0.60f;
             return;
         }
 
+        // ✅ 只有真的有变化，才进入 scanning（避免 HomeVC 误触发全量扫描）
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.snapshot.state = ASScanStateScanning;
+            if (self.progressBlock) self.progressBlock(self.snapshot);
+        });
+
         // 4) load mutable containers from cache
         NSError *err = nil;
+
         self.dupGroupsM = [self deepMutableGroups:self.cache.duplicateGroups];
         self.simGroupsM = [self deepMutableGroups:self.cache.similarGroups];
         self.screenshotsM = [self.cache.screenshots mutableCopy] ?: [NSMutableArray array];
@@ -1836,10 +1856,10 @@ static const float kASBlur_ROIFrac       = 0.60f;
         self.blurryPhotosM = [self.cache.blurryPhotos mutableCopy] ?: [NSMutableArray array];
         self.otherPhotosM  = [self.cache.otherPhotos  mutableCopy] ?: [NSMutableArray array];
 
-        // ✅ rebuild index from comparable pools
+        // rebuild index from comparable pools
         [self rebuildIndexFromComparablePools];
 
-        // ✅ rebuild blurryBytesRunning
+        // rebuild blurryBytesRunning
         self.blurryBytesRunning = 0;
         for (ASAssetModel *bm in self.blurryPhotosM) self.blurryBytesRunning += bm.fileSizeBytes;
 
@@ -1847,7 +1867,6 @@ static const float kASBlur_ROIFrac       = 0.60f;
         if (deleted.count > 0) {
             [self removeModelsByIds:deleted];
 
-            // 校准 blurryBytesRunning
             self.blurryBytesRunning = 0;
             for (ASAssetModel *bm in self.blurryPhotosM) self.blurryBytesRunning += bm.fileSizeBytes;
         }
@@ -1862,7 +1881,7 @@ static const float kASBlur_ROIFrac       = 0.60f;
             @autoreleasepool {
                 NSString *lid = a.localIdentifier ?: @"";
                 if (lid.length) {
-                    [self removeModelByIdEverywhere:lid]; // ✅ 先删旧
+                    [self removeModelByIdEverywhere:lid]; // 先删旧
                 }
 
                 ASAssetModel *m = [self buildModelForAsset:a computeCompareBits:YES error:&err];
@@ -1878,7 +1897,6 @@ static const float kASBlur_ROIFrac       = 0.60f;
                 } else if (ASIsScreenRecording(a)) {
                     [self.screenRecordingsM addObject:m];
                 } else {
-                    // ✅ blurry：score + 增量TopK（不要再 isBlurryModel 直接 append）
                     if (a.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(a)) {
                         float score = [self blurScoreForAsset:a];
                         if (score >= 0.f) {
@@ -1911,7 +1929,7 @@ static const float kASBlur_ROIFrac       = 0.60f;
             }
         }
 
-        // ✅ 防守：确保不超过 desiredK
+        // 防守：确保不超过 desiredK
         while (self.blurryPhotosM.count > desiredK) {
             ASAssetModel *tail = self.blurryPhotosM.lastObject;
             [self.blurryPhotosM removeLastObject];
@@ -1940,7 +1958,6 @@ static const float kASBlur_ROIFrac       = 0.60f;
         self.cache.comparableImages = [self.comparableImagesM copy];
         self.cache.comparableVideos = [self.comparableVideosM copy];
 
-        // ✅ 写回 blurry / other
         self.cache.blurryPhotos = [self.blurryPhotosM copy];
         self.cache.otherPhotos  = [self.otherPhotosM  copy];
 
