@@ -15,20 +15,16 @@ static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
 static const CGFloat kHomeSideInset = 16.0;
 static const CGFloat kHomeGridGap   = 12.0;
 
-static const CGFloat kHeaderHeight  = 200.0;   // 按截图大致高度，可再微调
-static const CGFloat kLargeCellH    = 260.0;   // Similar Photos 大卡
-static const CGFloat kSmallCellH    = 200.0;   // 其余小卡
+static const CGFloat kHeaderHeight  = 200.0;
+static const CGFloat kLargeCellH    = 260.0;
 
 static UIColor *kHomeBgColor(void) { return ASRGB(246, 248, 251); }
 static UIColor *kCardShadowColor(void) { return [UIColor colorWithWhite:0 alpha:0.10]; }
-
-// #666666FF
 static UIColor *kTextGray(void) { return ASRGB(102, 102, 102); }
 
-// 进度条颜色
-static UIColor *kClutterRed(void) { return ASRGB(245, 19, 19); }      // #F51313FF
-static UIColor *kAppDataYellow(void) { return ASRGB(255, 181, 46); }  // #FFB52EFF
-static UIColor *kTotalGray(void) { return ASRGB(218, 218, 218); }     // #DADADAFF
+static UIColor *kClutterRed(void) { return ASRGB(245, 19, 19); }
+static UIColor *kAppDataYellow(void) { return ASRGB(255, 181, 46); }
+static UIColor *kTotalGray(void) { return ASRGB(218, 218, 218); }
 
 static CGFloat ASHomeBgHeightForWidth(CGFloat width) {
     static UIImage *bgImg = nil;
@@ -40,21 +36,16 @@ static CGFloat ASHomeBgHeightForWidth(CGFloat width) {
     return bgImg.size.height * (width / bgImg.size.width);
 }
 
-static uint64_t ASBytesFromGiB(double gib) {
-    return (uint64_t)(gib * 1024.0 * 1024.0 * 1024.0);
-}
-
-// 把系统读到的 totalBytes 映射到 128/256/512/1TB/2TB 档位
 static NSString *ASMarketingTotalString(uint64_t totalBytes) {
     double gib = (double)totalBytes / (1024.0 * 1024.0 * 1024.0);
-
-    // 用“中点阈值”做分类，避免 121GiB 这种被误判
-    if (gib < 192)  return @"128GB";  // <(128+256)/2
-    if (gib < 384)  return @"256GB";  // <(256+512)/2
-    if (gib < 768)  return @"512GB";  // <(512+1024)/2
-    if (gib < 1536) return @"1TB";    // <(1024+2048)/2
+    if (gib < 192)  return @"128GB";
+    if (gib < 384)  return @"256GB";
+    if (gib < 768)  return @"512GB";
+    if (gib < 1536) return @"1TB";
     return @"2TB";
 }
+
+static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); }
 
 #pragma mark - Home Card Type
 
@@ -70,24 +61,24 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
 #pragma mark - Home Module Model
 
 @interface ASHomeModuleVM : NSObject
+@property (nonatomic) BOOL didSetThumb; // ✅ 扫描中封面只设置一次，避免频繁换封面导致重复请求
 @property (nonatomic) ASHomeCardType type;
+
 @property (nonatomic, copy) NSString *title;
-@property (nonatomic, copy) NSString *countText;     // 例如 “253 Photos” / “24 Videos”
+@property (nonatomic, copy) NSString *countText;
 @property (nonatomic) NSUInteger totalCount;
 @property (nonatomic) uint64_t totalBytes;
 
-// 封面（最多2张：Similar/Duplicate 用2张；其余1张；视频用1个视频id）
-@property (nonatomic, strong) NSArray<NSString *> *thumbLocalIds; // 0/1/2
+@property (nonatomic, strong) NSArray<NSString *> *thumbLocalIds;
 @property (nonatomic, copy) NSString *thumbKey;
 
-// UI flags
 @property (nonatomic) BOOL showsTwoThumbs;
-@property (nonatomic) BOOL isVideoCover; // 视频卡片：动态预览
+@property (nonatomic) BOOL isVideoCover;
 @end
 
 @implementation ASHomeModuleVM @end
 
-#pragma mark - Segmented Progress View (red/yellow/gray)
+#pragma mark - Segmented Progress View
 
 @interface ASSegmentedBarView : UIView
 @property (nonatomic, strong) UIView *redView;
@@ -113,7 +104,6 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         _yellowView.backgroundColor = kAppDataYellow();
         _grayView.backgroundColor = kTotalGray();
 
-        // 关键：叠放顺序（灰在底，黄中间，红在最上）
         [self addSubview:_grayView];
         [self addSubview:_yellowView];
         [self addSubview:_redView];
@@ -140,9 +130,8 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     CGFloat w = self.bounds.size.width;
     CGFloat h = self.bounds.size.height;
 
-    // 你要求：高度12，圆角6
     CGFloat radius = 6.0;
-    CGFloat overlap = radius; // 用圆角宽度做覆盖，符合“左边被覆盖”的感觉
+    CGFloat overlap = radius;
 
     CGFloat sum = self.redRatio + self.yellowRatio + self.grayRatio;
     if (sum <= 0.0001) {
@@ -158,20 +147,17 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         CGFloat yw = floor(w * y);
         CGFloat gw = w - rw - yw;
 
-        // 1) 灰：全长底色（让“不分开”永远成立）
         self.grayView.frame = CGRectMake(0, 0, w, h);
 
-        // 2) 黄：从红末尾开始，但左边被红覆盖（x = rw - overlap）
         if (yw > 0) {
             CGFloat yx = MAX(0, rw - overlap);
-            CGFloat yRight = MIN(w, rw + yw);  // 逻辑右端
+            CGFloat yRight = MIN(w, rw + yw);
             CGFloat yWidth = MAX(0, yRight - yx);
             self.yellowView.frame = CGRectMake(yx, 0, yWidth, h);
         } else {
             self.yellowView.frame = CGRectZero;
         }
 
-        // 3) 红：最上层，长度到 rw，并向右多盖 overlap（让红右边也是圆角但不露缝）
         if (rw > 0) {
             CGFloat rWidth = MIN(w, rw + ((yw > 0 || gw > 0) ? overlap : 0));
             self.redView.frame = CGRectMake(0, 0, rWidth, h);
@@ -180,7 +166,6 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         }
     }
 
-    // 每段都圆角（你要求：红左右圆角，黄右圆角但左被盖，灰右圆角但左被盖）
     void (^roundAll)(UIView *) = ^(UIView *v) {
         if (CGRectIsEmpty(v.frame)) return;
         v.layer.cornerRadius = radius;
@@ -234,20 +219,17 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         self.backgroundColor = UIColor.clearColor;
         self.clipsToBounds = NO;
 
-        // Space To Clean
         _spaceTitleLabel = [UILabel new];
         _spaceTitleLabel.text = @"Space To Clean";
         _spaceTitleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
         _spaceTitleLabel.textColor = UIColor.blackColor;
         [self addSubview:_spaceTitleLabel];
 
-        // 大数字
         _spaceLabel = [UILabel new];
         _spaceLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightMedium];
         _spaceLabel.textColor = UIColor.blackColor;
         [self addSubview:_spaceLabel];
 
-        // Pro 按钮
         _proBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         _proBtn.layer.cornerRadius = 18;
         _proBtn.clipsToBounds = YES;
@@ -255,10 +237,8 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         [_proBtn setTitle:@"Pro" forState:UIControlStateNormal];
         [_proBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
 
-        // ✅ 让图标按原图显示，不被 tint 影响
         UIImage *vip = [[UIImage imageNamed:@"ic_vip"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         if (vip) {
-            // ✅ 给个明确大小，防止图片太大/太小导致看不到
             UIGraphicsBeginImageContextWithOptions(CGSizeMake(24, 24), NO, 0);
             [vip drawInRect:CGRectMake(0, 0, 24, 24)];
             UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext();
@@ -267,7 +247,6 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
             [_proBtn setImage:scaled forState:UIControlStateNormal];
             _proBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
 
-            // ✅ 用 contentEdgeInsets + image/title 的间距方式居中
             _proBtn.contentEdgeInsets = UIEdgeInsetsMake(4, 6, 4, 6);
             _proBtn.imageEdgeInsets = UIEdgeInsetsMake(0, 4, 0, 8);
             _proBtn.titleEdgeInsets = UIEdgeInsetsZero;
@@ -277,10 +256,8 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
 
         _proBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
         _proBtn.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
-
         [self addSubview:_proBtn];
 
-        // 渐变层（#6F47E1FF -> #2E3BF0FF）
         _proGradient = [CAGradientLayer layer];
         _proGradient.colors = @[
             (id)ASRGB(111, 71, 225).CGColor,
@@ -294,7 +271,6 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         _bar = [[ASSegmentedBarView alloc] initWithFrame:CGRectZero];
         [self addSubview:_bar];
 
-        // Legends（类型 #666666 12；数值 #000000 12）
         _legend1Dot = [UIView new];
         _legend1Dot.backgroundColor = kClutterRed();
         _legend1Dot.layer.cornerRadius = 3;
@@ -350,14 +326,13 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     [super layoutSubviews];
 
     CGFloat w = self.bounds.size.width;
-
     CGFloat left = 30.0;
+
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.window.safeAreaInsets.top;
 
     CGFloat top = safeTop;
 
-    // Pro：右上
     CGFloat proH = 36.0;
     [_proBtn sizeToFit];
     CGFloat proW = MAX(78.0, _proBtn.bounds.size.width + 10.0);
@@ -366,29 +341,24 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     _proGradient.frame = _proBtn.bounds;
     _proGradient.cornerRadius = 18.0;
 
-    // Space To Clean 与 Pro 顶对齐
     CGFloat titleH = 20.0;
     CGFloat bigH   = 40.0;
 
     CGFloat textMaxW = CGRectGetMinX(_proBtn.frame) - left - 10.0;
     _spaceTitleLabel.frame = CGRectMake(left, top, MAX(0, textMaxW), titleH);
 
-    // Space to clean 距离大文字 5
     _spaceLabel.frame = CGRectMake(left,
                                    CGRectGetMaxY(_spaceTitleLabel.frame) + 5.0,
                                    MAX(0, textMaxW),
                                    bigH);
 
-    // 大文字距离进度条 10；进度条高12
     _bar.frame = CGRectMake(left,
                             CGRectGetMaxY(_spaceLabel.frame) + 10.0,
                             w - left * 2.0,
                             12.0);
 
-    // 进度条距离下面文字 15
     CGFloat legendsTop = CGRectGetMaxY(_bar.frame) + 15.0;
 
-    // 圆点 8 直径；文字距离大小 2
     CGFloat dotD = 8.0;
     CGFloat dotToText = 6.0;
 
@@ -415,7 +385,6 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     layoutLegend(_legend3Dot, _legend3Name, _legend3Value, left + colW * 2.0);
 }
 
-
 - (void)applyTotal:(uint64_t)total
            clutter:(uint64_t)clutter
            appData:(uint64_t)appData
@@ -440,7 +409,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
 
 @end
 
-#pragma mark - Waterfall Layout (2 columns + optional full-span)
+#pragma mark - Waterfall Layout
 
 @protocol ASWaterfallLayoutDelegate <NSObject>
 - (CGFloat)collectionView:(UICollectionView *)collectionView
@@ -490,7 +459,6 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     CGFloat contentW = width - self.sectionInset.left - self.sectionInset.right;
     CGFloat colW = (contentW - (self.numberOfColumns - 1) * self.interItemSpacing) / self.numberOfColumns;
 
-    // Header
     if (self.headerHeight > 0) {
         NSIndexPath *hp = [NSIndexPath indexPathForItem:0 inSection:0];
         UICollectionViewLayoutAttributes *ha =
@@ -501,7 +469,6 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
         _contentHeight = CGRectGetMaxY(ha.frame);
     }
 
-    // Columns y
     NSMutableArray<NSNumber *> *colY = [NSMutableArray arrayWithCapacity:self.numberOfColumns];
     for (NSInteger c = 0; c < self.numberOfColumns; c++) {
         [colY addObject:@(_contentHeight + self.sectionInset.top)];
@@ -522,7 +489,6 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
         }
 
         if (fullSpan) {
-            // Full width item (e.g. Similar big card)
             CGFloat y = colY[0].doubleValue;
             for (NSInteger c = 1; c < colY.count; c++) y = MAX(y, colY[c].doubleValue);
 
@@ -537,7 +503,6 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
             continue;
         }
 
-        // choose the shortest column
         NSInteger targetCol = 0;
         CGFloat minY = colY[0].doubleValue;
         for (NSInteger c = 1; c < colY.count; c++) {
@@ -560,25 +525,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     _contentHeight += self.sectionInset.bottom;
 }
 
-- (nullable NSArray<UICollectionViewLayoutAttributes *> *)layoutAttributesForElementsInRect:(CGRect)rect {
-    NSMutableArray<UICollectionViewLayoutAttributes *> *out = [NSMutableArray array];
-    for (UICollectionViewLayoutAttributes *a in _cache) {
-        if (CGRectIntersectsRect(a.frame, rect)) [out addObject:a];
-    }
-    return out;
-}
-
-- (nullable UICollectionViewLayoutAttributes *)layoutAttributesForSupplementaryViewOfKind:(NSString *)elementKind
-                                                                              atIndexPath:(NSIndexPath *)indexPath {
-    for (UICollectionViewLayoutAttributes *a in _cache) {
-        if (a.representedElementCategory == UICollectionElementCategorySupplementaryView &&
-            [a.representedElementKind isEqualToString:elementKind] &&
-            [a.indexPath isEqual:indexPath]) {
-            return a;
-        }
-    }
-    return nil;
-}
+- (nullable NSArray<UICollectionViewLayoutAttributes *> *)layoutAttributesForElementsInRect:(CGRect)rect { NSMutableArray<UICollectionViewLayoutAttributes *> *out = [NSMutableArray array]; for (UICollectionViewLayoutAttributes *a in _cache) { if (CGRectIntersectsRect(a.frame, rect)) [out addObject:a]; } return out; } - (nullable UICollectionViewLayoutAttributes *)layoutAttributesForSupplementaryViewOfKind:(NSString *)elementKind atIndexPath:(NSIndexPath *)indexPath { for (UICollectionViewLayoutAttributes *a in _cache) { if (a.representedElementCategory == UICollectionElementCategorySupplementaryView && [a.representedElementKind isEqualToString:elementKind] && [a.indexPath isEqual:indexPath]) { return a; } } return nil; }
 
 - (CGSize)collectionViewContentSize {
     CGFloat w = self.collectionView ? self.collectionView.bounds.size.width : 0;
@@ -591,13 +538,10 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 @end
 
-
-static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
-
 #pragma mark - Home Module Cell
 
 @interface HomeModuleCell : UICollectionViewCell
-@property (nonatomic) BOOL isLargeCard; // Similar 大卡
+@property (nonatomic) BOOL isLargeCard;
 
 @property (nonatomic, copy) NSArray<NSString *> *representedLocalIds;
 @property (nonatomic, copy) NSString *thumbKey;
@@ -611,10 +555,9 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
 @property (nonatomic, strong) UIImageView *img1;
 @property (nonatomic, strong) UIImageView *img2;
 
-@property (nonatomic, strong) UIButton *badgeBtn;         // 蓝色胶囊（大小 + >）
-@property (nonatomic, strong) UIImageView *playIconView;  // 视频左上角 ic_play
+@property (nonatomic, strong) UIButton *badgeBtn;
+@property (nonatomic, strong) UIImageView *playIconView;
 
-// video preview
 @property (nonatomic, strong) AVQueuePlayer *player;
 @property (nonatomic, strong) AVPlayerLayer *playerLayer;
 @property (nonatomic, strong) AVPlayerLooper *looper;
@@ -670,7 +613,6 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
         _img1.layer.cornerRadius = 12;
         _img2.layer.cornerRadius = 12;
 
-        // ✅ 胶囊按钮（按你新规格）
         _badgeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         _badgeBtn.titleLabel.numberOfLines = 1;
         _badgeBtn.titleLabel.lineBreakMode = NSLineBreakByClipping;
@@ -684,17 +626,13 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
         [_badgeBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         [_badgeBtn setTitle:@"--" forState:UIControlStateNormal];
 
-        // ✅ 内边距：左15 右18 上下11
         _badgeBtn.contentEdgeInsets = UIEdgeInsetsMake(11, 15, 11, 18);
         _badgeBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
         _badgeBtn.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
 
-        // ✅ 关键：文字左、图标右
         _badgeBtn.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
-
         _badgeBtn.userInteractionEnabled = NO;
 
-        // ✅ 右图标 ic_todo，强制 9x16，并且不受 tint 影响
         UIImage *todo = [[UIImage imageNamed:@"ic_todo"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         if (todo) {
             UIGraphicsBeginImageContextWithOptions(CGSizeMake(9, 16), NO, 0);
@@ -705,7 +643,6 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
             [_badgeBtn setImage:scaled forState:UIControlStateNormal];
             _badgeBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
 
-            // ✅ 图文间距 9（RTL 下用这组最直观）
             CGFloat spacing = 9.0;
             _badgeBtn.imageEdgeInsets = UIEdgeInsetsMake(0, spacing, 0, 0);
             _badgeBtn.titleEdgeInsets = UIEdgeInsetsMake(0, 0, 0, spacing);
@@ -716,14 +653,14 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
         _playIconView.contentMode = UIViewContentModeScaleAspectFit;
         _playIconView.hidden = YES;
 
-        // ✅ 别漏了标题/数量
         [_cardView addSubview:_titleLabel];
         [_cardView addSubview:_countLabel];
-
         [_cardView addSubview:_img1];
         [_cardView addSubview:_img2];
+
         [_shadowContainer addSubview:_badgeBtn];
         _shadowContainer.clipsToBounds = NO;
+
         [_cardView addSubview:_playIconView];
 
         _reqId1 = PHInvalidImageRequestID;
@@ -741,31 +678,28 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
     CGFloat w = self.cardView.bounds.size.width;
     CGFloat h = self.cardView.bounds.size.height;
 
-    // ✅ 卡片整体内边距 15
     CGFloat pad = 15.0;
 
-    // 标题
     self.titleLabel.frame = CGRectMake(pad, pad, w - pad * 2.0, 20);
 
-    // ✅ 大标题离下面数量文字 4
     self.countLabel.frame = CGRectMake(pad,
                                        CGRectGetMaxY(self.titleLabel.frame) + 4,
                                        w - pad * 2.0,
                                        16);
 
-    // ✅ 标题(准确说：数量)离下面图片 12
     CGFloat imgTop = CGRectGetMaxY(self.countLabel.frame) + 12;
-
     CGFloat imgBottomPad = pad;
     CGFloat imgH = MAX(0, h - imgTop - imgBottomPad);
 
     if (self.showsTwoThumbs) {
-        // ✅ 图片间隔 10
         CGFloat gap = 10.0;
         CGFloat imgW = (w - pad * 2.0 - gap) / 2.0;
 
         self.img1.hidden = NO;
         self.img2.hidden = NO;
+
+        self.img1.layer.cornerRadius = 12;
+        self.img2.layer.cornerRadius = 12;
 
         self.img1.frame = CGRectMake(pad, imgTop, imgW, imgH);
         self.img2.frame = CGRectMake(CGRectGetMaxX(self.img1.frame) + gap, imgTop, imgW, imgH);
@@ -774,11 +708,9 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
         self.img2.hidden = YES;
 
         if (!self.isLargeCard) {
-            // ✅ 小卡：图片贴左右、贴底，上边两角直角
             self.img1.layer.cornerRadius = 0;
-            self.img1.frame = CGRectMake(0, imgTop, w, h - imgTop); // 贴左右贴底
+            self.img1.frame = CGRectMake(0, imgTop, w, h - imgTop);
         } else {
-            // ✅ 大卡保持原来内边距与圆角
             self.img1.layer.cornerRadius = 12;
             self.img1.frame = CGRectMake(pad, imgTop, w - pad * 2.0, imgH);
         }
@@ -786,7 +718,6 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
         self.img2.frame = CGRectZero;
     }
 
-    // ✅ 手算：文字宽 + 图标宽 + 间距 + contentEdgeInsets
     NSString *t = self.badgeBtn.currentTitle ?: @"";
     UIFont *f = self.badgeBtn.titleLabel.font ?: [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
     CGSize textSize = [t sizeWithAttributes:@{NSFontAttributeName: f}];
@@ -794,13 +725,11 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
     UIImage *img = [self.badgeBtn imageForState:UIControlStateNormal];
     CGSize imgSize = img ? img.size : CGSizeZero;
 
-    CGFloat spacing = img ? 9.0 : 0.0; // 你要的图文间距
+    CGFloat spacing = img ? 9.0 : 0.0;
     UIEdgeInsets in = self.badgeBtn.contentEdgeInsets;
 
     CGFloat badgeW = ceil(in.left + textSize.width + spacing + imgSize.width + in.right);
     CGFloat badgeH = ceil(in.top + MAX(textSize.height, imgSize.height) + in.bottom);
-
-    CGFloat inset = 10.0;
 
     if (self.isLargeCard) {
         CGFloat x = w - pad - badgeW;
@@ -808,19 +737,13 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
     } else {
         CGFloat rightInset = 10.0;
         CGFloat by = CGRectGetMaxY(self.img1.frame) - badgeH - rightInset;
-
         CGFloat bx = CGRectGetMaxX(self.img1.frame) - rightInset - badgeW;
-
         self.badgeBtn.frame = CGRectMake(bx, by, badgeW, badgeH);
     }
 
     [self.shadowContainer bringSubviewToFront:self.badgeBtn];
-
-
-    [self.cardView bringSubviewToFront:self.badgeBtn];
     [self.cardView bringSubviewToFront:self.playIconView];
 
-    // play icon（视频左上角）
     self.playIconView.hidden = !self.isVideoCover;
     self.playIconView.frame = CGRectMake(CGRectGetMinX(self.img1.frame) + 10,
                                          CGRectGetMinY(self.img1.frame) + 10,
@@ -848,31 +771,37 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
 }
 
 - (void)stopVideoIfNeeded {
-    if (self.player) {
-        [self.player pause];
-    }
-    if (self.playerLayer) {
-        [self.playerLayer removeFromSuperlayer];
-    }
+    if (self.player) [self.player pause];
+    if (self.playerLayer) [self.playerLayer removeFromSuperlayer];
     self.playerLayer = nil;
     self.looper = nil;
     self.player = nil;
 }
 
 - (void)applyVM:(ASHomeModuleVM *)vm humanSizeFn:(NSString * _Nonnull (^)(uint64_t bytes))humanSize {
-    self.showsTwoThumbs = vm.showsTwoThumbs;
-    self.isVideoCover = vm.isVideoCover;
 
-    self.isLargeCard = (vm.type == ASHomeCardTypeSimilarPhotos);
+    BOOL needLayout = NO;
 
-    self.titleLabel.text = vm.title ?: @"";
-    self.countLabel.text = vm.countText ?: @"";
+    if (self.showsTwoThumbs != vm.showsTwoThumbs) { self.showsTwoThumbs = vm.showsTwoThumbs; needLayout = YES; }
+    if (self.isVideoCover != vm.isVideoCover)     { self.isVideoCover = vm.isVideoCover; needLayout = YES; }
+
+    BOOL newLarge = (vm.type == ASHomeCardTypeSimilarPhotos);
+    if (self.isLargeCard != newLarge) { self.isLargeCard = newLarge; needLayout = YES; }
+
+    if (![self.titleLabel.text ?: @"" isEqualToString:vm.title ?: @""]) {
+        self.titleLabel.text = vm.title ?: @"";
+    }
+    if (![self.countLabel.text ?: @"" isEqualToString:vm.countText ?: @""]) {
+        self.countLabel.text = vm.countText ?: @"";
+    }
 
     NSString *sizeText = humanSize(vm.totalBytes);
-    NSString *badge = [NSString stringWithFormat:@"%@", sizeText];
-    [self.badgeBtn setTitle:badge forState:UIControlStateNormal];
-    [self.badgeBtn invalidateIntrinsicContentSize];
-    [self setNeedsLayout];
+    if (![[self.badgeBtn currentTitle] ?: @"" isEqualToString:sizeText ?: @""]) {
+        [self.badgeBtn setTitle:sizeText forState:UIControlStateNormal];
+        needLayout = YES; // badge 宽度可能变化
+    }
+
+    if (needLayout) [self setNeedsLayout];
 }
 
 + (NSString *)humanSize:(uint64_t)bytes {
@@ -891,26 +820,37 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
 #pragma mark - HomeViewController
 
 @interface HomeViewController () <UICollectionViewDataSource, UICollectionViewDelegate, ASWaterfallLayoutDelegate>
-@property (nonatomic, strong) UIImageView *topBgView;
+@property (nonatomic) BOOL didInitialBuild;
 
+@property (nonatomic, strong) UIImageView *topBgView;
 @property (nonatomic, strong) UICollectionView *cv;
 @property (nonatomic, strong) NSArray<ASHomeModuleVM *> *modules;
 
 @property (nonatomic, strong) PHCachingImageManager *imgMgr;
 @property (nonatomic, strong) ASPhotoScanManager *scanMgr;
 
-// 空间数据（Header）
+// Header space
 @property (nonatomic) uint64_t diskTotalBytes;
 @property (nonatomic) uint64_t diskFreeBytes;
 @property (nonatomic) uint64_t clutterBytes;
 @property (nonatomic) uint64_t appDataBytes;
 
-// 去重集合（用于一键删除/也可用于 clutter）
+// ✅ 节流：合并扫描进度高频 UI 刷新
+@property (nonatomic, strong) NSTimer *scanUITimer;
+@property (nonatomic) BOOL pendingScanUIUpdate;
+@property (nonatomic) CFTimeInterval lastScanUIFire;
+
+// 去重集合（如果你别处要用）
 @property (nonatomic, strong) NSSet<NSString *> *allCleanableIds;
 @property (nonatomic) uint64_t allCleanableBytes;
 @end
 
 @implementation HomeViewController
+
+- (void)dealloc {
+    [self.scanUITimer invalidate];
+    self.scanUITimer = nil;
+}
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
@@ -934,14 +874,24 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
 
     __weak typeof(self) weakSelf = self;
     [self.scanMgr subscribeProgress:^(ASScanSnapshot *snapshot) {
-        if (!weakSelf.cv) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!weakSelf) return;
 
-        // 扫描中不频繁 reload，避免闪烁
-        if (snapshot.state == ASScanStateScanning) return;
+            if (snapshot.state == ASScanStateScanning) {
+                // ✅ 合并/节流刷新（解决“扫描中刷新数量大小过于频繁”）
+                [weakSelf scheduleScanUIUpdateCoalesced];
+                return;
+            }
 
-        if (snapshot.state == ASScanStateFinished) {
-            [weakSelf rebuildModulesAndReload];
-        }
+            if (snapshot.state == ASScanStateFinished) {
+                // finished：一次性重建（含存在性校验）
+                [weakSelf.scanUITimer invalidate];
+                weakSelf.scanUITimer = nil;
+                weakSelf.pendingScanUIUpdate = NO;
+
+                [weakSelf rebuildModulesAndReload];
+            }
+        });
     }];
 
     [self.scanMgr loadCacheAndCheckIncremental];
@@ -972,7 +922,7 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
     if (self.scanMgr.snapshot.state == ASScanStateFinished) return;
 
     __weak typeof(self) weakSelf = self;
-    [self.scanMgr startFullScanWithProgress:nil completion:^(ASScanSnapshot *snapshot, NSError * _Nullable error) {
+    [self.scanMgr startFullScanWithProgress:nil completion:^(__unused ASScanSnapshot *snapshot, __unused NSError * _Nullable error) {
         [weakSelf rebuildModulesAndReload];
     }];
 }
@@ -999,14 +949,13 @@ static UIColor *kBadgeBlue(void) { return ASRGB(2, 77, 255); } // #024DFFFF
     if (@available(iOS 11.0, *)) {
         self.cv.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     } else {
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
         self.automaticallyAdjustsScrollViewInsets = NO;
-    #pragma clang diagnostic pop
+#pragma clang diagnostic pop
     }
 
     self.cv.backgroundColor = UIColor.clearColor;
-
     self.cv.dataSource = self;
     self.cv.delegate = self;
 
@@ -1024,19 +973,16 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.cv.frame = self.view.bounds;
 
     CGFloat w = self.view.bounds.size.width;
-
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
 
     CGFloat bgH = ASHomeBgHeightForWidth(w);
-
-    // ✅ 背景固定在顶部，不随列表滚动，并覆盖到状态栏
     self.topBgView.frame = CGRectMake(0, 0, w, bgH + safeTop);
 
     UIEdgeInsets safe = self.view.safeAreaInsets;
     self.cv.contentInset = UIEdgeInsetsMake(0, 0, safe.bottom + 70, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
-    
+
     ASWaterfallLayout *wf = (ASWaterfallLayout *)self.cv.collectionViewLayout;
     if ([wf isKindOfClass:ASWaterfallLayout.class]) {
         wf.headerHeight = [self collectionView:self.cv layout:wf referenceSizeForHeaderInSection:0].height;
@@ -1048,7 +994,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
 - (void)rebuildModulesAndReload {
     [self computeDiskSpace];
-    self.modules = [self buildModulesFromManagerAndComputeClutter];
+    self.modules = [self buildModulesFromManagerAndComputeClutterIsFinal:(self.scanMgr.snapshot.state == ASScanStateFinished)];
 
     [UIView performWithoutAnimation:^{
         [self.cv reloadData];
@@ -1059,14 +1005,99 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil];
     uint64_t total = [attrs[NSFileSystemSize] unsignedLongLongValue];
     uint64_t free  = [attrs[NSFileSystemFreeSize] unsignedLongLongValue];
-
     self.diskTotalBytes = total;
     self.diskFreeBytes = free;
 }
 
-- (NSArray<ASHomeModuleVM *> *)buildModulesFromManagerAndComputeClutter {
+#pragma mark - ✅ Scan UI Throttle (关键)
 
-    // 取扫描结果
+- (void)scheduleScanUIUpdateCoalesced {
+    self.pendingScanUIUpdate = YES;
+
+    if (!self.scanUITimer) {
+        // 每 0.25s 合并刷新一次
+        self.scanUITimer = [NSTimer scheduledTimerWithTimeInterval:0.25
+                                                           target:self
+                                                         selector:@selector(handleScanUITimerFire)
+                                                         userInfo:nil
+                                                          repeats:YES];
+        [[NSRunLoop mainRunLoop] addTimer:self.scanUITimer forMode:NSRunLoopCommonModes];
+    }
+}
+
+- (void)handleScanUITimerFire {
+    if (!self.pendingScanUIUpdate) return;
+    self.pendingScanUIUpdate = NO;
+
+    // 扫描结束就停
+    if (self.scanMgr.snapshot.state != ASScanStateScanning) {
+        [self.scanUITimer invalidate];
+        self.scanUITimer = nil;
+        return;
+    }
+
+    [self updateModulesDuringScanning];
+}
+
+- (void)updateModulesDuringScanning {
+
+    if (self.modules.count == 0) {
+        // 兜底：第一次 build
+        self.modules = [self buildModulesFromManagerAndComputeClutterIsFinal:NO];
+        [self.cv reloadData];
+        return;
+    }
+
+    // ✅ 扫描中：只更新 count/bytes；封面不乱改（避免 thumbKey 变动导致频繁请求）
+    BOOL anyModuleChanged = [self refreshCountsAndBytesOnlyKeepThumbs];
+
+    // ✅ header 也节流刷新
+    [self updateHeaderDuringScanning];
+
+    if (!anyModuleChanged) return;
+
+    NSArray<NSIndexPath *> *visible = [self.cv indexPathsForVisibleItems];
+    for (NSIndexPath *ip in visible) {
+        if (ip.item >= self.modules.count) continue;
+
+        HomeModuleCell *cell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:ip];
+        if (!cell) continue;
+
+        ASHomeModuleVM *vm = self.modules[ip.item];
+
+        // ✅ 只刷新数量和大小（文字）
+        [cell applyVM:vm humanSizeFn:^NSString *(uint64_t bytes) {
+            return [HomeModuleCell humanSize:bytes];
+        }];
+
+        // ✅ 扫描中：封面只在“第一次出现时”加载一次，之后不再刷新封面
+        [self ensureCoverLoadedOnceDuringScanningForIndexPath:ip];
+    }
+}
+
+- (void)updateHeaderDuringScanning {
+    // 更新磁盘信息（free 会变）
+    [self computeDiskSpace];
+
+    // 触发 header 更新：不 reloadData，直接拿当前 header
+    ASHomeHeaderView *hv = (ASHomeHeaderView *)[self.cv supplementaryViewForElementKind:UICollectionElementKindSectionHeader
+                                                                            atIndexPath:[NSIndexPath indexPathForItem:0 inSection:0]];
+    if (![hv isKindOfClass:ASHomeHeaderView.class]) return;
+
+    [hv applyTotal:self.diskTotalBytes
+           clutter:self.clutterBytes
+           appData:self.appDataBytes
+              free:self.diskFreeBytes
+       humanSizeFn:^NSString * _Nonnull(uint64_t bytes) {
+        return [HomeModuleCell humanSize:bytes];
+    }];
+}
+
+#pragma mark - ✅ 只刷新数量/大小（保持封面不变，解决缩略图频繁刷新）
+
+- (BOOL)refreshCountsAndBytesOnlyKeepThumbs {
+
+    // 扫描中不做“存在性校验”，否则会 fetchAssetsWithLocalIdentifiers 巨重
     NSArray<ASAssetGroup *> *dup = self.scanMgr.duplicateGroups ?: @[];
     NSArray<ASAssetGroup *> *sim = self.scanMgr.similarGroups ?: @[];
     NSArray<ASAssetModel *> *shots = self.scanMgr.screenshots ?: @[];
@@ -1075,10 +1106,232 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     NSArray<ASAssetModel *> *blurs = self.scanMgr.blurryPhotos ?: @[];
     NSArray<ASAssetModel *> *others = self.scanMgr.otherPhotos ?: @[];
 
-    // finished 后做存在性校验，避免缓存的 localId 已被删导致封面/计数错
-    BOOL needExistCheck = (self.scanMgr.snapshot.state == ASScanStateFinished);
+    // flatten group
+    NSArray<ASAssetModel *> *(^flattenGroups)(NSArray<ASAssetGroup *> *, ASGroupType) =
+    ^NSArray<ASAssetModel *> *(NSArray<ASAssetGroup *> *groups, ASGroupType type) {
+        NSMutableArray<ASAssetModel *> *arr = [NSMutableArray array];
+        for (ASAssetGroup *g in groups) {
+            if (g.type != type) continue;
+            if (g.assets.count < 2) continue;
+            [arr addObjectsFromArray:g.assets];
+        }
+        return arr;
+    };
+
+    NSArray<ASAssetModel *> *simImg = flattenGroups(sim, ASGroupTypeSimilarImage);
+    NSArray<ASAssetModel *> *dupImg = flattenGroups(dup, ASGroupTypeDuplicateImage);
+    NSArray<ASAssetModel *> *simVid = flattenGroups(sim, ASGroupTypeSimilarVideo);
+    NSArray<ASAssetModel *> *dupVid = flattenGroups(dup, ASGroupTypeDuplicateVideo);
+
+    // 计算 clutter（扫描范围可清理总大小）
+    NSMutableDictionary<NSString*, NSNumber*> *bytesById = [NSMutableDictionary dictionary];
+    void (^collectUniq)(NSArray<ASAssetModel *> *) = ^(NSArray<ASAssetModel *> *arr) {
+        for (ASAssetModel *m in arr) {
+            if (!m.localId.length) continue;
+            if (!bytesById[m.localId]) bytesById[m.localId] = @(m.fileSizeBytes);
+        }
+    };
+
+    collectUniq(simImg);
+    collectUniq(dupImg);
+    collectUniq(simVid);
+    collectUniq(dupVid);
+    collectUniq(shots);
+    collectUniq(recs);
+    collectUniq(bigs);
+    collectUniq(blurs);
+    collectUniq(others);
+
+    uint64_t uniqBytes = 0;
+    for (NSNumber *n in bytesById.allValues) uniqBytes += n.unsignedLongLongValue;
+
+    self.allCleanableIds = [NSSet setWithArray:bytesById.allKeys];
+    self.allCleanableBytes = uniqBytes;
+    self.clutterBytes = uniqBytes;
+
+    uint64_t used = (self.diskTotalBytes > self.diskFreeBytes) ? (self.diskTotalBytes - self.diskFreeBytes) : 0;
+    self.appDataBytes = (used > self.clutterBytes) ? (used - self.clutterBytes) : 0;
+
+    // 更新 modules
+    BOOL changed = NO;
+    for (ASHomeModuleVM *vm in self.modules) {
+        switch (vm.type) {
+            case ASHomeCardTypeSimilarPhotos: {
+                uint64_t bytes = 0; for (ASAssetModel *m in simImg) bytes += m.fileSizeBytes;
+                NSUInteger cnt = simImg.count;
+                NSString *ct = [NSString stringWithFormat:@"%lu Photos", (unsigned long)cnt];
+
+                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
+                    vm.totalBytes = bytes;
+                    vm.totalCount = cnt;
+                    vm.countText = ct;
+                    changed = YES;
+                }
+
+                // ✅ 封面只在没设置过且现在有可用封面时设置一次
+                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0) {
+                    NSArray<NSString *> *ids = [self thumbsFromFirstGroup:sim type:ASGroupTypeSimilarImage maxCount:2];
+                    if (ids.count > 0) {
+                        vm.thumbLocalIds = ids;
+                        vm.thumbKey = [ids componentsJoinedByString:@"|"];
+                        vm.didSetThumb = YES;
+                        changed = YES;
+                    }
+                }
+            } break;
+
+            case ASHomeCardTypeDuplicatePhotos: {
+                uint64_t bytes = 0; for (ASAssetModel *m in dupImg) bytes += m.fileSizeBytes;
+                NSUInteger cnt = dupImg.count;
+                NSString *ct = [NSString stringWithFormat:@"%lu Photos", (unsigned long)cnt];
+
+                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
+                    vm.totalBytes = bytes;
+                    vm.totalCount = cnt;
+                    vm.countText = ct;
+                    changed = YES;
+                }
+
+                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0) {
+                    NSArray<NSString *> *ids = [self thumbsFromFirstGroup:dup type:ASGroupTypeDuplicateImage maxCount:2];
+                    if (ids.count > 0) {
+                        // 小卡你想只显示 1 张：thumbLocalIds 保留 2 也行，但 showsTwoThumbs=NO 不会加载第二张
+                        vm.thumbLocalIds = ids;
+                        vm.thumbKey = [ids componentsJoinedByString:@"|"];
+                        vm.didSetThumb = YES;
+                        changed = YES;
+                    }
+                }
+            } break;
+
+            case ASHomeCardTypeScreenshots: {
+                uint64_t bytes = 0; for (ASAssetModel *m in shots) bytes += m.fileSizeBytes;
+                NSUInteger cnt = shots.count;
+                NSString *ct = [NSString stringWithFormat:@"%lu Photos", (unsigned long)cnt];
+
+                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
+                    vm.totalBytes = bytes;
+                    vm.totalCount = cnt;
+                    vm.countText = ct;
+                    changed = YES;
+                }
+
+                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0 && shots.firstObject.localId.length) {
+                    vm.thumbLocalIds = @[shots.firstObject.localId];
+                    vm.thumbKey = shots.firstObject.localId;
+                    vm.didSetThumb = YES;
+                    changed = YES;
+                }
+            } break;
+
+            case ASHomeCardTypeBlurryPhotos: {
+                uint64_t bytes = 0; for (ASAssetModel *m in blurs) bytes += m.fileSizeBytes;
+                NSUInteger cnt = blurs.count;
+                NSString *ct = [NSString stringWithFormat:@"%lu Photos", (unsigned long)cnt];
+
+                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
+                    vm.totalBytes = bytes;
+                    vm.totalCount = cnt;
+                    vm.countText = ct;
+                    changed = YES;
+                }
+
+                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0 && blurs.firstObject.localId.length) {
+                    vm.thumbLocalIds = @[blurs.firstObject.localId];
+                    vm.thumbKey = blurs.firstObject.localId;
+                    vm.didSetThumb = YES;
+                    changed = YES;
+                }
+            } break;
+
+            case ASHomeCardTypeOtherPhotos: {
+                uint64_t bytes = 0; for (ASAssetModel *m in others) bytes += m.fileSizeBytes;
+                NSUInteger cnt = others.count;
+                NSString *ct = [NSString stringWithFormat:@"%lu Photos", (unsigned long)cnt];
+
+                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
+                    vm.totalBytes = bytes;
+                    vm.totalCount = cnt;
+                    vm.countText = ct;
+                    changed = YES;
+                }
+
+                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0 && others.firstObject.localId.length) {
+                    vm.thumbLocalIds = @[others.firstObject.localId];
+                    vm.thumbKey = others.firstObject.localId;
+                    vm.didSetThumb = YES;
+                    changed = YES;
+                }
+            } break;
+
+            case ASHomeCardTypeVideos: {
+                NSUInteger cnt = simVid.count + dupVid.count + bigs.count + recs.count;
+                uint64_t bytes = 0;
+                for (ASAssetModel *m in simVid) bytes += m.fileSizeBytes;
+                for (ASAssetModel *m in dupVid) bytes += m.fileSizeBytes;
+                for (ASAssetModel *m in bigs) bytes += m.fileSizeBytes;
+                for (ASAssetModel *m in recs) bytes += m.fileSizeBytes;
+
+                NSString *ct = [NSString stringWithFormat:@"%lu Videos", (unsigned long)cnt];
+                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
+                    vm.totalBytes = bytes;
+                    vm.totalCount = cnt;
+                    vm.countText = ct;
+                    changed = YES;
+                }
+
+                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0) {
+                    NSString *cover = nil;
+                    if (bigs.firstObject.localId.length) cover = bigs.firstObject.localId;
+                    else if (recs.firstObject.localId.length) cover = recs.firstObject.localId;
+                    else if (simVid.firstObject.localId.length) cover = simVid.firstObject.localId;
+                    else if (dupVid.firstObject.localId.length) cover = dupVid.firstObject.localId;
+
+                    if (cover.length) {
+                        vm.thumbLocalIds = @[cover];
+                        vm.thumbKey = cover;
+                        vm.didSetThumb = YES;
+                        changed = YES;
+                    }
+                }
+            } break;
+        }
+    }
+
+    return changed;
+}
+
+- (NSArray<NSString *> *)thumbsFromFirstGroup:(NSArray<ASAssetGroup *> *)groups
+                                        type:(ASGroupType)type
+                                    maxCount:(NSUInteger)maxCount {
+    for (ASAssetGroup *g in groups) {
+        if (g.type != type) continue;
+        NSMutableArray<NSString *> *ids = [NSMutableArray array];
+        for (ASAssetModel *m in g.assets) {
+            if (!m.localId.length) continue;
+            [ids addObject:m.localId];
+            if (ids.count == maxCount) break;
+        }
+        if (ids.count >= 1) return ids;
+    }
+    return @[];
+}
+
+#pragma mark - Final Build (finished 时做存在性校验，确保封面/计数准确)
+
+- (NSArray<ASHomeModuleVM *> *)buildModulesFromManagerAndComputeClutterIsFinal:(BOOL)isFinal {
+
+    NSArray<ASAssetGroup *> *dup = self.scanMgr.duplicateGroups ?: @[];
+    NSArray<ASAssetGroup *> *sim = self.scanMgr.similarGroups ?: @[];
+    NSArray<ASAssetModel *> *shots = self.scanMgr.screenshots ?: @[];
+    NSArray<ASAssetModel *> *recs  = self.scanMgr.screenRecordings ?: @[];
+    NSArray<ASAssetModel *> *bigs  = self.scanMgr.bigVideos ?: @[];
+    NSArray<ASAssetModel *> *blurs = self.scanMgr.blurryPhotos ?: @[];
+    NSArray<ASAssetModel *> *others = self.scanMgr.otherPhotos ?: @[];
+
+    // finished 后做存在性校验（避免缓存 localId 已被删）
     NSMutableSet<NSString *> *existIdSet = nil;
-    if (needExistCheck) {
+    if (isFinal) {
         NSMutableArray<NSString *> *candidateIds = [NSMutableArray array];
 
         void (^collectIdsFromModels)(NSArray<ASAssetModel *> *) = ^(NSArray<ASAssetModel *> *arr) {
@@ -1111,7 +1364,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return [existIdSet containsObject:lid];
     };
 
-    // flatten group (similar/duplicate)
     NSArray<ASAssetModel *> *(^flattenGroups)(NSArray<ASAssetGroup *> *, ASGroupType) =
     ^NSArray<ASAssetModel *> *(NSArray<ASAssetGroup *> *groups, ASGroupType type) {
         NSMutableArray<ASAssetModel *> *arr = [NSMutableArray array];
@@ -1123,7 +1375,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                 if (isValidId(m.localId)) [valid addObject:m];
             }
             if (valid.count < 2) continue;
-
             [arr addObjectsFromArray:valid];
         }
         return arr;
@@ -1145,21 +1396,15 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return @[];
     };
 
-    // Similar/Duplicate photo flat arrays（用于统计）
     NSArray<ASAssetModel *> *simImg = flattenGroups(sim, ASGroupTypeSimilarImage);
     NSArray<ASAssetModel *> *dupImg = flattenGroups(dup, ASGroupTypeDuplicateImage);
-
-    // Videos 统计：相似视频 + 重复视频 + 大视频 + 录屏
     NSArray<ASAssetModel *> *simVid = flattenGroups(sim, ASGroupTypeSimilarVideo);
     NSArray<ASAssetModel *> *dupVid = flattenGroups(dup, ASGroupTypeDuplicateVideo);
 
-    // 过滤 models 数组（shots/recs/bigs/blurs/others）
     NSArray<ASAssetModel *> *(^filterValidModels)(NSArray<ASAssetModel *> *) =
     ^NSArray<ASAssetModel *> *(NSArray<ASAssetModel *> *arr) {
         NSMutableArray<ASAssetModel *> *out = [NSMutableArray array];
-        for (ASAssetModel *m in arr) {
-            if (isValidId(m.localId)) [out addObject:m];
-        }
+        for (ASAssetModel *m in arr) if (isValidId(m.localId)) [out addObject:m];
         return out;
     };
 
@@ -1169,7 +1414,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     blurs = filterValidModels(blurs);
     others = filterValidModels(others);
 
-    // 去重总集合（用于 clutter）
     NSMutableDictionary<NSString*, NSNumber*> *bytesById = [NSMutableDictionary dictionary];
     void (^collectUniq)(NSArray<ASAssetModel *> *) = ^(NSArray<ASAssetModel *> *arr) {
         for (ASAssetModel *m in arr) {
@@ -1190,17 +1434,15 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     uint64_t uniqBytes = 0;
     for (NSNumber *n in bytesById.allValues) uniqBytes += n.unsignedLongLongValue;
+
     self.allCleanableIds = [NSSet setWithArray:bytesById.allKeys];
     self.allCleanableBytes = uniqBytes;
 
-    // Clutter = photos + video（这里取“可清理扫描范围内”的聚合，跟首页一致）
-    self.clutterBytes = self.allCleanableBytes;
+    self.clutterBytes = uniqBytes;
 
-    // App&Data = used - clutter
     uint64_t used = (self.diskTotalBytes > self.diskFreeBytes) ? (self.diskTotalBytes - self.diskFreeBytes) : 0;
     self.appDataBytes = (used > self.clutterBytes) ? (used - self.clutterBytes) : 0;
 
-    // 构造 VM
     ASHomeModuleVM *(^makeVM)(ASHomeCardType, NSString *, NSString *, uint64_t, NSArray<NSString *> *, BOOL, BOOL) =
     ^ASHomeModuleVM *(ASHomeCardType type,
                       NSString *title,
@@ -1215,49 +1457,50 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         vm.title = title;
         vm.countText = countText ?: @"";
         vm.totalBytes = totalBytes;
+        vm.totalCount = 0;
+
         vm.thumbLocalIds = thumbIds ?: @[];
         vm.thumbKey = [vm.thumbLocalIds componentsJoinedByString:@"|"];
+
         vm.showsTwoThumbs = showsTwo;
         vm.isVideoCover = isVideoCover;
+
+        // ✅ 初始 build 认为封面已定
+        vm.didSetThumb = (vm.thumbLocalIds.count > 0);
+
         return vm;
     };
 
-    // Similar Photos（2张封面取第一组相似图两张）
     NSArray<NSString *> *simThumbs = thumbsFromFirstValidGroup(sim, ASGroupTypeSimilarImage, 2);
-    uint64_t simBytes = 0;
-    for (ASAssetModel *m in simImg) simBytes += m.fileSizeBytes;
+    uint64_t simBytes = 0; for (ASAssetModel *m in simImg) simBytes += m.fileSizeBytes;
     NSString *simCountText = [NSString stringWithFormat:@"%lu Photos", (unsigned long)simImg.count];
     ASHomeModuleVM *vmSimilar = makeVM(ASHomeCardTypeSimilarPhotos, @"Similar Photos", simCountText, simBytes, simThumbs, YES, NO);
+    vmSimilar.totalCount = simImg.count;
 
-    // Duplicate Photos（2张封面取第一组重复图两张）
     NSArray<NSString *> *dupThumbs = thumbsFromFirstValidGroup(dup, ASGroupTypeDuplicateImage, 2);
-    uint64_t dupBytes = 0;
-    for (ASAssetModel *m in dupImg) dupBytes += m.fileSizeBytes;
+    uint64_t dupBytes = 0; for (ASAssetModel *m in dupImg) dupBytes += m.fileSizeBytes;
     NSString *dupCountText = [NSString stringWithFormat:@"%lu Photos", (unsigned long)dupImg.count];
-    ASHomeModuleVM *vmDup = makeVM(ASHomeCardTypeDuplicatePhotos, @"Duplicate Photos", dupCountText, dupBytes, dupThumbs, NO /*小卡只显示1图*/, NO);
+    ASHomeModuleVM *vmDup = makeVM(ASHomeCardTypeDuplicatePhotos, @"Duplicate Photos", dupCountText, dupBytes, dupThumbs, NO, NO);
+    vmDup.totalCount = dupImg.count;
 
-    // Screenshots（1张封面取第一张）
-    uint64_t shotsBytes = 0;
-    for (ASAssetModel *m in shots) shotsBytes += m.fileSizeBytes;
+    uint64_t shotsBytes = 0; for (ASAssetModel *m in shots) shotsBytes += m.fileSizeBytes;
     NSString *shotsCountText = [NSString stringWithFormat:@"%lu Photos", (unsigned long)shots.count];
     NSArray<NSString *> *shotThumb = shots.count ? @[shots.firstObject.localId ?: @""] : @[];
     ASHomeModuleVM *vmShots = makeVM(ASHomeCardTypeScreenshots, @"Screenshots", shotsCountText, shotsBytes, shotThumb, NO, NO);
+    vmShots.totalCount = shots.count;
 
-    // Blurry Photos
-    uint64_t blurBytes = 0;
-    for (ASAssetModel *m in blurs) blurBytes += m.fileSizeBytes;
+    uint64_t blurBytes = 0; for (ASAssetModel *m in blurs) blurBytes += m.fileSizeBytes;
     NSString *blurCountText = [NSString stringWithFormat:@"%lu Photos", (unsigned long)blurs.count];
     NSArray<NSString *> *blurThumb = blurs.count ? @[blurs.firstObject.localId ?: @""] : @[];
     ASHomeModuleVM *vmBlur = makeVM(ASHomeCardTypeBlurryPhotos, @"Blurry Photos", blurCountText, blurBytes, blurThumb, NO, NO);
+    vmBlur.totalCount = blurs.count;
 
-    // Other Photos
-    uint64_t otherBytes = 0;
-    for (ASAssetModel *m in others) otherBytes += m.fileSizeBytes;
+    uint64_t otherBytes = 0; for (ASAssetModel *m in others) otherBytes += m.fileSizeBytes;
     NSString *otherCountText = [NSString stringWithFormat:@"%lu Photos", (unsigned long)others.count];
     NSArray<NSString *> *otherThumb = others.count ? @[others.firstObject.localId ?: @""] : @[];
     ASHomeModuleVM *vmOther = makeVM(ASHomeCardTypeOtherPhotos, @"Other photos", otherCountText, otherBytes, otherThumb, NO, NO);
+    vmOther.totalCount = others.count;
 
-    // Videos（相似视频+重复视频+大视频+录屏 总数/总大小；封面取第一个视频，动态播放）
     NSUInteger vCount = simVid.count + dupVid.count + bigs.count + recs.count;
     uint64_t vBytes = 0;
     for (ASAssetModel *m in simVid) vBytes += m.fileSizeBytes;
@@ -1267,7 +1510,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     NSString *vCountText = [NSString stringWithFormat:@"%lu Videos", (unsigned long)vCount];
     NSString *videoCoverId = nil;
-    // cover 优先：大视频 > 录屏 > 相似视频 > 重复视频（你也可以按业务调整）
     if (bigs.firstObject.localId.length) videoCoverId = bigs.firstObject.localId;
     else if (recs.firstObject.localId.length) videoCoverId = recs.firstObject.localId;
     else if (simVid.firstObject.localId.length) videoCoverId = simVid.firstObject.localId;
@@ -1275,8 +1517,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     NSArray<NSString *> *videoThumb = videoCoverId.length ? @[videoCoverId] : @[];
     ASHomeModuleVM *vmVideos = makeVM(ASHomeCardTypeVideos, @"Videos", vCountText, vBytes, videoThumb, NO, YES);
+    vmVideos.totalCount = vCount;
 
-    // 排序：按截图：Similar(大卡) -> Videos -> Duplicate -> Screenshots -> Blurry -> Other
     return @[ vmSimilar, vmVideos, vmDup, vmShots, vmBlur, vmOther ];
 }
 
@@ -1312,7 +1554,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return cell;
     }
 
-    // 只有 thumbKey 变化才请求（防闪）
+    // ✅ 只有 thumbKey 变化才请求（解决缩略图频繁刷新）
     if (thumbChanged) {
         [cell setNeedsLayout];
         [cell layoutIfNeeded];
@@ -1357,7 +1599,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 - (BOOL)collectionView:(UICollectionView *)collectionView
                 layout:(UICollectionViewLayout *)layout
 shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath {
-    // Similar 大卡全宽
     ASHomeModuleVM *vm = self.modules[indexPath.item];
     return (vm.type == ASHomeCardTypeSimilarPhotos);
 }
@@ -1367,11 +1608,8 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath {
  heightForItemAtIndexPath:(NSIndexPath *)indexPath {
 
     ASHomeModuleVM *vm = self.modules[indexPath.item];
-    if (vm.type == ASHomeCardTypeSimilarPhotos) {
-        return kLargeCellH; // 260
-    }
+    if (vm.type == ASHomeCardTypeSimilarPhotos) return kLargeCellH;
 
-    // 小卡：两列交错 306 / 246（从第一个小卡开始算）
     NSInteger smallIdx = (NSInteger)indexPath.item - 1;
     if (smallIdx < 0) smallIdx = 0;
     return (smallIdx % 3 == 0) ? 306.0 : 246.0;
@@ -1446,7 +1684,6 @@ referenceSizeForHeaderInSection:(NSInteger)section {
         } break;
 
         case ASHomeCardTypeVideos: {
-            // 合并视频模块点击：给用户一个入口选择具体列表（不改你现有 listMode）
             UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Videos"
                                                                         message:nil
                                                                  preferredStyle:UIAlertControllerStyleActionSheet];
@@ -1475,6 +1712,37 @@ referenceSizeForHeaderInSection:(NSInteger)section {
     }
 }
 
+#pragma mark - Scan Cover One-Time Load
+
+- (void)ensureCoverLoadedOnceDuringScanningForIndexPath:(NSIndexPath *)ip {
+    if (ip.item >= self.modules.count) return;
+
+    ASHomeModuleVM *vm = self.modules[ip.item];
+    HomeModuleCell *cell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:ip];
+    if (!cell) return;
+
+    // 没封面就不处理
+    if (vm.thumbLocalIds.count == 0 || vm.thumbKey.length == 0) return;
+
+    // ✅ 扫描中：封面只要显示过一次，就不再刷新
+    // 利用 cell.thumbKey：只有当 cell 还没显示过该 thumbKey 时才加载一次
+    if (cell.thumbKey != nil && [cell.thumbKey isEqualToString:vm.thumbKey]) return;
+
+    // 更新 cell 标识（必须在发起请求前设置，避免并发多次触发）
+    cell.representedLocalIds = vm.thumbLocalIds ?: @[];
+    cell.thumbKey = vm.thumbKey ?: @"";
+
+    // 触发一次封面加载（图片 or 视频）
+    [cell setNeedsLayout];
+    [cell layoutIfNeeded];
+
+    if (vm.isVideoCover) {
+        [self loadVideoPreviewForVM:vm intoCell:cell atIndexPath:ip];
+    } else {
+        [self loadThumbsForVM:vm intoCell:cell atIndexPath:ip];
+    }
+}
+
 #pragma mark - Thumbnails (Images)
 
 - (void)loadThumbsForVM:(ASHomeModuleVM *)vm intoCell:(HomeModuleCell *)cell atIndexPath:(NSIndexPath *)indexPath {
@@ -1482,7 +1750,6 @@ referenceSizeForHeaderInSection:(NSInteger)section {
     NSArray<NSString *> *ids = vm.thumbLocalIds ?: @[];
     if (ids.count == 0) return;
 
-    // cancel old requests
     if (cell.reqId1 != PHInvalidImageRequestID) {
         [self.imgMgr cancelImageRequest:cell.reqId1];
         cell.reqId1 = PHInvalidImageRequestID;
@@ -1568,7 +1835,6 @@ referenceSizeForHeaderInSection:(NSInteger)section {
     NSArray<NSString *> *ids = vm.thumbLocalIds ?: @[];
     if (ids.count == 0) return;
 
-    // cancel image requests
     if (cell.reqId1 != PHInvalidImageRequestID) {
         [self.imgMgr cancelImageRequest:cell.reqId1];
         cell.reqId1 = PHInvalidImageRequestID;
@@ -1585,7 +1851,6 @@ referenceSizeForHeaderInSection:(NSInteger)section {
 
     PHAsset *asset = fr.firstObject;
     if (asset.mediaType != PHAssetMediaTypeVideo) {
-        // fallback：用封面帧
         [self loadThumbsForVM:vm intoCell:cell atIndexPath:indexPath];
         return;
     }
@@ -1596,7 +1861,7 @@ referenceSizeForHeaderInSection:(NSInteger)section {
 
     __weak typeof(self) weakSelf = self;
 
-    [self.imgMgr requestAVAssetForVideo:asset options:vopt resultHandler:^(AVAsset * _Nullable avAsset, AVAudioMix * _Nullable audioMix, NSDictionary * _Nullable info) {
+    [self.imgMgr requestAVAssetForVideo:asset options:vopt resultHandler:^(AVAsset * _Nullable avAsset, __unused AVAudioMix * _Nullable audioMix, __unused NSDictionary * _Nullable info) {
 
         if (!avAsset) return;
 
@@ -1605,7 +1870,6 @@ referenceSizeForHeaderInSection:(NSInteger)section {
             if (!nowCell) return;
             if (![nowCell.representedLocalIds isEqualToArray:vm.thumbLocalIds ?: @[]]) return;
 
-            // 先给一个 poster（避免 player 准备时空白）
             PHImageRequestOptions *iopt = [PHImageRequestOptions new];
             iopt.networkAccessAllowed = YES;
             iopt.deliveryMode = PHImageRequestOptionsDeliveryModeFastFormat;
@@ -1624,7 +1888,6 @@ referenceSizeForHeaderInSection:(NSInteger)section {
                 if (result) nowCell.img1.image = result;
             }];
 
-            // 循环播放（静音）
             AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:avAsset];
             AVQueuePlayer *player = [AVQueuePlayer queuePlayerWithItems:@[item]];
             player.muted = YES;
@@ -1632,7 +1895,6 @@ referenceSizeForHeaderInSection:(NSInteger)section {
             AVPlayerLayer *layer = [AVPlayerLayer playerLayerWithPlayer:player];
             layer.frame = nowCell.img1.bounds;
             layer.videoGravity = AVLayerVideoGravityResizeAspectFill;
-
             [nowCell.img1.layer addSublayer:layer];
 
             if (@available(iOS 10.0, *)) {
