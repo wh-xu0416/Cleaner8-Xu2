@@ -492,6 +492,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 // day
 @property (nonatomic, strong) NSDate *currentDay;
+@property (nonatomic, assign) BOOL didLoadCacheFromDisk;
 
 @property (atomic) BOOL cancelled;
 @end
@@ -861,10 +862,14 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 }
 
 - (BOOL)isCacheValid {
-    NSLog(@"[缓存] isCacheValid = %@ | snapshot = %@",
-          self.cache.snapshot != nil ? @"YES" : @"NO",
-          self.cache.snapshot);
-    return self.cache.snapshot != nil;
+    BOOL ok = self.didLoadCacheFromDisk && (self.cache.snapshot.state == ASScanStateFinished);
+    NSLog(@"[缓存] file=%@ didLoad=%@ state=%ld anchor=%@ lastUpdated=%@",
+          [self cacheFileExists] ? @"YES" : @"NO",
+          self.didLoadCacheFromDisk ? @"YES" : @"NO",
+          (long)self.cache.snapshot.state,
+          self.cache.anchorDate,
+          self.cache.snapshot.lastUpdated);
+    return ok;
 }
 
 #pragma mark - Purge deleted assets
@@ -2598,16 +2603,36 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
 #pragma mark - Cache IO
 
 - (void)loadCacheIfExists {
-    NSData *d = [NSData dataWithContentsOfFile:ASCachePath()];
-    if (!d) { self.cache = [ASScanCache new]; return; }
+    self.didLoadCacheFromDisk = NO;
 
-    NSError *err = nil;
-    ASScanCache *c = [NSKeyedUnarchiver unarchivedObjectOfClass:[ASScanCache class] fromData:d error:&err];
-    if (!c || err) {
+    NSString *path = ASCachePath();
+    NSData *d = [NSData dataWithContentsOfFile:path];
+    if (!d || d.length == 0) {
         self.cache = [ASScanCache new];
         return;
     }
+
+    NSError *err = nil;
+    ASScanCache *c = [NSKeyedUnarchiver unarchivedObjectOfClass:[ASScanCache class]
+                                                       fromData:d
+                                                          error:&err];
+    if (!c || err) {
+        self.cache = [ASScanCache new];
+
+        // 可选：坏缓存直接删掉，避免下次还读到
+        [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+        return;
+    }
+
     self.cache = c;
+    self.didLoadCacheFromDisk = YES;
+}
+
+- (BOOL)cacheFileExists {
+    NSString *path = ASCachePath();
+    NSDictionary *attr = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil];
+    unsigned long long sz = [attr[NSFileSize] unsignedLongLongValue];
+    return (sz > 0);
 }
 
 - (void)saveCache {

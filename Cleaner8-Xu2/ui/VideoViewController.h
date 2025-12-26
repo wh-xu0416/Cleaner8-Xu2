@@ -3,7 +3,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface CutViewController : UIViewController
+@interface VideoViewController : UIViewController
 
 @end
 

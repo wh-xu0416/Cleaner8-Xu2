@@ -1,7 +1,7 @@
 #import "MainTabBarController.h"
 #import "ASFloatingTabBar.h"
 #import "HomeViewController.h"
-#import "CutViewController.h"
+#import "VideoViewController.h"
 #import "SecretViewController.h"
 #import "SetViewController.h"
 #import "SwipeViewController.h"
@@ -34,7 +34,7 @@ UIGestureRecognizerDelegate
     // 设置底部五个页面
     self.viewControllers = @[
         [self navWithVC:[HomeViewController new]   title:@"Cleaner" image:@""],
-        [self navWithVC:[CutViewController new]    title:@"Video" image:@""],
+        [self navWithVC:[VideoViewController new]    title:@"Video" image:@""],
         [self navWithVC:[SwipeViewController new]    title:@"Swipe" image:@""],
         [self navWithVC:[SecretViewController new] title:@"Private" image:@""],
         [self navWithVC:[SetViewController new]    title:@"More" image:@""],
