@@ -144,6 +144,14 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 #pragma mark - VC
 
 @interface ASAssetListViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
+
+@property (nonatomic, strong) UILabel *topSummaryLabel;
+@property (nonatomic, strong) UIButton *topSelectAllBtn;
+@property (nonatomic, strong) UIButton *topSortBtn;
+
+@property (nonatomic) NSUInteger totalItemCount;      // 当前列表总数
+@property (nonatomic) NSUInteger cleanableItemCount;  // 当前“可清理”数量（分组模式会排除每组第1张）
+
 @property (nonatomic, strong) ASCustomNavBar *navBar;
 @property (nonatomic, strong) UIView *topToolbar;  // 用于放置全选按钮
 
@@ -196,6 +204,11 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
     // 外部 title 统一从 mode 计算
     NSString *title = [self titleForMode:self.mode];
     self.navBar = [[ASCustomNavBar alloc] initWithTitle:title];
+    __weak typeof(self) weakSelf = self;
+    self.navBar.onBack = ^{
+        [weakSelf.navigationController popViewControllerAnimated:YES];
+    };
+
     [self.view addSubview:self.navBar];
 
     // 添加全选按钮到顶部工具栏
@@ -223,61 +236,52 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
 
-    // 计算导航栏高度，包括安全区域
-    CGFloat navH = 44 + self.view.safeAreaInsets.top; // 导航栏高度，考虑到安全区域
-    CGFloat bottomSafe = self.view.safeAreaInsets.bottom;  // 底部安全区域
-    CGFloat bottomH = self.bottomBarH;  // 底部工具栏高度
+    CGFloat topSafe = self.view.safeAreaInsets.top;
+    CGFloat bottomSafe = self.view.safeAreaInsets.bottom;
 
-    // 设置导航栏 frame
+    CGFloat navH = 44 + topSafe;
+    CGFloat toolbarH = 88;      // 两行：44 + 44
+    CGFloat floatBtnH = 70;     // 圆角35 => 高度70
+    CGFloat floatBtnX = 15;
+    CGFloat floatBtnW = self.view.bounds.size.width - 30;
+
+    // navBar
     self.navBar.frame = CGRectMake(0, 0, self.view.bounds.size.width, navH);
 
-    // 确保顶部工具栏已添加并显示
-    if (!self.topToolbar.superview) {
-        [self.view addSubview:self.topToolbar]; // 确保已添加到视图中
-    }
-    self.topToolbar.frame = CGRectMake(0, navH, self.view.bounds.size.width, 44);  // 高度为 44
+    // topToolbar
+    self.topToolbar.frame = CGRectMake(0, navH, self.view.bounds.size.width, toolbarH);
 
-    // 确保底部工具栏已添加并显示
-    if (!self.bottomBar.superview) {
-        [self.view addSubview:self.bottomBar]; // 确保已添加到底部工具栏
-    }
+    // topToolbar 子视图布局
+    CGFloat pad = 16;
+    self.topSummaryLabel.frame = CGRectMake(pad, 0, self.topToolbar.bounds.size.width - pad*2, 44);
 
-    self.bottomBar.frame = CGRectMake(16,
-                                      self.view.bounds.size.height - bottomH - bottomSafe,
-                                      self.view.bounds.size.width - 32,
-                                      bottomH);  // 底部工具栏位置
+    self.topSelectAllBtn.frame = CGRectMake(pad, 44, 80, 44);
+    self.topSortBtn.frame = CGRectMake(self.topToolbar.bounds.size.width - pad - 80, 44, 80, 44);
 
-    // 设置 padding 和其他布局参数
-    CGFloat pad = 12;  // 元素之间的间距
-    CGFloat h = self.bottomBar.bounds.size.height;  // 获取底部工具栏的高度
-
-    // 删除按钮的位置（右侧）
-    CGFloat btnW = 120;  // 删除按钮宽度
-    self.deleteBtn.frame = CGRectMake(self.bottomBar.bounds.size.width - btnW - pad,
-                                      pad,
-                                      btnW,
-                                      h - pad * 2); // 删除按钮在右侧，顶部留出 padding
-
-    // 文案标签的位置（左侧）
-    self.totalLabel.frame = CGRectMake(pad,
-                                       pad,
-                                       self.bottomBar.bounds.size.width - btnW - pad * 3,
-                                       h - pad * 2); // 文案标签在左侧，占据剩余空间
-
-    // 设置集合视图的位置，确保它不会被底部工具栏遮挡
+    // list (cv)
+    CGFloat cvY = navH + toolbarH;
     self.cv.frame = CGRectMake(0,
-                               navH + 44, // 内容视图下移，避免被顶部工具栏和导航栏遮挡
+                               cvY,
                                self.view.bounds.size.width,
-                               self.view.bounds.size.height - navH - bottomH - bottomSafe - 44); // 减去顶部工具栏和底部工具栏的空间
+                               self.view.bounds.size.height - cvY);
 
-    // 设置集合视图的内容内边距，确保它不与工具栏重叠
-    self.cv.contentInset = UIEdgeInsetsZero;  // 或根据需要调整
+    // 底部浮动删除按钮：只有选中才显示（frame 先摆好，显示/隐藏在 recompute 里控制）
+    if (!self.bottomBar.superview) [self.view addSubview:self.bottomBar];
+
+    // ✅ 贴紧屏幕底部（考虑 safeArea）
+    CGFloat floatBtnY = self.view.bounds.size.height - bottomSafe - floatBtnH;
+
+    self.bottomBar.frame = CGRectMake(floatBtnX, floatBtnY, floatBtnW, floatBtnH);
+    self.deleteBtn.frame = self.bottomBar.bounds;
+
+    // ✅ 列表底部 inset：只在按钮显示时为它让出高度
+    CGFloat insetBottom = bottomSafe + (self.deleteBtn.hidden ? 0 : floatBtnH);
+    self.cv.contentInset = UIEdgeInsetsMake(0, 0, insetBottom, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 
-    // 将导航栏和底部工具栏移到最前面，确保它们不会被其他视图遮挡
     [self.view bringSubviewToFront:self.navBar];
+    [self.view bringSubviewToFront:self.topToolbar];
     [self.view bringSubviewToFront:self.bottomBar];
-    [self.view bringSubviewToFront:self.topToolbar];  // 确保顶部工具栏在最前面
 }
 
 - (void)syncNavSelectAllState {
@@ -302,43 +306,173 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
     }
 
     self.navBar.allSelected = all;
+    [self.topSelectAllBtn setTitle:(all ? @"取消全选" : @"全选") forState:UIControlStateNormal];
 }
 
 - (void)setupTopToolbar {
-    // 创建顶部工具栏
-    self.topToolbar = [[UIView alloc] init];
-    self.topToolbar.backgroundColor = [UIColor whiteColor];
-    self.topToolbar.layer.shadowColor = [UIColor blackColor].CGColor;
-    self.topToolbar.layer.shadowOffset = CGSizeMake(0, 2);
-    self.topToolbar.layer.shadowOpacity = 0.1;
-    self.topToolbar.layer.shadowRadius = 2;
+    self.topToolbar = [[UIView alloc] initWithFrame:CGRectZero];
+    self.topToolbar.backgroundColor = UIColor.whiteColor;
 
-    // 创建全选按钮
+    // 第一行：居中 summary
+    UILabel *summary = [UILabel new];
+    summary.textAlignment = NSTextAlignmentCenter;
+    summary.numberOfLines = 1;
+    summary.adjustsFontSizeToFitWidth = YES;
+    summary.minimumScaleFactor = 0.8;
+    summary.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    self.topSummaryLabel = summary;
+
+    // 第二行：左 全选
     UIButton *selectAllBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    selectAllBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
     [selectAllBtn setTitle:@"全选" forState:UIControlStateNormal];
+    [selectAllBtn setTitleColor:[UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0]
+                       forState:UIControlStateNormal];
     [selectAllBtn addTarget:self action:@selector(toggleSelectAll) forControlEvents:UIControlEventTouchUpInside];
+    self.topSelectAllBtn = selectAllBtn;
 
-    // 将按钮添加到工具栏
+    // 第二行：右 排序
+    UIButton *sortBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    sortBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    [sortBtn setTitle:@"排序" forState:UIControlStateNormal];
+    [sortBtn setTitleColor:[UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0]
+                  forState:UIControlStateNormal];
+    [sortBtn addTarget:self action:@selector(onTapSort) forControlEvents:UIControlEventTouchUpInside];
+    self.topSortBtn = sortBtn;
+
+    [self.topToolbar addSubview:summary];
     [self.topToolbar addSubview:selectAllBtn];
+    [self.topToolbar addSubview:sortBtn];
 
-    // 将工具栏添加到视图中
     [self.view addSubview:self.topToolbar];
+}
 
-    CGFloat toolbarHeight = 44.0;
-    CGFloat padding = 16.0;
-    CGFloat navH = 44 + self.view.safeAreaInsets.top; // nav bar height, considering safe area
+- (void)onTapSort {
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"排序"
+                                                                message:nil
+                                                         preferredStyle:UIAlertControllerStyleActionSheet];
 
-    // 设置顶部工具栏的位置
-    self.topToolbar.frame = CGRectMake(0, navH, self.view.bounds.size.width, toolbarHeight);  // 设置顶部工具栏位于 navBar 下方
-    
-    // 设置全选按钮的位置
-    selectAllBtn.frame = CGRectMake(self.view.bounds.size.width - 80 - padding, 0, 80, toolbarHeight);
+    __weak typeof(self) weakSelf = self;
+
+    [ac addAction:[UIAlertAction actionWithTitle:@"按时间（最新优先）"
+                                          style:UIAlertActionStyleDefault
+                                        handler:^(UIAlertAction * _Nonnull action) {
+        [weakSelf sortByDateDesc];
+    }]];
+
+    [ac addAction:[UIAlertAction actionWithTitle:@"按大小（小到大）"
+                                          style:UIAlertActionStyleDefault
+                                        handler:^(UIAlertAction * _Nonnull action) {
+        [weakSelf sortBySizeDesc];
+    }]];
+
+    [ac addAction:[UIAlertAction actionWithTitle:@"取消"
+                                          style:UIAlertActionStyleCancel
+                                        handler:nil]];
+
+    [self presentViewController:ac animated:YES completion:nil];
+}
+
+- (void)sortByDateDesc {
+    if ([self isGroupMode]) {
+        [self.sections sortUsingComparator:^NSComparisonResult(ASAssetSection *a, ASAssetSection *b) {
+            return [b.groupDate compare:a.groupDate];
+        }];
+    } else {
+        ASAssetSection *sec = self.sections.firstObject;
+        [sec.assets sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
+            NSDate *da = [self dateForModel:a];
+            NSDate *db = [self dateForModel:b];
+            if (!da && !db) return NSOrderedSame;
+            if (!da) return NSOrderedDescending;
+            if (!db) return NSOrderedAscending;
+            return [db compare:da];
+        }];
+    }
+    [self.cv reloadData];
+}
+
+- (void)sortBySizeDesc {
+    if ([self isGroupMode]) {
+        // 组按“可清理大小”排序（排除每组第1个）
+        [self.sections sortUsingComparator:^NSComparisonResult(ASAssetSection *a, ASAssetSection *b) {
+            uint64_t sa = 0, sb = 0;
+            for (NSInteger i=1; i<a.assets.count; i++) sa += a.assets[i].fileSizeBytes;
+            for (NSInteger i=1; i<b.assets.count; i++) sb += b.assets[i].fileSizeBytes;
+            if (sa == sb) return NSOrderedSame;
+            return (sb > sa) ? NSOrderedAscending : NSOrderedDescending;
+        }];
+    } else {
+        ASAssetSection *sec = self.sections.firstObject;
+        [sec.assets sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
+            if (a.fileSizeBytes == b.fileSizeBytes) return NSOrderedSame;
+            return (b.fileSizeBytes > a.fileSizeBytes) ? NSOrderedAscending : NSOrderedDescending;
+        }];
+    }
+    [self.cv reloadData];
 }
 
 #pragma mark - UI 设置
 
+- (BOOL)isVideoMode {
+    return (self.mode == ASAssetListModeSimilarVideo ||
+            self.mode == ASAssetListModeDuplicateVideo ||
+            self.mode == ASAssetListModeBigVideos ||
+            self.mode == ASAssetListModeScreenRecordings);
+}
+
+- (void)recomputeCountsOnly {
+    NSUInteger total = 0;
+    NSUInteger cleanable = 0;
+
+    if ([self isGroupMode]) {
+        for (ASAssetSection *sec in self.sections) {
+            total += sec.assets.count;
+            if (sec.assets.count > 1) cleanable += (sec.assets.count - 1);
+        }
+    } else {
+        for (ASAssetSection *sec in self.sections) total += sec.assets.count;
+        cleanable = total;
+    }
+
+    self.totalItemCount = total;
+    self.cleanableItemCount = cleanable;
+}
+
+- (NSAttributedString *)topSummaryAttributedText {
+    // 文案：12.7GB Free Up |  2343 / 3000 Photos
+    NSString *freeStr = ASHumanSize(self.totalCleanableBytes);
+    NSString *cleanableStr = [NSString stringWithFormat:@"%lu", (unsigned long)self.cleanableItemCount];
+    NSString *totalStr = [NSString stringWithFormat:@"%lu", (unsigned long)self.totalItemCount];
+    NSString *unit = [self isVideoMode] ? @"Videos" : @"Photos";
+
+    NSString *full = [NSString stringWithFormat:@"%@ Free Up |  %@ / %@ %@", freeStr, cleanableStr, totalStr, unit];
+
+    UIColor *blue = [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0]; // #024DFFFF
+    UIColor *gray = [UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0]; // #666666FF
+    UIFont *font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+
+    NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full attributes:@{
+        NSFontAttributeName: font,
+        NSForegroundColorAttributeName: gray
+    }];
+
+    // 把 “freeStr” 和 “cleanableStr” 染成蓝色
+    NSRange r1 = [full rangeOfString:freeStr];
+    if (r1.location != NSNotFound) [att addAttribute:NSForegroundColorAttributeName value:blue range:r1];
+
+    NSRange r2 = [full rangeOfString:cleanableStr];
+    if (r2.location != NSNotFound) [att addAttribute:NSForegroundColorAttributeName value:blue range:r2];
+
+    return att;
+}
+
+- (void)updateTopSummaryUI {
+    self.topSummaryLabel.attributedText = [self topSummaryAttributedText];
+}
+
 - (void)setupUI {
-    self.bottomBarH = 64;
+    self.bottomBarH = 64;  // 底部按钮的高度
 
     UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
     layout.minimumInteritemSpacing = 8;
@@ -360,33 +494,35 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     [self.view addSubview:self.cv];
 
     UIView *bar = [UIView new];
-    bar.backgroundColor = UIColor.whiteColor;
-    bar.layer.cornerRadius = 16;
-
-    UILabel *lab = [UILabel new];
-    lab.numberOfLines = 2;
-    lab.font = [UIFont systemFontOfSize:13];
-    lab.textColor = [UIColor darkGrayColor];
+    bar.backgroundColor = UIColor.clearColor;
 
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-    btn.layer.cornerRadius = 12;
-    btn.backgroundColor = [UIColor systemRedColor];
+    btn.layer.cornerRadius = 35;
+    btn.layer.masksToBounds = NO;
+
+    // 背景 #024DFF
+    btn.backgroundColor = [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
+
+    // 阴影：offset 0,0 blur 20 spread 0 color #0000001A
+    btn.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0x1A/255.0].CGColor;
+    btn.layer.shadowOffset = CGSizeMake(0, 0);
+    btn.layer.shadowOpacity = 1.0;
+    btn.layer.shadowRadius = 20;
+
     [btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    btn.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    btn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
     [btn addTarget:self action:@selector(onDelete) forControlEvents:UIControlEventTouchUpInside];
 
-    [bar addSubview:lab];
     [bar addSubview:btn];
     [self.view addSubview:bar];
 
     self.bottomBar = bar;
-    self.totalLabel = lab;
     self.deleteBtn = btn;
-
-    self.deleteBtn.hidden = NO;
-    self.deleteBtn.alpha = 0.4;
+    
+    // 初始隐藏按钮
+    self.deleteBtn.hidden = YES;
     self.deleteBtn.enabled = NO;
-
+    
     [self.view bringSubviewToFront:self.bottomBar];
 }
 
@@ -661,14 +797,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     BOOL canDelete = (self.selectedIds.count > 0);
 
-    self.deleteBtn.hidden = NO;
-    self.deleteBtn.enabled = canDelete;
-    self.deleteBtn.alpha = canDelete ? 1.0 : 0.4;
-
-    [self.deleteBtn setTitle:
-    [NSString stringWithFormat:@"删除(%@)", ASHumanSize(self.selectedBytes)]
-    forState:UIControlStateNormal];
-
     for (NSIndexPath *ip in self.cv.indexPathsForVisibleItems) {
         if (ip.section >= self.sections.count) continue;
         ASAssetSection *sec = self.sections[ip.section];
@@ -814,9 +942,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     uint64_t selected = 0;
 
     if ([self isGroupMode]) {
-        for (ASAssetSection *sec in self.sections) {
+        for (ASAssetSection *sec in self.sections)
             for (NSInteger i=1; i<sec.assets.count; i++) total += sec.assets[i].fileSizeBytes;
-        }
     } else {
         for (ASAssetSection *sec in self.sections)
             for (ASAssetModel *m in sec.assets) total += m.fileSizeBytes;
@@ -829,18 +956,28 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.totalCleanableBytes = total;
     self.selectedBytes = selected;
 
-    self.totalLabel.text = [NSString stringWithFormat:@"总可清理：%@\n已选：%@",
-                            ASHumanSize(self.totalCleanableBytes),
-                            ASHumanSize(self.selectedBytes)];
+    // ✅ 数量
+    [self recomputeCountsOnly];
+    [self updateTopSummaryUI];
 
-    BOOL canDelete = (self.selectedIds.count > 0);
+    // ✅ 浮动删除按钮：未选中 -> 不显示；选中 -> 显示（数量 + 大小）
+    NSUInteger selCount = self.selectedIds.count;
+    BOOL show = (selCount > 0);
 
-    [self.deleteBtn setTitle:[NSString stringWithFormat:@"删除(%@)", ASHumanSize(self.selectedBytes)]
-                    forState:UIControlStateNormal];
-    self.deleteBtn.enabled = canDelete;
+    self.deleteBtn.hidden = !show;
+    self.deleteBtn.enabled = show;
 
-    self.deleteBtn.enabled = canDelete;
-    self.deleteBtn.alpha = canDelete ? 1.0 : 0.4;
+    if (show) {
+        NSString *title = [NSString stringWithFormat:@"删除  %lu 项 · %@",
+                           (unsigned long)selCount,
+                           ASHumanSize(self.selectedBytes)];
+        [self.deleteBtn setTitle:title forState:UIControlStateNormal];
+    } else {
+        [self.deleteBtn setTitle:@"" forState:UIControlStateNormal];
+    }
+
+    // 触发布局更新（用于更新 collectionView 的 bottom inset）
+    [self.view setNeedsLayout];
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
