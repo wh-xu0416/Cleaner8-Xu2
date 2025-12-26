@@ -145,6 +145,7 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 
 @interface ASAssetListViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
 @property (nonatomic, strong) ASCustomNavBar *navBar;
+@property (nonatomic, strong) UIView *topToolbar;  // 用于放置全选按钮
 
 @property (nonatomic) ASAssetListMode mode;
 
@@ -194,21 +195,11 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 
     // 外部 title 统一从 mode 计算
     NSString *title = [self titleForMode:self.mode];
-
-    __weak typeof(self) weakSelf = self;
-
     self.navBar = [[ASCustomNavBar alloc] initWithTitle:title];
-
-    self.navBar.onBack = ^{
-        [weakSelf.navigationController popViewControllerAnimated:YES];
-    };
-
-    self.navBar.onRight = ^(BOOL allSelected) {
-        [weakSelf toggleSelectAll];
-    };
-    [self.navBar setShowRightButton:YES];
-
     [self.view addSubview:self.navBar];
+
+    // 添加全选按钮到顶部工具栏
+    [self setupTopToolbar];
 
     self.imgMgr = [PHCachingImageManager new];
     self.scanMgr = [ASPhotoScanManager shared];
@@ -232,48 +223,61 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
 
-    CGFloat navH = 44 + self.view.safeAreaInsets.top;
-    CGFloat bottomSafe = self.view.safeAreaInsets.bottom;
-    CGFloat bottomH = self.bottomBarH;
+    // 计算导航栏高度，包括安全区域
+    CGFloat navH = 44 + self.view.safeAreaInsets.top; // 导航栏高度，考虑到安全区域
+    CGFloat bottomSafe = self.view.safeAreaInsets.bottom;  // 底部安全区域
+    CGFloat bottomH = self.bottomBarH;  // 底部工具栏高度
 
-    self.navBar.frame = CGRectMake(0, 0,
-                                         self.view.bounds.size.width,
-                                         navH);
+    // 设置导航栏 frame
+    self.navBar.frame = CGRectMake(0, 0, self.view.bounds.size.width, navH);
 
-    self.bottomBar.frame = CGRectMake(
-        16,
-        self.view.bounds.size.height - bottomH - bottomSafe,
-        self.view.bounds.size.width - 32,
-        bottomH
-    );
-    
-    CGFloat pad = 12;
-    CGFloat h = self.bottomBar.bounds.size.height;
+    // 确保顶部工具栏已添加并显示
+    if (!self.topToolbar.superview) {
+        [self.view addSubview:self.topToolbar]; // 确保已添加到视图中
+    }
+    self.topToolbar.frame = CGRectMake(0, navH, self.view.bounds.size.width, 44);  // 高度为 44
 
-    // 删除按钮（右侧）
-    CGFloat btnW = 120;
-    self.deleteBtn.frame = CGRectMake(
-        self.bottomBar.bounds.size.width - btnW - pad,
-        pad,
-        btnW,
-        h - pad * 2
-    );
+    // 确保底部工具栏已添加并显示
+    if (!self.bottomBar.superview) {
+        [self.view addSubview:self.bottomBar]; // 确保已添加到底部工具栏
+    }
 
-    // 文案（左侧）
-    self.totalLabel.frame = CGRectMake(
-        pad,
-        pad,
-        self.bottomBar.bounds.size.width - btnW - pad * 3,
-        h - pad * 2
-    );
+    self.bottomBar.frame = CGRectMake(16,
+                                      self.view.bounds.size.height - bottomH - bottomSafe,
+                                      self.view.bounds.size.width - 32,
+                                      bottomH);  // 底部工具栏位置
 
-    self.cv.frame = CGRectMake(0, navH, self.view.bounds.size.width, self.view.bounds.size.height - navH - bottomH - bottomSafe);
-    self.cv.contentInset = UIEdgeInsetsZero;  // 或调整内边距
+    // 设置 padding 和其他布局参数
+    CGFloat pad = 12;  // 元素之间的间距
+    CGFloat h = self.bottomBar.bounds.size.height;  // 获取底部工具栏的高度
 
+    // 删除按钮的位置（右侧）
+    CGFloat btnW = 120;  // 删除按钮宽度
+    self.deleteBtn.frame = CGRectMake(self.bottomBar.bounds.size.width - btnW - pad,
+                                      pad,
+                                      btnW,
+                                      h - pad * 2); // 删除按钮在右侧，顶部留出 padding
+
+    // 文案标签的位置（左侧）
+    self.totalLabel.frame = CGRectMake(pad,
+                                       pad,
+                                       self.bottomBar.bounds.size.width - btnW - pad * 3,
+                                       h - pad * 2); // 文案标签在左侧，占据剩余空间
+
+    // 设置集合视图的位置，确保它不会被底部工具栏遮挡
+    self.cv.frame = CGRectMake(0,
+                               navH + 44, // 内容视图下移，避免被顶部工具栏和导航栏遮挡
+                               self.view.bounds.size.width,
+                               self.view.bounds.size.height - navH - bottomH - bottomSafe - 44); // 减去顶部工具栏和底部工具栏的空间
+
+    // 设置集合视图的内容内边距，确保它不与工具栏重叠
+    self.cv.contentInset = UIEdgeInsetsZero;  // 或根据需要调整
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 
+    // 将导航栏和底部工具栏移到最前面，确保它们不会被其他视图遮挡
     [self.view bringSubviewToFront:self.navBar];
     [self.view bringSubviewToFront:self.bottomBar];
+    [self.view bringSubviewToFront:self.topToolbar];  // 确保顶部工具栏在最前面
 }
 
 - (void)syncNavSelectAllState {
@@ -298,6 +302,37 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
     }
 
     self.navBar.allSelected = all;
+}
+
+- (void)setupTopToolbar {
+    // 创建顶部工具栏
+    self.topToolbar = [[UIView alloc] init];
+    self.topToolbar.backgroundColor = [UIColor whiteColor];
+    self.topToolbar.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.topToolbar.layer.shadowOffset = CGSizeMake(0, 2);
+    self.topToolbar.layer.shadowOpacity = 0.1;
+    self.topToolbar.layer.shadowRadius = 2;
+
+    // 创建全选按钮
+    UIButton *selectAllBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [selectAllBtn setTitle:@"全选" forState:UIControlStateNormal];
+    [selectAllBtn addTarget:self action:@selector(toggleSelectAll) forControlEvents:UIControlEventTouchUpInside];
+
+    // 将按钮添加到工具栏
+    [self.topToolbar addSubview:selectAllBtn];
+
+    // 将工具栏添加到视图中
+    [self.view addSubview:self.topToolbar];
+
+    CGFloat toolbarHeight = 44.0;
+    CGFloat padding = 16.0;
+    CGFloat navH = 44 + self.view.safeAreaInsets.top; // nav bar height, considering safe area
+
+    // 设置顶部工具栏的位置
+    self.topToolbar.frame = CGRectMake(0, navH, self.view.bounds.size.width, toolbarHeight);  // 设置顶部工具栏位于 navBar 下方
+    
+    // 设置全选按钮的位置
+    selectAllBtn.frame = CGRectMake(self.view.bounds.size.width - 80 - padding, 0, 80, toolbarHeight);
 }
 
 #pragma mark - UI 设置

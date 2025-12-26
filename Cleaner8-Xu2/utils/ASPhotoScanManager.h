@@ -120,6 +120,7 @@ typedef void(^ASScanCompletionBlock)(ASScanSnapshot *snapshot, NSError *_Nullabl
 - (void)purgeDeletedAssetsAndRecalculate;
 
 + (instancetype)shared;
+- (BOOL)isCacheValid;
 
 // 启动：读取缓存 + 检测是否需要增量更新（杀死App后也能）
 - (void)loadCacheAndCheckIncremental;

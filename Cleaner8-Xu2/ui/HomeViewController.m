@@ -919,10 +919,30 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 }
 
 - (void)startScanIfNeeded {
-    if (self.scanMgr.snapshot.state == ASScanStateFinished) return;
+
+    ASScanSnapshot *snapshot = self.scanMgr.snapshot;
+
+    // 1️⃣ 优先：如果缓存存在，直接用缓存（不依赖 state）
+    if ([self.scanMgr isCacheValid]) {
+        NSLog(@"[扫描流程] ✅ 使用缓存，跳过扫描");
+        [self rebuildModulesAndReload];
+        return;
+    }
+
+    // 2️⃣ 如果已经在扫描中，直接返回（防止重复启动）
+    if (snapshot.state == ASScanStateScanning) {
+        NSLog(@"[扫描流程] ⏳ 已在扫描中，忽略");
+        return;
+    }
+
+    // 3️⃣ 否则，启动全量扫描
+    NSLog(@"[扫描流程] ❗ 无缓存，开始全量扫描");
 
     __weak typeof(self) weakSelf = self;
-    [self.scanMgr startFullScanWithProgress:nil completion:^(__unused ASScanSnapshot *snapshot, __unused NSError * _Nullable error) {
+    [self.scanMgr startFullScanWithProgress:nil
+                                 completion:^(__unused ASScanSnapshot *snapshot,
+                                              __unused NSError * _Nullable error) {
+        NSLog(@"[扫描流程] ✅ 全量扫描完成");
         [weakSelf rebuildModulesAndReload];
     }];
 }

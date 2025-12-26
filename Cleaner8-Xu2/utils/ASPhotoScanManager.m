@@ -860,6 +860,13 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     self.cancelled = YES;
 }
 
+- (BOOL)isCacheValid {
+    NSLog(@"[缓存] isCacheValid = %@ | snapshot = %@",
+          self.cache.snapshot != nil ? @"YES" : @"NO",
+          self.cache.snapshot);
+    return self.cache.snapshot != nil;
+}
+
 #pragma mark - Purge deleted assets
 
 - (void)purgeDeletedAssetsAndRecalculate {
