@@ -679,7 +679,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.arrowView.widthAnchor constraintEqualToConstant:26],
         [self.arrowView.heightAnchor constraintEqualToConstant:26],
 
-        [self.saveLabel.topAnchor constraintEqualToAnchor:ba.bottomAnchor constant:8],
+        [self.saveLabel.topAnchor constraintEqualToAnchor:ba.bottomAnchor constant:4],
         [self.saveLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [self.saveLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
 

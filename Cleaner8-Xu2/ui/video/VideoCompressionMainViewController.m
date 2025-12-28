@@ -471,8 +471,6 @@ UICollectionViewDataSource
         // 卡片左边对齐 20（标题也跟随）
         section.contentInsets = NSDirectionalEdgeInsetsMake(0, 20, 0, 0);
         section.supplementariesFollowContentInsets = YES;
-
-       
         
         // header
         NSCollectionLayoutSize *headerSize =

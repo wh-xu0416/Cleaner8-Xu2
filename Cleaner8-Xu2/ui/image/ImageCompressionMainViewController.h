@@ -3,7 +3,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface VideoCompressionMainViewController : UIViewController
+@interface ImageCompressionMainViewController : UIViewController
 
 @end
 

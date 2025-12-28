@@ -26,6 +26,9 @@ typedef NS_ENUM(NSUInteger, ASGroupType) {
 
 @class ASAssetModel, ASAssetGroup, ASScanSnapshot;
 
+typedef void (^ASPhotoScanProgressBlock)(ASScanSnapshot *snapshot);
+typedef void (^ASPhotoScanCompletionBlock)(ASScanSnapshot *snapshot, NSError * _Nullable error);
+
 typedef NS_ENUM(NSInteger, ASModuleScanState) {
     ASModuleScanStateIdle = 0,     // 等待/未开始
     ASModuleScanStateScanning,     // 扫描中（遍历相册、收集素材）
@@ -124,10 +127,14 @@ typedef void(^ASScanCompletionBlock)(ASScanSnapshot *snapshot, NSError *_Nullabl
 
 // 启动：读取缓存 + 检测是否需要增量更新（杀死App后也能）
 - (void)loadCacheAndCheckIncremental;
+- (BOOL)loadCacheIfExists;
 
-// 全量扫描（从最新到最远）
-- (void)startFullScanWithProgress:(ASScanProgressBlock)progress
-                       completion:(ASScanCompletionBlock)completion;
+- (void)startupForHomeWithProgress:(ASScanProgressBlock)progress
+                        completion:(ASScanCompletionBlock)completion
+         showPermissionPlaceholder:(dispatch_block_t)showPermissionPlaceholder;
+
+- (void)startFullScanWithProgress:(ASPhotoScanProgressBlock _Nullable)progress
+                       completion:(ASPhotoScanCompletionBlock _Nullable)completion;
 
 // 停止扫描（中断）
 - (void)cancel;

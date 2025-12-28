@@ -1,5 +1,7 @@
 #import "VideoViewController.h"
 #import "VideoCompressionMainViewController.h"
+#import "ImageCompressionMainViewController.h"
+#import "ASMyStudioViewController.h"
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
 
@@ -172,21 +174,26 @@
 }
 
 #pragma mark - Navigation (占位)
-- (void)tapImage { /* push ImageListVC */ }
-
-- (void)tapVideo {
-    // 获取当前的导航控制器
+- (void)tapImage {
     UINavigationController *nav = (UINavigationController *)self.view.window.rootViewController;
     if (![nav isKindOfClass:UINavigationController.class]) return;
+    ImageCompressionMainViewController *imageCompressionVC = [[ImageCompressionMainViewController alloc] init];
+    [nav pushViewController:imageCompressionVC animated:YES];
+}
 
-    // 创建 VideoCompressionMainViewController 的实例
+- (void)tapVideo {
+    UINavigationController *nav = (UINavigationController *)self.view.window.rootViewController;
+    if (![nav isKindOfClass:UINavigationController.class]) return;
     VideoCompressionMainViewController *videoCompressionVC = [[VideoCompressionMainViewController alloc] init];
-    
-    // 使用导航控制器进行跳转
     [nav pushViewController:videoCompressionVC animated:YES];
 }
 
 - (void)tapLive  { /* push LivePhotoListVC */ }
-- (void)tapStudio{ /* push MyStudioVC */ }
+- (void)tapStudio{
+    UINavigationController *nav = (UINavigationController *)self.view.window.rootViewController;
+    if (![nav isKindOfClass:UINavigationController.class]) return;
+    ASMyStudioViewController *studioCompressionVC = [[ASMyStudioViewController alloc] init];
+    [nav pushViewController:studioCompressionVC animated:YES];
+}
 
 @end

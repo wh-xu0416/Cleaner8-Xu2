@@ -80,6 +80,14 @@ UIGestureRecognizerDelegate
     return self.navigationController.viewControllers.count > 1;
 }
 
+- (void)navigationController:(UINavigationController *)nav
+      willShowViewController:(UIViewController *)vc
+                    animated:(BOOL)animated {
+
+    BOOL hide = [vc isKindOfClass:HomeViewController.class];
+    [nav setNavigationBarHidden:hide animated:animated];
+}
+
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
 

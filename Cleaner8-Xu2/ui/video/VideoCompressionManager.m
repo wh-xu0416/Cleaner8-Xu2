@@ -1,6 +1,9 @@
 #import "VideoCompressionManager.h"
 #import <AVFoundation/AVFoundation.h>
 #import <AudioToolbox/AudioToolbox.h>
+#import "ASStudioAlbumManager.h"
+#import "ASStudioStore.h"
+#import "ASStudioUtils.h"
 
 @implementation ASCompressionItemResult
 @end
@@ -9,6 +12,14 @@
 @end
 
 #pragma mark - Helpers
+
+static NSString *ASVideoQualitySuffix(ASCompressionQuality q) {
+    switch (q) {
+        case ASCompressionQualitySmall:  return @"S";
+        case ASCompressionQualityMedium: return @"M";
+        case ASCompressionQualityLarge:  return @"L";
+    }
+}
 
 static BOOL ASIsBlackFrame(CMSampleBufferRef sb) {
     CVPixelBufferRef pb = CMSampleBufferGetImageBuffer(sb);
@@ -197,6 +208,8 @@ static CMSampleBufferRef ASCopySampleBufferWithTimeOffset(CMSampleBufferRef sb, 
 
 @property (nonatomic) BOOL shouldCancel;
 @property (nonatomic, readwrite) BOOL isRunning;
+@property (nonatomic, strong) PHAssetCollection *studioAlbum;
+
 @end
 
 @implementation VideoCompressionManager
@@ -229,7 +242,16 @@ static CMSampleBufferRef ASCopySampleBufferWithTimeOffset(CMSampleBufferRef sb, 
     self.totalBefore = 0;
     self.totalAfter = 0;
 
-    [self startNext];
+    __weak typeof(self) weakSelf = self;
+    [[ASStudioAlbumManager shared] fetchOrCreateAlbum:^(PHAssetCollection * _Nullable album, NSError * _Nullable error) {
+        weakSelf.studioAlbum = album; // 可能为 nil（失败也不阻塞压缩，只是不归档到 album）
+        if (!album) {
+            NSLog(@"[MyStudio] Warning: studio album unavailable, will save video but not add to album.");
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf startNext];
+        });
+    }];
 }
 
 - (void)cancel {
@@ -296,16 +318,45 @@ static CMSampleBufferRef ASCopySampleBufferWithTimeOffset(CMSampleBufferRef sb, 
                 return;
             }
 
-            // 保存到相册
+            // 保存到相册 + 加入 My Studio album + 写入索引（历史）
+            __block NSString *createdAssetId = nil;
+            PHAssetCollection *album = weakSelf.studioAlbum; // 取缓存（可能 nil）
+
             [PHPhotoLibrary.sharedPhotoLibrary performChanges:^{
                 PHAssetChangeRequest *req =
                     [PHAssetChangeRequest creationRequestForAssetFromVideoAtFileURL:outURL];
                 req.creationDate = [NSDate date];
-            }  completionHandler:^(BOOL success, NSError * _Nullable saveError) {
+
+                PHObjectPlaceholder *phd = req.placeholderForCreatedAsset;
+                createdAssetId = phd.localIdentifier;
+
+                if (album && phd) {
+                    [ASStudioAlbumManager addPlaceholder:phd toAlbum:album];
+                }
+
+            } completionHandler:^(BOOL success, NSError * _Nullable saveError) {
+
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (!success) {
+                        // 失败也清理临时文件，避免堆积
+                        [[NSFileManager defaultManager] removeItemAtURL:outURL error:nil];
                         [weakSelf fail:ASError(saveError.localizedDescription ?: @"Save to album failed", -6)];
                         return;
+                    }
+
+                    // ✅ 写索引：My Studio 列表展示用
+                    if (createdAssetId.length > 0) {
+                        ASStudioItem *sitem = [ASStudioItem new];
+                        sitem.assetId = createdAssetId;
+                        sitem.type = ASStudioMediaTypeVideo;
+                        sitem.beforeBytes = (int64_t)before;
+                        sitem.afterBytes  = (int64_t)afterBytes;
+                        sitem.duration = ph.duration; // 用原 PHAsset 时长即可
+                        sitem.compressedAt = [NSDate date];
+                        sitem.displayName =
+                            [ASStudioUtils makeDisplayNameForVideoWithQualitySuffix:ASVideoQualitySuffix(weakSelf.quality)];
+
+                        [[ASStudioStore shared] upsertItem:sitem];
                     }
 
                     weakSelf.totalAfter += afterBytes;
@@ -314,13 +365,21 @@ static CMSampleBufferRef ASCopySampleBufferWithTimeOffset(CMSampleBufferRef sb, 
                     item.originalAsset = ph;
                     item.beforeBytes = before;
                     item.afterBytes = afterBytes;
+
+                    // 你原来存 outputURL：注意 outURL 是 tmp，若你后面不再使用建议置空并删除文件
                     item.outputURL = outURL;
+
                     [weakSelf.results addObject:item];
+
+                    // ✅ 可选：如果你不需要 tmp 文件（推荐），这里删除并把 outputURL 置空
+                    // [[NSFileManager defaultManager] removeItemAtURL:outURL error:nil];
+                    // item.outputURL = nil;
 
                     weakSelf.index += 1;
                     [weakSelf startNext];
                 });
             }];
+
         }];
     }];
 }
