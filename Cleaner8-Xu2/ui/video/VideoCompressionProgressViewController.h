@@ -3,5 +3,10 @@
 #import "VideoCompressionManager.h"
 
 @interface VideoCompressionProgressViewController : UIViewController
-- (instancetype)initWithAssets:(NSArray<PHAsset *> *)assets quality:(ASCompressionQuality)quality;
+
+- (instancetype)initWithAssets:(NSArray<PHAsset *> *)assets
+                       quality:(ASCompressionQuality)quality
+               totalBeforeBytes:(uint64_t)beforeBytes
+            estimatedAfterBytes:(uint64_t)afterBytes;
+
 @end
