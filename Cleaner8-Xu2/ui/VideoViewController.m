@@ -67,6 +67,10 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    if (self.navigationController) {
+        self.navigationController.interactivePopGestureRecognizer.enabled = YES;
+        self.navigationController.interactivePopGestureRecognizer.delegate = nil;
+    }
     self.hasPresentedLimitedPickerThisAppear = NO;
     [self requestAndApplyPhotoPermission];
 }
