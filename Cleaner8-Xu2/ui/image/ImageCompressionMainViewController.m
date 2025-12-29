@@ -1,9 +1,17 @@
 #import "ImageCompressionMainViewController.h"
 #import "ImageCompressionQualityViewController.h"
+#import "ASMediaPreviewViewController.h"
 #import <UIKit/UIKit.h>
 #import <Photos/Photos.h>
 
 #pragma mark - Helpers (static)
+static NSString * const kASImgSizeCachePlist = @"as_img_size_cache_v2.plist";
+
+static inline NSString *ASImgSizeCachePath(void) {
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
+    NSString *dir = paths.firstObject ?: NSTemporaryDirectory();
+    return [dir stringByAppendingPathComponent:kASImgSizeCachePlist];
+}
 
 static inline UIColor *ASBlue(void)   { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; }
 static inline UIColor *ASBlue10(void) { return [ASBlue() colorWithAlphaComponent:0.10]; }
@@ -87,6 +95,7 @@ static NSString *ASMBPill(uint64_t bytes) {
 #pragma mark - Cell (corner 12, check top-right, pill bottom-right)
 
 @interface ASImgCell : UICollectionViewCell
+@property (nonatomic, assign) PHImageRequestID requestId;
 @property (nonatomic, strong) UIImageView *thumbView;
 @property (nonatomic, strong) ASPaddingLabel *pill;
 @property (nonatomic, strong) UIButton *checkBtn;     // icon only
@@ -101,6 +110,7 @@ static NSString *ASMBPill(uint64_t bytes) {
         self.contentView.backgroundColor = UIColor.whiteColor;
         self.contentView.layer.cornerRadius = 12;
         self.contentView.layer.masksToBounds = YES;
+        _requestId = PHInvalidImageRequestID;
 
         _thumbView = [UIImageView new];
         _thumbView.contentMode = UIViewContentModeScaleAspectFill;
@@ -134,10 +144,10 @@ static NSString *ASMBPill(uint64_t bytes) {
             [_thumbView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
             [_thumbView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            [_checkBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-8],
-            [_checkBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:8],
-            [_checkBtn.widthAnchor constraintEqualToConstant:26],
-            [_checkBtn.heightAnchor constraintEqualToConstant:26],
+            [_checkBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-10],
+            [_checkBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:10],
+            [_checkBtn.widthAnchor constraintEqualToConstant:23],
+            [_checkBtn.heightAnchor constraintEqualToConstant:23],
 
             // bigger tappable area
             [_checkTapBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
@@ -146,8 +156,8 @@ static NSString *ASMBPill(uint64_t bytes) {
             [_checkTapBtn.heightAnchor constraintEqualToConstant:56],
 
             // pill bottom-right
-            [_pill.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-8],
-            [_pill.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-8],
+            [_pill.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-10],
+            [_pill.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-10],
             [_pill.heightAnchor constraintEqualToConstant:28],
         ]];
 
@@ -160,6 +170,7 @@ static NSString *ASMBPill(uint64_t bytes) {
 
 - (void)prepareForReuse {
     [super prepareForReuse];
+    self.requestId = PHInvalidImageRequestID; // 取消在 VC 里做
     self.representedAssetIdentifier = nil;
     self.thumbView.image = nil;
     self.pill.text = @"--";
@@ -167,13 +178,17 @@ static NSString *ASMBPill(uint64_t bytes) {
 }
 
 - (void)applySelectedUI:(BOOL)sel {
-    if (@available(iOS 13.0, *)) {
-        UIImage *img = sel ? [UIImage systemImageNamed:@"checkmark.circle.fill"]
-                           : [UIImage systemImageNamed:@"circle"];
-        [self.checkBtn setImage:img forState:UIControlStateNormal];
-        self.checkBtn.tintColor = sel ? ASBlue() : [UIColor colorWithWhite:0 alpha:0.25];
-    }
+    static UIImage *onImg = nil;
+    static UIImage *offImg = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        onImg  = [[UIImage imageNamed:@"ic_select_s"]  imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        offImg = [[UIImage imageNamed:@"ic_select_n"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    });
+
+    [self.checkBtn setImage:(sel ? onImg : offImg) forState:UIControlStateNormal];
 }
+
 @end
 
 #pragma mark - Preview VC (tap to preview)
@@ -232,6 +247,81 @@ static NSString *ASMBPill(uint64_t bytes) {
 - (void)dismissSelf { [self dismissViewControllerAnimated:YES completion:nil]; }
 @end
 
+@interface ASMiniCell : UICollectionViewCell
+@property (nonatomic, strong) UIImageView *iv;
+@property (nonatomic, strong) UIButton *delBtn;
+@property (nonatomic, copy) NSString *representedId;
+@property (nonatomic, assign) PHImageRequestID requestId;
+@end
+
+@implementation ASMiniCell
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self = [super initWithFrame:frame]) {
+        self.requestId = PHInvalidImageRequestID;
+
+        self.clipsToBounds = NO;
+        self.layer.masksToBounds = NO;
+        self.contentView.clipsToBounds = NO;
+        self.contentView.layer.masksToBounds = NO;
+
+        self.iv = [UIImageView new];
+        self.iv.contentMode = UIViewContentModeScaleAspectFill;
+        self.iv.clipsToBounds = YES;
+        self.iv.layer.cornerRadius = 8;
+        self.iv.layer.masksToBounds = YES;
+        self.iv.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.contentView addSubview:self.iv];
+
+        self.delBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        self.delBtn.translatesAutoresizingMaskIntoConstraints = NO;
+
+        self.delBtn.layer.cornerRadius = 12;
+        self.delBtn.layer.masksToBounds = YES;
+
+        UIImage *del = [[UIImage imageNamed:@"ic_delete"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        [self.delBtn setImage:del forState:UIControlStateNormal];
+
+        self.delBtn.contentEdgeInsets = UIEdgeInsetsMake(4, 4, 4, 4);
+        self.delBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
+
+        self.delBtn.layer.zPosition = 1000;
+
+        [self.contentView addSubview:self.delBtn];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [self.iv.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
+            [self.iv.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+            [self.iv.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
+            [self.iv.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
+
+            [self.delBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-8],
+            [self.delBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:8],
+            [self.delBtn.widthAnchor constraintEqualToConstant:24],
+            [self.delBtn.heightAnchor constraintEqualToConstant:24],
+        ]];
+    }
+    return self;
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.representedId = nil;
+    self.requestId = PHInvalidImageRequestID;
+    self.iv.image = nil;
+}
+
+/// ✅ 重要：按钮有一部分在 cell bounds 外时，默认点不到
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    if ([super pointInside:point withEvent:event]) return YES;
+
+    // 把点击点转换到 contentView，再判断是否落在 delBtn 上
+    CGPoint p = [self convertPoint:point toView:self.contentView];
+    return CGRectContainsPoint(self.delBtn.frame, p);
+}
+
+@end
+
 #pragma mark - Selected Bar (background touches bottom, content in safeArea)
 
 @interface ASSelectedBar : UIView <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
@@ -250,44 +340,70 @@ static NSString *ASMBPill(uint64_t bytes) {
 
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
-        self.backgroundColor = UIColor.whiteColor;
-        self.layer.cornerRadius = 16;
+        UIView *cardView = [UIView new];
+        cardView.backgroundColor = UIColor.whiteColor;
+        cardView.translatesAutoresizingMaskIntoConstraints = NO;
+        cardView.layer.cornerRadius = 16;
         if (@available(iOS 11.0,*)) {
-            self.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+            cardView.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
         }
-        self.layer.masksToBounds = YES;
+        cardView.layer.masksToBounds = YES;
+
+        // ✅ 外层自己不裁剪，用来显示阴影
+        self.backgroundColor = UIColor.clearColor;
+        self.clipsToBounds = NO;
+        self.layer.masksToBounds = NO;
+
+        // ✅ 阴影：Offset (0, -5), blur 10, color #00000033
+        self.layer.shadowColor = [UIColor blackColor].CGColor;
+        self.layer.shadowOpacity = (0x33 / 255.0);        // ≈0.2
+        self.layer.shadowOffset = CGSizeMake(0, -5);
+        self.layer.shadowRadius = 10;
+
+        [self addSubview:cardView];
+        [NSLayoutConstraint activateConstraints:@[
+            [cardView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [cardView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [cardView.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [cardView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+        ]];
 
         self.cachingMgr = [PHCachingImageManager new];
 
         self.titleLabel = [UILabel new];
-        self.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
+        self.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
         self.titleLabel.textColor = UIColor.blackColor;
 
         UICollectionViewFlowLayout *lay = [UICollectionViewFlowLayout new];
         lay.scrollDirection = UICollectionViewScrollDirectionHorizontal;
         lay.minimumLineSpacing = 10;
-        lay.sectionInset = UIEdgeInsetsMake(0, 16, 0, 16);
+        lay.sectionInset = UIEdgeInsetsMake(0, 20, 0, 20);
 
         self.cv = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:lay];
         self.cv.backgroundColor = UIColor.clearColor;
         self.cv.showsHorizontalScrollIndicator = NO;
         self.cv.dataSource = self;
         self.cv.delegate = self;
-        [self.cv registerClass:UICollectionViewCell.class forCellWithReuseIdentifier:@"mini"];
+        [self.cv registerClass:ASMiniCell.class forCellWithReuseIdentifier:@"mini"];
         self.cv.clipsToBounds = NO;
         self.cv.layer.masksToBounds = NO;
         
-        self.goBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-        self.goBtn.tintColor = ASBlue();
-        self.goBtn.backgroundColor = ASBlue10();
-        self.goBtn.layer.cornerRadius = 16;
-        self.goBtn.layer.masksToBounds = YES;
-        if (@available(iOS 13.0,*)) [self.goBtn setImage:[UIImage systemImageNamed:@"chevron.right"] forState:UIControlStateNormal];
+        self.goBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+
+        UIImage *todoImg = [[UIImage imageNamed:@"ic_todo_big"]
+                            imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        [self.goBtn setImage:todoImg forState:UIControlStateNormal];
+
+        self.goBtn.backgroundColor = UIColor.clearColor;
+        self.goBtn.adjustsImageWhenHighlighted = NO;
+        self.goBtn.showsTouchWhenHighlighted = NO;
+        self.goBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
+
         [self.goBtn addTarget:self action:@selector(onGoTap) forControlEvents:UIControlEventTouchUpInside];
 
-        [self addSubview:self.titleLabel];
-        [self addSubview:self.cv];
-        [self addSubview:self.goBtn];
+        [cardView addSubview:self.titleLabel];
+        [cardView addSubview:self.cv];
+        [cardView addSubview:self.goBtn];
 
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.cv.translatesAutoresizingMaskIntoConstraints = NO;
@@ -297,12 +413,12 @@ static NSString *ASMBPill(uint64_t bytes) {
 
         [NSLayoutConstraint activateConstraints:@[
             [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
-            [self.titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:12],
+            [self.titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:20],
 
             [self.goBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16],
             [self.goBtn.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
-            [self.goBtn.widthAnchor constraintEqualToConstant:52],
-            [self.goBtn.heightAnchor constraintEqualToConstant:34],
+            [self.goBtn.widthAnchor constraintEqualToConstant:60],
+            [self.goBtn.heightAnchor constraintEqualToConstant:36],
 
             [self.cv.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
             [self.cv.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
@@ -319,96 +435,128 @@ static NSString *ASMBPill(uint64_t bytes) {
 - (void)onGoTap { if (self.onGo) self.onGo(); }
 
 - (void)setSelectedAssets:(NSArray<PHAsset *> *)selectedAssets {
-    _selectedAssets = selectedAssets ?: @[];
-    self.titleLabel.text = [NSString stringWithFormat:@"Selected %ld Image", (long)_selectedAssets.count];
-    [self.cv reloadData];
+    NSArray<PHAsset *> *old = _selectedAssets ?: @[];
+    NSArray<PHAsset *> *newA = selectedAssets ?: @[];
+    _selectedAssets = [newA copy];
+
+    self.titleLabel.text = [NSString stringWithFormat:@"Selected %ld Image", (long)newA.count];
+
+    if (old.count == 0 && newA.count == 0) return;
+
+    if (newA.count == old.count + 1) {
+        BOOL prefixSame = YES;
+        for (NSInteger i=0;i<old.count;i++) {
+            if (![old[i].localIdentifier isEqualToString:newA[i].localIdentifier]) { prefixSame = NO; break; }
+        }
+        if (prefixSame) {
+            NSIndexPath *ip = [NSIndexPath indexPathForItem:newA.count-1 inSection:0];
+            [self.cv performBatchUpdates:^{
+                [self.cv insertItemsAtIndexPaths:@[ip]];
+            } completion:nil];
+            return;
+        }
+    }
+
+    // ✅ 只删除一个（找首个不一致的位置）
+    if (old.count == newA.count + 1) {
+        NSInteger rm = NSNotFound;
+        NSInteger i=0,j=0;
+        while (i<old.count && j<newA.count) {
+            if ([old[i].localIdentifier isEqualToString:newA[j].localIdentifier]) { i++; j++; }
+            else { rm = i; i++; } // skip old one
+            if (rm != NSNotFound) break;
+        }
+        if (rm == NSNotFound) rm = old.count-1;
+        // 校验尾部一致
+        BOOL ok = YES;
+        for (NSInteger k=rm;k<newA.count;k++) {
+            if (![old[k+1].localIdentifier isEqualToString:newA[k].localIdentifier]) { ok = NO; break; }
+        }
+        if (ok) {
+            NSIndexPath *ip = [NSIndexPath indexPathForItem:rm inSection:0];
+            [self.cv performBatchUpdates:^{
+                [self.cv deleteItemsAtIndexPaths:@[ip]];
+            } completion:nil];
+            return;
+        }
+    }
+
+    // fallback：复杂变化就无动画 reload（减少闪）
+    [UIView performWithoutAnimation:^{
+        [self.cv reloadData];
+        [self.cv layoutIfNeeded];
+    }];
 }
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
     return self.selectedAssets.count;
 }
 
-- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    UICollectionViewCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"mini" forIndexPath:indexPath];
-
-    cell.clipsToBounds = NO;
-    cell.contentView.clipsToBounds = NO;
-    cell.layer.masksToBounds = NO;
-    cell.contentView.layer.masksToBounds = NO;
-
-    UIImageView *iv = (UIImageView *)[cell.contentView viewWithTag:100];
-    UIButton *x = (UIButton *)[cell.contentView viewWithTag:101];
-
-    if (!iv) {
-        iv = [UIImageView new];
-        iv.tag = 100;
-        iv.contentMode = UIViewContentModeScaleAspectFill;
-        iv.layer.cornerRadius = 12;
-        iv.layer.masksToBounds = YES;
-        iv.translatesAutoresizingMaskIntoConstraints = NO;
-
-        x = [UIButton buttonWithType:UIButtonTypeSystem];
-        x.tag = 101;
-        x.tintColor = UIColor.whiteColor;
-        x.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.55];
-        x.layer.cornerRadius = 12;
-        x.layer.masksToBounds = YES;
-        if (@available(iOS 13.0,*)) [x setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
-        x.translatesAutoresizingMaskIntoConstraints = NO;
-        [x addTarget:self action:@selector(onX:) forControlEvents:UIControlEventTouchUpInside];
-
-        [cell.contentView addSubview:iv];
-        [cell.contentView addSubview:x];
-
-        [NSLayoutConstraint activateConstraints:@[
-            [iv.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor],
-            [iv.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor],
-            [iv.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor],
-            [iv.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor],
-
-            [x.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:-6],
-            [x.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:6],
-            [x.widthAnchor constraintEqualToConstant:24],
-            [x.heightAnchor constraintEqualToConstant:24],
-        ]];
+- (void)collectionView:(UICollectionView *)collectionView
+  didEndDisplayingCell:(UICollectionViewCell *)cell
+    forItemAtIndexPath:(NSIndexPath *)indexPath {
+    if (![cell isKindOfClass:ASMiniCell.class]) return;
+    ASMiniCell *c = (ASMiniCell *)cell;
+    if (c.requestId != PHInvalidImageRequestID) {
+        [self.cachingMgr cancelImageRequest:c.requestId];
+        c.requestId = PHInvalidImageRequestID;
     }
+}
 
-    iv.image = nil;
+- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    ASMiniCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"mini" forIndexPath:indexPath];
 
     PHAsset *a = self.selectedAssets[indexPath.item];
+    NSString *newId = a.localIdentifier ?: @"";
 
-    NSString *assetId = a.localIdentifier ?: @"";
-    cell.accessibilityIdentifier = assetId;
+    if (cell.representedId.length && ![cell.representedId isEqualToString:newId]) {
+        if (cell.requestId != PHInvalidImageRequestID) {
+            [self.cachingMgr cancelImageRequest:cell.requestId];
+            cell.requestId = PHInvalidImageRequestID;
+        }
+        cell.iv.image = nil;
+    }
+    cell.representedId = newId;
 
-    PHImageRequestOptions *opt = [PHImageRequestOptions new];
-    opt.networkAccessAllowed = YES;
-    opt.resizeMode = PHImageRequestOptionsResizeModeFast;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    [cell.delBtn removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
+    [cell.delBtn addTarget:self action:@selector(onDelTap:) forControlEvents:UIControlEventTouchUpInside];
 
-    CGFloat px = 64.0 * UIScreen.mainScreen.scale * 2.0; // 2.0 倍冗余，缩放更清晰
-    CGSize target = CGSizeMake(px, px);
+    if (!cell.iv.image && cell.requestId == PHInvalidImageRequestID) {
+        PHImageRequestOptions *opt = [PHImageRequestOptions new];
+        opt.networkAccessAllowed = YES;
+        opt.resizeMode = PHImageRequestOptionsResizeModeFast;
+        opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
 
-    [self.cachingMgr requestImageForAsset:a
-                               targetSize:target
-                              contentMode:PHImageContentModeAspectFill
-                                  options:opt
-                            resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+        CGFloat px = 64.0 * UIScreen.mainScreen.scale * 2.0;
+        CGSize target = CGSizeMake(px, px);
 
-        if (!result) return;
+        __weak typeof(cell) weakCell = cell;
+        cell.requestId =
+        [self.cachingMgr requestImageForAsset:a
+                                   targetSize:target
+                                  contentMode:PHImageContentModeAspectFill
+                                      options:opt
+                                resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+            if (!result) return;
+            if (![weakCell.representedId isEqualToString:newId]) return;
 
-        if (![cell.accessibilityIdentifier isEqualToString:assetId]) return;
+            BOOL cancelled = [info[PHImageCancelledKey] boolValue];
+            if (cancelled) return;
 
-        iv.image = result;
-    }];
+            BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
+            if (degraded && weakCell.iv.image) return;
+
+            weakCell.iv.image = result;
+            if (!degraded) weakCell.requestId = PHInvalidImageRequestID;
+        }];
+    }
 
     return cell;
 }
 
-- (void)onX:(UIButton *)btn {
-    UIView *v = btn.superview;
-    while (v && ![v isKindOfClass:UICollectionViewCell.class]) v = v.superview;
-    UICollectionViewCell *cell = (UICollectionViewCell *)v;
-    NSIndexPath *ip = [self.cv indexPathForCell:cell];
+- (void)onDelTap:(UIButton *)btn {
+    CGPoint p = [btn convertPoint:CGPointMake(12, 12) toView:self.cv];
+    NSIndexPath *ip = [self.cv indexPathForItemAtPoint:p];
     if (!ip) return;
     PHAsset *a = self.selectedAssets[ip.item];
     if (self.onRemove) self.onRemove(a);
@@ -451,7 +599,6 @@ UICollectionViewDataSource,
 UICollectionViewDataSourcePrefetching
 >
 
-// stats (no flicker, no full scan)
 @property (nonatomic, strong) NSObject *statsLock;
 @property (nonatomic, assign) uint64_t statsKnownBytes;
 @property (nonatomic, assign) NSInteger statsPending;
@@ -479,7 +626,6 @@ UICollectionViewDataSourcePrefetching
 @property (nonatomic, strong) NSLayoutConstraint *selectedBarHeightC;
 @property (nonatomic, assign) BOOL selectedBarVisible;
 
-// Data
 @property (nonatomic, strong) NSArray<PHAsset *> *allImages;
 @property (nonatomic, strong) NSArray<PHAsset *> *displayImages;
 @property (nonatomic, strong) NSArray<ASImgSizeSection *> *sections;
@@ -493,12 +639,70 @@ UICollectionViewDataSourcePrefetching
 @property (nonatomic, strong) PHCachingImageManager *cachingMgr;
 @property (nonatomic, assign) CGSize thumbPixelSize;
 
-// async token
 @property (nonatomic, assign) NSInteger filterToken;
+
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary *> *sizeMetaCache;
+@property (nonatomic, assign) BOOL sizeCacheSaveScheduled;
 
 @end
 
 @implementation ImageCompressionMainViewController
+
+#pragma mark - Preview selection bridge (Main <-> Preview)
+
+- (NSIndexSet *)selectedIndexesForPreviewAssets:(NSArray<PHAsset *> *)previewAssets {
+    NSMutableIndexSet *set = [NSMutableIndexSet indexSet];
+    if (previewAssets.count == 0 || self.selectedAssets.count == 0) return set;
+
+    NSMutableSet<NSString *> *selectedIds = [NSMutableSet setWithCapacity:self.selectedAssets.count];
+    for (PHAsset *a in self.selectedAssets) {
+        if (a.localIdentifier) [selectedIds addObject:a.localIdentifier];
+    }
+
+    [previewAssets enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if (obj.localIdentifier && [selectedIds containsObject:obj.localIdentifier]) {
+            [set addIndex:idx];
+        }
+    }];
+    return set;
+}
+
+- (void)applyPreviewSelectionFromAssets:(NSArray<PHAsset *> *)previewAssets selectedIndexes:(NSIndexSet *)selectedIndexes {
+    NSMutableSet<NSString *> *scopeIds = [NSMutableSet setWithCapacity:previewAssets.count];
+    for (PHAsset *a in previewAssets) if (a.localIdentifier) [scopeIds addObject:a.localIdentifier];
+
+    NSMutableSet<NSString *> *newSelIds = [NSMutableSet set];
+    [selectedIndexes enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL * _Nonnull stop) {
+        if (idx < previewAssets.count) {
+            PHAsset *a = previewAssets[idx];
+            if (a.localIdentifier) [newSelIds addObject:a.localIdentifier];
+        }
+    }];
+
+    for (NSInteger i = (NSInteger)self.selectedAssets.count - 1; i >= 0; i--) {
+        PHAsset *a = self.selectedAssets[i];
+        NSString *aid = a.localIdentifier ?: @"";
+        if ([scopeIds containsObject:aid] && ![newSelIds containsObject:aid]) {
+            [self.selectedAssets removeObjectAtIndex:i];
+        }
+    }
+
+    for (PHAsset *a in previewAssets) {
+        if (self.selectedAssets.count >= 9) break;
+        NSString *aid = a.localIdentifier ?: @"";
+        if (![newSelIds containsObject:aid]) continue;
+
+        BOOL already = NO;
+        for (PHAsset *x in self.selectedAssets) {
+            if ([x.localIdentifier ?: @"" isEqualToString:aid]) { already = YES; break; }
+        }
+        if (!already) [self.selectedAssets addObject:a];
+    }
+
+    self.selectedBar.selectedAssets = self.selectedAssets;
+    [self showSelectedBar:(self.selectedAssets.count > 0) animated:NO];
+    [self updateVisibleSelectionOnly];
+}
 
 - (UIStatusBarStyle)preferredStatusBarStyle { return UIStatusBarStyleLightContent; }
 
@@ -516,12 +720,14 @@ UICollectionViewDataSourcePrefetching
 
     self.statsLock = [NSObject new];
     self.sizeCache = [NSMutableDictionary dictionary];
+    NSDictionary *disk = [NSDictionary dictionaryWithContentsOfFile:ASImgSizeCachePath()];
+    self.sizeMetaCache = [(disk ?: @{}) mutableCopy];
     self.selectedAssets = [NSMutableArray array];
     self.sections = @[];
     self.filterIndex = 0;
 
     self.sizeQueue = [NSOperationQueue new];
-    self.sizeQueue.maxConcurrentOperationCount = 1; // ✅更稳，不抢 UI
+    self.sizeQueue.maxConcurrentOperationCount = 1;
     self.cachingMgr = [PHCachingImageManager new];
 
     self.view.backgroundColor = UIColor.whiteColor;
@@ -534,10 +740,9 @@ UICollectionViewDataSourcePrefetching
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
 
-    // ✅ bottom bar height = base(118) + safeBottom, background贴底不留缝
     CGFloat safeB = 0;
     if (@available(iOS 11.0,*)) safeB = self.view.safeAreaInsets.bottom;
-    self.selectedBarHeightC.constant = 118.0 + safeB;
+    self.selectedBarHeightC.constant = 130.0 + safeB;
 
     [self updateThumbTargetSizeIfNeeded];
     [self updateBottomInsetsForSelectedBarAnimated:NO];
@@ -553,11 +758,17 @@ UICollectionViewDataSourcePrefetching
     self.blueHeader.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.blueHeader];
 
-    self.backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    if (@available(iOS 13.0,*)) [self.backBtn setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
-    self.backBtn.tintColor = UIColor.whiteColor;
+    self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+
+    UIImage *backImg = [[UIImage imageNamed:@"ic_return_white"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.backBtn setImage:backImg forState:UIControlStateNormal];
+
+    self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.backBtn.adjustsImageWhenHighlighted = NO;
+
     [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
+
     [self.blueHeader addSubview:self.backBtn];
 
     self.headerTitle = [UILabel new];
@@ -570,7 +781,7 @@ UICollectionViewDataSourcePrefetching
 
     self.headerTotal = [UILabel new];
     self.headerTotal.text = @"--";
-    self.headerTotal.font = [UIFont systemFontOfSize:44 weight:UIFontWeightSemibold];
+    self.headerTotal.font = [UIFont systemFontOfSize:34 weight:UIFontWeightSemibold];
     self.headerTotal.textColor = UIColor.whiteColor;
     self.headerTotal.textAlignment = NSTextAlignmentCenter;
     self.headerTotal.translatesAutoresizingMaskIntoConstraints = NO;
@@ -658,7 +869,7 @@ UICollectionViewDataSourcePrefetching
         [self.blueHeader.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.blueHeader.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:16],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:6],
         [self.backBtn.topAnchor constraintEqualToAnchor:self.blueHeader.safeAreaLayoutGuide.topAnchor constant:10],
         [self.backBtn.widthAnchor constraintEqualToConstant:44],
         [self.backBtn.heightAnchor constraintEqualToConstant:44],
@@ -690,11 +901,9 @@ UICollectionViewDataSourcePrefetching
         [self.selectedBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:0],
     ]];
 
-    // height updated in viewDidLayoutSubviews
     self.selectedBarHeightC = [self.selectedBar.heightAnchor constraintEqualToConstant:150];
     self.selectedBarHeightC.active = YES;
 
-    // hidden / shown
     self.selectedBarHiddenC = [self.selectedBar.topAnchor constraintEqualToAnchor:self.view.bottomAnchor];
     self.selectedBarHiddenC.active = YES;
 
@@ -727,7 +936,7 @@ UICollectionViewDataSourcePrefetching
     }
 }
 
-#pragma mark - Layout (width = screen/3.5, square, 2 rows, gap 10, horizontal per section)
+#pragma mark - Layout
 
 - (UICollectionViewLayout *)buildLayout {
     if (@available(iOS 13.0, *)) {
@@ -738,7 +947,7 @@ UICollectionViewDataSourcePrefetching
 
             CGFloat containerW = environment.container.effectiveContentSize.width;
 
-            CGFloat inter = 10.0;
+            CGFloat inter = 5.0;
             CGFloat leading = 20.0;
 
             CGFloat contentW = containerW - leading * 2.0;
@@ -762,10 +971,8 @@ UICollectionViewDataSourcePrefetching
             sec.orthogonalScrollingBehavior = UICollectionLayoutSectionOrthogonalScrollingBehaviorContinuous;
             sec.interGroupSpacing = inter;
 
-            // ✅ item 左右和 header title 对齐（20）
             sec.contentInsets = NSDirectionalEdgeInsetsMake(0, leading, 0, leading);
 
-            // ✅ 关键：header 不跟随 contentInsets（否则会 20 + 20 = 40）
             sec.supplementariesFollowContentInsets = NO;
 
 
@@ -831,28 +1038,117 @@ UICollectionViewDataSourcePrefetching
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         PHFetchOptions *opt = [PHFetchOptions new];
         opt.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
-        PHFetchResult<PHAsset *> *result = [PHAsset fetchAssetsWithMediaType:PHAssetMediaTypeImage options:opt];
+
+        opt.predicate = [NSPredicate predicateWithFormat:
+                         @"(mediaType == %d) AND ((mediaSubtypes & %d) == 0)",
+                         PHAssetMediaTypeImage,
+                         PHAssetMediaSubtypePhotoLive];
+
+        if (@available(iOS 9.0, *)) {
+            opt.includeHiddenAssets = YES;
+            opt.includeAssetSourceTypes =
+                PHAssetSourceTypeUserLibrary |
+                PHAssetSourceTypeCloudShared |
+                PHAssetSourceTypeiTunesSynced;
+        }
+
+        PHFetchResult<PHAsset *> *result =
+        [PHAsset fetchAssetsWithMediaType:PHAssetMediaTypeImage options:opt];
 
         NSMutableArray<PHAsset *> *arr = [NSMutableArray arrayWithCapacity:result.count];
         [result enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
             [arr addObject:obj];
         }];
+        
+        NSDictionary *metaSnap = nil;
+        @synchronized (self.sizeMetaCache) { metaSnap = [self.sizeMetaCache copy]; }
+
+        uint64_t known = 0;
+        NSInteger pending = 0;
+        NSMutableDictionary<NSString *, NSNumber *> *warm = [NSMutableDictionary dictionary];
+
+        for (PHAsset *a in arr) {
+            NSString *aid = a.localIdentifier ?: @"";
+            NSDictionary *rec = metaSnap[aid];
+            if (rec) {
+                uint64_t s = [rec[@"s"] unsignedLongLongValue];
+                NSTimeInterval cachedM = [rec[@"m"] doubleValue];
+                NSTimeInterval curM = a.modificationDate ? a.modificationDate.timeIntervalSince1970 : 0;
+
+                if (s > 0 && fabs(curM - cachedM) < 1.0) {
+                    warm[aid] = @(s);
+                    known += s;
+                    continue;
+                }
+            }
+            pending += 1;
+        }
 
         dispatch_async(dispatch_get_main_queue(), ^{
             self.allImages = [arr copy];
 
-            @synchronized(self.statsLock) {
-                self.statsKnownBytes = 0;
-                self.statsPending = self.allImages.count;
+            @synchronized (self.sizeCache) {
+                [self.sizeCache addEntriesFromDictionary:warm];
+            }
+
+            @synchronized (self.statsLock) {
+                self.statsKnownBytes = known;
+                self.statsPending = pending;
                 self.statsFailed = 0;
             }
+
             [self refreshHeaderFromStats:YES];
-
             [self applyFilterIndex:self.filterIndex];
-
-            // ✅ 后台开始统计所有 size（不会卡 UI）
             [self startComputeAllSizesIfNeeded];
         });
+    });
+}
+
+
+- (void)prewarmStatsFromDiskCache {
+    uint64_t known = 0;
+    NSInteger pending = 0;
+
+    for (PHAsset *a in self.allImages) {
+        NSString *aid = a.localIdentifier ?: @"";
+        NSDictionary *rec = nil;
+        @synchronized (self.sizeMetaCache) { rec = self.sizeMetaCache[aid]; }
+
+        if (rec) {
+            uint64_t s = [rec[@"s"] unsignedLongLongValue];
+            NSTimeInterval cachedM = [rec[@"m"] doubleValue];
+            NSTimeInterval curM = a.modificationDate ? a.modificationDate.timeIntervalSince1970 : 0;
+
+            // modificationDate 基本能作为“是否变化”的版本号
+            if (s > 0 && fabs(curM - cachedM) < 1.0) {
+                @synchronized (self.sizeCache) { self.sizeCache[aid] = @(s); }
+                known += s;
+                continue;
+            }
+        }
+        pending += 1;
+    }
+
+    @synchronized(self.statsLock) {
+        self.statsKnownBytes = known;
+        self.statsPending = pending;
+        self.statsFailed = 0;
+    }
+}
+
+- (void)scheduleSaveSizeCache {
+    @synchronized (self) {
+        if (self.sizeCacheSaveScheduled) return;
+        self.sizeCacheSaveScheduled = YES;
+    }
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSDictionary *snap = nil;
+        @synchronized (self.sizeMetaCache) { snap = [self.sizeMetaCache copy]; }
+        [snap writeToFile:ASImgSizeCachePath() atomically:YES];
+
+        @synchronized (self) { self.sizeCacheSaveScheduled = NO; }
     });
 }
 
@@ -884,7 +1180,7 @@ UICollectionViewDataSourcePrefetching
     [att addAttribute:NSForegroundColorAttributeName value:UIColor.whiteColor range:NSMakeRange(prefix.length, savedText.length)];
 
     [CATransaction begin];
-    [CATransaction setDisableActions:YES]; // ✅ 不闪
+    [CATransaction setDisableActions:YES];
     self.headerTotal.text = totalText;
     self.headerSubtitle.attributedText = att;
     [CATransaction commit];
@@ -920,20 +1216,35 @@ UICollectionViewDataSourcePrefetching
     __weak typeof(self) weakSelf = self;
     NSArray<PHAsset *> *assets = self.allImages ?: @[];
 
+    NSMutableArray<PHAsset *> *missing = [NSMutableArray array];
+    for (PHAsset *a in assets) {
+        NSString *aid = a.localIdentifier ?: @"";
+        NSNumber *n = nil;
+        @synchronized (self.sizeCache) { n = self.sizeCache[aid]; }
+        if (!n || n.unsignedLongLongValue == 0) [missing addObject:a];
+    }
+
+    if (missing.count == 0) {
+        [self refreshHeaderFromStats:NO];
+        // 可选：这里做一次分组刷新（只有一次，不会闪到肉眼）
+        [self applyFilterIndex:self.filterIndex];
+        return;
+    }
+
     [self.sizeQueue addOperationWithBlock:^{
         @autoreleasepool {
             NSInteger tick = 0;
-            for (PHAsset *a in assets) {
-                if (weakSelf.sizeQueue.isSuspended || weakSelf.sizeQueue.operationCount == 0) {
-                    // ignore
-                }
-
+            for (PHAsset *a in missing) {
                 uint64_t size = [weakSelf fileSizeForAsset:a];
 
+                NSString *aid = a.localIdentifier ?: @"";
+                NSTimeInterval mod = a.modificationDate ? a.modificationDate.timeIntervalSince1970 : 0;
+
                 @synchronized (weakSelf.sizeCache) {
-                    if (!weakSelf.sizeCache[a.localIdentifier]) {
-                        weakSelf.sizeCache[a.localIdentifier] = @(size);
-                    }
+                    weakSelf.sizeCache[aid] = @(size);
+                }
+                @synchronized (weakSelf.sizeMetaCache) {
+                    weakSelf.sizeMetaCache[aid] = @{@"s": @(size), @"m": @(mod)};
                 }
 
                 @synchronized(weakSelf.statsLock) {
@@ -942,25 +1253,40 @@ UICollectionViewDataSourcePrefetching
                     else weakSelf.statsFailed += 1;
                 }
 
-                tick += 1;
-                if (tick % 120 == 0) {
+                tick++;
+                if (tick % 30 == 0) {
                     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
                         [weakSelf refreshHeaderFromStats:YES];
-
-                        // ✅ 只刷新可见 item（避免闪、避免大 reload）
-                        NSArray<NSIndexPath *> *visible = weakSelf.collectionView.indexPathsForVisibleItems;
-                        if (visible.count) [weakSelf.collectionView reloadItemsAtIndexPaths:visible];
+                        [weakSelf updateVisiblePillsOnly];
                     }];
+                    [weakSelf scheduleSaveSizeCache];
                 }
             }
 
             [[NSOperationQueue mainQueue] addOperationWithBlock:^{
                 [weakSelf refreshHeaderFromStats:NO];
-                // ✅ 统计结束后，重新按 size 分组（后台做，不卡）
+                [weakSelf scheduleSaveSizeCache];
                 [weakSelf applyFilterIndex:weakSelf.filterIndex];
             }];
         }
     }];
+}
+
+- (void)updateVisiblePillsOnly {
+    NSArray<NSIndexPath *> *visible = self.collectionView.indexPathsForVisibleItems;
+    for (NSIndexPath *ip in visible) {
+        if (ip.section >= self.sections.count) continue;
+        NSArray<PHAsset *> *arr = self.sections[ip.section].assets;
+        if (ip.item >= arr.count) continue;
+
+        PHAsset *a = arr[ip.item];
+        ASImgCell *cell = (ASImgCell *)[self.collectionView cellForItemAtIndexPath:ip];
+        if (![cell.representedAssetIdentifier isEqualToString:a.localIdentifier]) continue;
+
+        uint64_t bytes = [self cachedFileSizeForAsset:a];
+        NSString *txt = ASMBPill(bytes);
+        if (![cell.pill.text isEqualToString:txt]) cell.pill.text = txt;
+    }
 }
 
 #pragma mark - Filter (async,不卡 UI)
@@ -1072,10 +1398,27 @@ UICollectionViewDataSourcePrefetching
     self.selectedBar.selectedAssets = self.selectedAssets;
     [self showSelectedBar:(self.selectedAssets.count > 0) animated:YES];
 
-    // ✅ 只刷新可见，避免闪
     NSArray<NSIndexPath *> *visible = self.collectionView.indexPathsForVisibleItems;
-    if (visible.count) [self.collectionView reloadItemsAtIndexPaths:visible];
+    [self updateVisibleSelectionOnly];
 }
+
+- (void)updateVisibleSelectionOnly {
+    NSArray<NSIndexPath *> *visible = self.collectionView.indexPathsForVisibleItems;
+    for (NSIndexPath *ip in visible) {
+        if (ip.section >= self.sections.count) continue;
+        NSArray<PHAsset *> *arr = self.sections[ip.section].assets;
+        if (ip.item >= arr.count) continue;
+
+        PHAsset *a = arr[ip.item];
+        ASImgCell *cell = (ASImgCell *)[self.collectionView cellForItemAtIndexPath:ip];
+        if (!cell) continue;
+        if (![cell.representedAssetIdentifier isEqualToString:a.localIdentifier]) continue;
+
+        BOOL sel = [self.selectedAssets containsObject:a];
+        [cell applySelectedUI:sel];
+    }
+}
+
 
 - (void)showSelectedBar:(BOOL)show animated:(BOOL)animated {
     if (show == self.selectedBarVisible) return;
@@ -1140,31 +1483,57 @@ UICollectionViewDataSourcePrefetching
     ASImgCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ASImgCell" forIndexPath:indexPath];
 
     PHAsset *asset = self.sections[indexPath.section].assets[indexPath.item];
-    cell.representedAssetIdentifier = asset.localIdentifier;
 
+    NSString *oldId = cell.representedAssetIdentifier;
+    NSString *newId = asset.localIdentifier ?: @"";
+    NSString *capturedId = [newId copy];
+
+    // 如果 cell 复用到了新 asset：先 cancel 旧请求 + 清图
+    if (oldId.length && ![oldId isEqualToString:newId]) {
+        if (cell.requestId != PHInvalidImageRequestID) {
+            [self.cachingMgr cancelImageRequest:cell.requestId];
+            cell.requestId = PHInvalidImageRequestID;
+        }
+        cell.thumbView.image = nil;
+    }
+    cell.representedAssetIdentifier = newId;
+
+    // selection + pill（不 reload）
     BOOL sel = [self.selectedAssets containsObject:asset];
     [cell applySelectedUI:sel];
+    cell.pill.text = ASMBPill([self cachedFileSizeForAsset:asset]);
 
-    uint64_t bytes = [self cachedFileSizeForAsset:asset];
-    cell.pill.text = ASMBPill(bytes);
+    // thumb：只有当当前没有图时才请求
+    if (!cell.thumbView.image && cell.requestId == PHInvalidImageRequestID) {
+        PHImageRequestOptions *opt = [PHImageRequestOptions new];
+        opt.networkAccessAllowed = YES;
+        opt.resizeMode = PHImageRequestOptionsResizeModeExact;
+        opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
 
-    // thumb
-    PHImageRequestOptions *opt = [PHImageRequestOptions new];
-    opt.networkAccessAllowed = YES;
-    opt.resizeMode = PHImageRequestOptionsResizeModeFast;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
+        CGSize target = CGSizeEqualToSize(self.thumbPixelSize, CGSizeZero) ? CGSizeMake(512, 512) : self.thumbPixelSize;
 
-    CGSize target = CGSizeEqualToSize(self.thumbPixelSize, CGSizeZero) ? CGSizeMake(600, 600) : self.thumbPixelSize;
+        cell.requestId =
+        [self.cachingMgr requestImageForAsset:asset
+                                   targetSize:target
+                                  contentMode:PHImageContentModeAspectFill
+                                      options:opt
+                                resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+            if (!result) return;
+            if (![cell.representedAssetIdentifier isEqualToString:capturedId]) return;
 
-    [self.cachingMgr requestImageForAsset:asset
-                               targetSize:target
-                              contentMode:PHImageContentModeAspectFill
-                                  options:opt
-                            resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
-        if (!result) return;
-        if (![cell.representedAssetIdentifier isEqualToString:asset.localIdentifier]) return;
-        cell.thumbView.image = result;
-    }];
+            BOOL cancelled = [info[PHImageCancelledKey] boolValue];
+            if (cancelled) return;
+
+            BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
+            if (degraded) {
+                if (cell.thumbView.image) return;
+            }
+
+            cell.thumbView.image = result;
+
+            if (!degraded) cell.requestId = PHInvalidImageRequestID;
+        }];
+    }
 
     // check tap
     cell.checkTapBtn.tag = (indexPath.section<<16) | indexPath.item;
@@ -1172,6 +1541,19 @@ UICollectionViewDataSourcePrefetching
     [cell.checkTapBtn addTarget:self action:@selector(onCheckTap:) forControlEvents:UIControlEventTouchUpInside];
 
     return cell;
+}
+
+- (void)collectionView:(UICollectionView *)collectionView
+  didEndDisplayingCell:(UICollectionViewCell *)cell
+    forItemAtIndexPath:(NSIndexPath *)indexPath {
+
+    if (![cell isKindOfClass:ASImgCell.class]) return;
+    ASImgCell *c = (ASImgCell *)cell;
+
+    if (c.requestId != PHInvalidImageRequestID) {
+        [self.cachingMgr cancelImageRequest:c.requestId];
+        c.requestId = PHInvalidImageRequestID;
+    }
 }
 
 - (void)onCheckTap:(UIButton *)btn {
@@ -1184,10 +1566,29 @@ UICollectionViewDataSourcePrefetching
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    PHAsset *a = self.sections[indexPath.section].assets[indexPath.item];
-    ASImagePreviewVC *p = [[ASImagePreviewVC alloc] initWithAsset:a];
-    p.modalPresentationStyle = UIModalPresentationFullScreen;
-    [self presentViewController:p animated:YES completion:nil];
+    if (indexPath.section >= self.sections.count) return;
+    NSArray<PHAsset *> *arr = self.sections[indexPath.section].assets ?: @[];
+    if (indexPath.item >= arr.count) return;
+
+    PHAsset *a = arr[indexPath.item];
+
+    NSArray<PHAsset *> *previewAssets = @[a];
+    NSIndexSet *preSel = [self selectedIndexesForPreviewAssets:previewAssets];
+
+    ASMediaPreviewViewController *p =
+    [[ASMediaPreviewViewController alloc] initWithAssets:previewAssets
+                                           initialIndex:0
+                                        selectedIndexes:preSel];
+
+    p.bestIndex = 0;
+    p.showsBestBadge = YES;
+
+    __weak typeof(self) weakSelf = self;
+    p.onBack = ^(NSArray<PHAsset *> *selectedAssets, NSIndexSet *selectedIndexes) {
+        [weakSelf applyPreviewSelectionFromAssets:previewAssets selectedIndexes:selectedIndexes];
+    };
+
+    [self.navigationController pushViewController:p animated:YES];
 }
 
 - (UICollectionReusableView *)collectionView:(UICollectionView *)collectionView

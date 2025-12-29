@@ -88,7 +88,6 @@ static uint64_t ASAssetFileSize(PHAsset *asset) {
     return n.unsignedLongLongValue;
 }
 
-// 你要的：节省 80/50/20 => remain 0.2/0.5/0.8
 static double ASRemainRatio(ASCompressionQuality q) {
     switch (q) {
         case ASCompressionQualitySmall:  return 0.20; // save 80%
@@ -366,12 +365,10 @@ static CMSampleBufferRef ASCopySampleBufferWithTimeOffset(CMSampleBufferRef sb, 
                     item.beforeBytes = before;
                     item.afterBytes = afterBytes;
 
-                    // 你原来存 outputURL：注意 outURL 是 tmp，若你后面不再使用建议置空并删除文件
                     item.outputURL = outURL;
 
                     [weakSelf.results addObject:item];
 
-                    // ✅ 可选：如果你不需要 tmp 文件（推荐），这里删除并把 outputURL 置空
                     // [[NSFileManager defaultManager] removeItemAtURL:outURL error:nil];
                     // item.outputURL = nil;
 
@@ -429,7 +426,6 @@ static NSInteger ASEvenFloor(CGFloat v) {
     float srcFPS = videoTrack.nominalFrameRate;
     NSInteger fps = MAX((NSInteger)llroundf(srcFPS), 30);
 
-    // ===== bitrate：保持你现在 Swift 同款逻辑 =====
     double origTotalBitrate = 0;
     if (beforeBytes > 0 && duration > 0) {
         origTotalBitrate = ((double)beforeBytes * 8.0) / duration;

@@ -1,6 +1,5 @@
-#import <UIKit/UIKit.h>
-#import "ImageCompressionManager.h"
+#import "ASCompressionResultBaseViewController.h"
+#import "UIKit/UIKit.h"
 
-@interface ImageCompressionResultViewController : UIViewController
-- (instancetype)initWithSummary:(ASImageCompressionSummary *)summary;
+@interface ImageCompressionResultViewController : ASCompressionResultBaseViewController
 @end

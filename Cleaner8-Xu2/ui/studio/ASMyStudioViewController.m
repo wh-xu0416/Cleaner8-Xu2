@@ -8,11 +8,12 @@
 #import "ASStudioUtils.h"
 #import "ASTabSegmentView.h"
 
+#import "ASMediaPreviewViewController.h"
+
 static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; }
 
 @interface ASMyStudioViewController () <UITableViewDelegate, UITableViewDataSource, PHPhotoLibraryChangeObserver>
 
-// UI
 @property (nonatomic, strong) UIView *blueHeader;
 @property (nonatomic, strong) UIButton *backBtn;
 @property (nonatomic, strong) UILabel *titleLabel;
@@ -26,10 +27,10 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
 @property (nonatomic, strong) UILabel *emptyLabel;
 @property (nonatomic, strong) UIButton *limitedBtn;
 
-// Data
 @property (nonatomic, strong) PHCachingImageManager *imgMgr;
 @property (nonatomic, strong) NSArray<ASStudioItem *> *data;
 @property (nonatomic, assign) ASStudioMediaType currentType;
+@property (nonatomic, strong) NSArray<PHAsset *> *selectedAssets;
 
 @end
 
@@ -44,6 +45,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     [super viewDidLoad];
 
     self.view.backgroundColor = UIColor.whiteColor;
+    self.selectedAssets = @[];
 
     self.imgMgr = [PHCachingImageManager new];
     self.data = @[];
@@ -62,17 +64,21 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
 #pragma mark - UI
 
 - (void)buildUI {
-    // 蓝色 header
     self.blueHeader = [UIView new];
     self.blueHeader.translatesAutoresizingMaskIntoConstraints = NO;
     self.blueHeader.backgroundColor = ASBlue();
     [self.view addSubview:self.blueHeader];
 
-    self.backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    self.backBtn.tintColor = UIColor.whiteColor;
-    if (@available(iOS 13.0,*)) [self.backBtn setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
+    self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+
+    UIImage *backImg = [[UIImage imageNamed:@"ic_return_white"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.backBtn setImage:backImg forState:UIControlStateNormal];
+
+    self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.backBtn.adjustsImageWhenHighlighted = NO;
+
     [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
+    self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.blueHeader addSubview:self.backBtn];
 
     self.titleLabel = [UILabel new];
@@ -83,7 +89,6 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.blueHeader addSubview:self.titleLabel];
 
-    // 白色大圆角卡片容器
     self.whiteCard = [UIView new];
     self.whiteCard.translatesAutoresizingMaskIntoConstraints = NO;
     self.whiteCard.backgroundColor = UIColor.whiteColor;
@@ -91,7 +96,6 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     self.whiteCard.layer.masksToBounds = YES;
     [self.view addSubview:self.whiteCard];
 
-    // tabs
     self.tabs = [ASTabSegmentView new];
     self.tabs.translatesAutoresizingMaskIntoConstraints = NO;
     self.tabs.selectedIndex = 0;
@@ -102,7 +106,6 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     };
     [self.whiteCard addSubview:self.tabs];
 
-    // table
     self.table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.table.translatesAutoresizingMaskIntoConstraints = NO;
     self.table.delegate = self;
@@ -114,7 +117,6 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     [self.table registerClass:[ASStudioCell class] forCellReuseIdentifier:@"ASStudioCell"];
     [self.whiteCard addSubview:self.table];
 
-    // empty
     self.emptyView = [UIView new];
     self.emptyView.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyView.backgroundColor = UIColor.whiteColor;
@@ -134,13 +136,12 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     self.limitedBtn.hidden = YES;
     [self.emptyView addSubview:self.limitedBtn];
 
-    // layout
     [NSLayoutConstraint activateConstraints:@[
         [self.blueHeader.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.blueHeader.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.blueHeader.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:18],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:6],
         [self.backBtn.topAnchor constraintEqualToAnchor:self.blueHeader.safeAreaLayoutGuide.topAnchor constant:10],
         [self.backBtn.widthAnchor constraintEqualToConstant:44],
         [self.backBtn.heightAnchor constraintEqualToConstant:44],
@@ -159,7 +160,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
         [self.tabs.trailingAnchor constraintEqualToAnchor:self.whiteCard.trailingAnchor],
         [self.tabs.heightAnchor constraintEqualToConstant:62],
 
-        [self.table.topAnchor constraintEqualToAnchor:self.tabs.bottomAnchor constant:6],
+        [self.table.topAnchor constraintEqualToAnchor:self.tabs.bottomAnchor constant:0],
         [self.table.leadingAnchor constraintEqualToAnchor:self.whiteCard.leadingAnchor],
         [self.table.trailingAnchor constraintEqualToAnchor:self.whiteCard.trailingAnchor],
         [self.table.bottomAnchor constraintEqualToAnchor:self.whiteCard.bottomAnchor],
@@ -229,7 +230,6 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     }
 
     self.table.hidden = NO;
-    // emptyView 在 reload 时决定
 }
 
 - (void)onLimited:(id)sender {
@@ -264,7 +264,6 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     self.data = [[ASStudioStore shared] itemsForType:self.currentType] ?: @[];
     [self.table reloadData];
 
-    // empty state
     PHAuthorizationStatus st;
     if (@available(iOS 14.0,*)) st = [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
     else st = [PHPhotoLibrary authorizationStatus];
@@ -291,7 +290,6 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     ASStudioCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ASStudioCell" forIndexPath:ip];
     ASStudioItem *it = self.data[ip.row];
 
-    // 统一 item：只改文件名
     cell.nameLabel.text = it.displayName.length ? it.displayName : @"(Unnamed)";
 
     NSString *sizeText = [ASStudioUtils humanBytes:it.afterBytes];
@@ -305,12 +303,10 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
 
     [cell showVideoBadge:(it.type == ASStudioMediaTypeVideo)];
 
-    // delete
     cell.deleteButton.tag = ip.row;
     [cell.deleteButton removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
     [cell.deleteButton addTarget:self action:@selector(onDelete:) forControlEvents:UIControlEventTouchUpInside];
 
-    // thumb
     cell.thumbView.image = nil;
     if (it.assetId.length > 0) {
         PHFetchResult<PHAsset *> *r = [PHAsset fetchAssetsWithLocalIdentifiers:@[it.assetId] options:nil];
@@ -341,7 +337,32 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     return cell;
 }
 
+// 进入预览页
+- (void)goPreviewAssets:(NSArray<PHAsset *> *)assets {
+    if (assets.count == 0) return;
+
+    NSArray<PHAsset *> *previewAssets = assets;
+    NSIndexSet *preSel = [NSIndexSet indexSet];
+
+    ASMediaPreviewViewController *p =
+    [[ASMediaPreviewViewController alloc] initWithAssets:previewAssets
+                                           initialIndex:0
+                                        selectedIndexes:preSel];
+
+    p.bestIndex = 0;
+    p.showsBestBadge = YES;
+
+    __weak typeof(self) weakSelf = self;
+    p.onBack = ^(NSArray<PHAsset *> *selectedAssets, NSIndexSet *selectedIndexes) {
+        weakSelf.selectedAssets = selectedAssets;
+    };
+
+    [self.navigationController pushViewController:p animated:YES];
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)ip {
+    [tableView deselectRowAtIndexPath:ip animated:YES];
+
     ASStudioItem *it = self.data[ip.row];
     if (it.assetId.length == 0) return;
 
@@ -349,8 +370,8 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     PHAsset *asset = r.firstObject;
     if (!asset) return;
 
-    if (it.type == ASStudioMediaTypePhoto) [self previewPhotoAsset:asset];
-    else [self previewVideoAsset:asset];
+    self.selectedAssets = @[asset];
+    [self goPreviewAssets:self.selectedAssets];
 }
 
 #pragma mark - Preview

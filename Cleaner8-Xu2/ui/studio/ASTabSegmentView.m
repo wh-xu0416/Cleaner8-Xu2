@@ -25,7 +25,6 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
         [_photosBtn setTitle:@"Photos" forState:UIControlStateNormal];
         [_videoBtn  setTitle:@"Video"  forState:UIControlStateNormal];
 
-        // ✅ 字号 24
         _photosBtn.titleLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
         _videoBtn.titleLabel.font  = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
 
@@ -74,14 +73,12 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
 
     CGFloat w = self.bounds.size.width;
 
-    // 指示器宽度保持你之前那种“看起来更像截图”的宽度
     CGFloat ulW = w * 0.34;
 
     CGFloat x = (self.selectedIndex == 0)
         ? (w * 0.5 - ulW) * 0.5
         : (w * 0.5) + (w * 0.5 - ulW) * 0.5;
 
-    // ✅ 指示器高度 5；✅ 圆角 3
     CGFloat h = 5.0;
     CGFloat y = self.bounds.size.height - h;
 

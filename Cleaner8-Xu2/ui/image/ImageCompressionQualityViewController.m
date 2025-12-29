@@ -43,8 +43,15 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 @end
 
 @implementation ASMinusCell
+
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
+
+        // ✅ 不裁剪：允许按钮突出
+        self.clipsToBounds = NO;
+        self.layer.masksToBounds = NO;
+        self.contentView.clipsToBounds = NO;
+        self.contentView.layer.masksToBounds = NO;
 
         self.iv = [UIImageView new];
         self.iv.contentMode = UIViewContentModeScaleAspectFill;
@@ -52,26 +59,21 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         self.iv.layer.masksToBounds = YES;
         self.iv.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1];
         self.iv.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.contentView addSubview:self.iv];
 
-        self.clipsToBounds = NO;
-        self.contentView.clipsToBounds = NO;
-        self.layer.masksToBounds = NO;
-        self.contentView.layer.masksToBounds = NO;
-
-        self.minusBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-        self.minusBtn.tintColor = UIColor.whiteColor;
-        self.minusBtn.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.45];
-        self.minusBtn.layer.cornerRadius = 10.5;
-        self.minusBtn.layer.masksToBounds = YES;
-        if (@available(iOS 13.0,*)) {
-            UIImageSymbolConfiguration *cfg =
-            [UIImageSymbolConfiguration configurationWithPointSize:21 weight:UIImageSymbolWeightRegular];
-            UIImage *img = [[UIImage systemImageNamed:@"minus"] imageByApplyingSymbolConfiguration:cfg];
-            [self.minusBtn setImage:img forState:UIControlStateNormal];
-        }
+        self.minusBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         self.minusBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
-        [self.contentView addSubview:self.iv];
+        self.minusBtn.layer.cornerRadius = 12;
+        self.minusBtn.layer.masksToBounds = YES;
+
+        // ✅ ic_delete 22x22 原尺寸显示
+        UIImage *delImg = [[UIImage imageNamed:@"ic_delete"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        [self.minusBtn setImage:delImg forState:UIControlStateNormal];
+        self.minusBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
+
+        self.minusBtn.layer.zPosition = 1000;
+
         [self.contentView addSubview:self.minusBtn];
 
         [NSLayoutConstraint activateConstraints:@[
@@ -80,14 +82,21 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
             [self.iv.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.iv.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            [self.minusBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-6],
-            [self.minusBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:6],
-            [self.minusBtn.widthAnchor constraintEqualToConstant:21],
-            [self.minusBtn.heightAnchor constraintEqualToConstant:21],
+            [self.minusBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-8],
+            [self.minusBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:8],
+            [self.minusBtn.widthAnchor constraintEqualToConstant:24],
+            [self.minusBtn.heightAnchor constraintEqualToConstant:24],
         ]];
     }
     return self;
 }
+
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    if ([super pointInside:point withEvent:event]) return YES;
+    CGPoint p = [self convertPoint:point toView:self.contentView];
+    return CGRectContainsPoint(self.minusBtn.frame, p);
+}
+
 @end
 
 #pragma mark - Option Row (same layout/style as Video)
@@ -225,8 +234,8 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     [NSLayoutConstraint activateConstraints:@[
         [self.radioIcon.leadingAnchor constraintEqualToAnchor:leftGroup.leadingAnchor],
         [self.radioIcon.centerYAnchor constraintEqualToAnchor:leftGroup.centerYAnchor],
-        [self.radioIcon.widthAnchor constraintEqualToConstant:26],
-        [self.radioIcon.heightAnchor constraintEqualToConstant:26],
+        [self.radioIcon.widthAnchor constraintEqualToConstant:24],
+        [self.radioIcon.heightAnchor constraintEqualToConstant:24],
 
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.radioIcon.trailingAnchor constant:14],
         [self.titleLabel.topAnchor constraintEqualToAnchor:leftGroup.topAnchor],
@@ -387,11 +396,14 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     header.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:header];
 
-    self.backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    if (@available(iOS 13.0, *)) {
-        [self.backBtn setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
-    }
-    self.backBtn.tintColor = ASBlue();
+    self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+
+    UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.backBtn setImage:backImg forState:UIControlStateNormal];
+
+    self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.backBtn.adjustsImageWhenHighlighted = NO;
+
     [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -404,7 +416,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     [header addSubview:self.backBtn];
     [header addSubview:self.titleLabel];
 
-    // Preview：九宫格（✅ 80x80、间隔 16，其余布局同视频的 preview block 位置）
     UIView *preview = [UIView new];
     preview.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:preview];
@@ -440,11 +451,10 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.afterLabel.textColor = ASBlue();
 
     self.arrowView = [UIImageView new];
-    if (@available(iOS 13.0, *)) {
-        self.arrowView.image = [[UIImage systemImageNamed:@"arrow.right"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-        self.arrowView.tintColor = ASBlue();
-    }
-    self.arrowView.contentMode = UIViewContentModeScaleAspectFit;
+
+    UIImage *toImg = [[UIImage imageNamed:@"ic_compress_to"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    self.arrowView.image = toImg;
+    self.arrowView.contentMode = UIViewContentModeCenter;
 
     UIView *ba = [UIView new];
     ba.translatesAutoresizingMaskIntoConstraints = NO;
@@ -458,8 +468,8 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     baStack.translatesAutoresizingMaskIntoConstraints = NO;
     [ba addSubview:baStack];
 
-    [self.arrowView.widthAnchor constraintEqualToConstant:26].active = YES;
-    [self.arrowView.heightAnchor constraintEqualToConstant:26].active = YES;
+    [self.arrowView.widthAnchor constraintEqualToConstant:29].active = YES;
+    [self.arrowView.heightAnchor constraintEqualToConstant:29].active = YES;
 
     self.saveLabel = [UILabel new];
     self.saveLabel.font = ASRG(16);
@@ -531,7 +541,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         [header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [header.heightAnchor constraintEqualToConstant:headerH],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:12],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:6],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
         [self.backBtn.widthAnchor constraintEqualToConstant:44],
         [self.backBtn.heightAnchor constraintEqualToConstant:44],
@@ -699,10 +709,31 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         }
     }];
 
-    cell.minusBtn.tag = indexPath.item;
     [cell.minusBtn removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
-    [cell.minusBtn addTarget:self action:@selector(onRemove:) forControlEvents:UIControlEventTouchUpInside];
+    [cell.minusBtn addTarget:self action:@selector(onRemoveBtn:) forControlEvents:UIControlEventTouchUpInside];
+    
     return cell;
+}
+
+- (void)onRemoveBtn:(UIButton *)btn {
+    // 用按钮位置反查 indexPath，避免 tag 错位
+    CGPoint p = [btn convertPoint:CGPointMake(btn.bounds.size.width/2.0, btn.bounds.size.height/2.0)
+                           toView:self.grid];
+    NSIndexPath *ip = [self.grid indexPathForItemAtPoint:p];
+    if (!ip) return;
+
+    NSInteger i = ip.item;
+    if (i < 0 || i >= self.assets.count) return;
+
+    [self.assets removeObjectAtIndex:i];
+    if (self.assets.count == 0) {
+        [self.navigationController popViewControllerAnimated:YES];
+        return;
+    }
+
+    [self.grid reloadData];
+    [self calcBefore];
+    [self refreshAll];
 }
 
 - (void)onRemove:(UIButton *)btn {

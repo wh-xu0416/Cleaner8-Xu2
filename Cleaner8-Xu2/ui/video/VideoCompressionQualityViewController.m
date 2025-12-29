@@ -199,8 +199,8 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     [NSLayoutConstraint activateConstraints:@[
         [self.radioIcon.leadingAnchor constraintEqualToAnchor:leftGroup.leadingAnchor],
         [self.radioIcon.centerYAnchor constraintEqualToAnchor:leftGroup.centerYAnchor],
-        [self.radioIcon.widthAnchor constraintEqualToConstant:26],
-        [self.radioIcon.heightAnchor constraintEqualToConstant:26],
+        [self.radioIcon.widthAnchor constraintEqualToConstant:24],
+        [self.radioIcon.heightAnchor constraintEqualToConstant:24],
 
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.radioIcon.trailingAnchor constant:14],
         [self.titleLabel.topAnchor constraintEqualToAnchor:leftGroup.topAnchor],
@@ -234,26 +234,25 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 
 - (void)applySelectedState:(BOOL)selected {
 
-    if (@available(iOS 13.0, *)) {
-        if (selected) {
-            self.radioIcon.image = [[UIImage systemImageNamed:@"checkmark.circle.fill"]
-                                    imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-            self.radioIcon.tintColor = ASBlue();
-            self.layer.borderWidth = 2;
-            self.layer.borderColor = ASBlue().CGColor;
-        } else {
-            self.radioIcon.image = [[UIImage systemImageNamed:@"circle"]
-                                    imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-            self.radioIcon.tintColor = [UIColor colorWithWhite:0 alpha:0.25];
-            self.layer.borderWidth = 0;
-            self.layer.borderColor = UIColor.clearColor.CGColor;
-        }
+    static UIImage *onImg = nil;
+    static UIImage *offImg = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        onImg  = [[UIImage imageNamed:@"ic_select_s"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        offImg = [[UIImage imageNamed:@"ic_select_gray_n"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    });
+
+    self.radioIcon.image = selected ? onImg : offImg;
+    self.radioIcon.contentMode = UIViewContentModeScaleAspectFit;
+
+    if (selected) {
+        self.layer.borderWidth = 2;
+        self.layer.borderColor = ASBlue().CGColor;
     } else {
-        self.layer.borderWidth = selected ? 2 : 0;
-        self.layer.borderColor = selected ? ASBlue().CGColor : UIColor.clearColor.CGColor;
+        self.layer.borderWidth = 0;
+        self.layer.borderColor = UIColor.clearColor.CGColor;
     }
 }
-
 @end
 
 #pragma mark - VC
@@ -340,7 +339,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 
 - (UILabel *)makeVal {
     UILabel *l = [UILabel new];
-    l.font = ASSB(15);
+    l.font = ASMD(15);
     l.textColor = UIColor.blackColor;
     l.text = @"--";
     return l;
@@ -369,16 +368,19 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     [self.view addSubview:self.compressBtn];
     self.compressBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // Header（固定，不滚动）
-    self.backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    if (@available(iOS 13.0, *)) {
-        [self.backBtn setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
-    }
-    self.backBtn.tintColor = ASBlue();
-    [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
+    self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
 
+    UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.backBtn setImage:backImg forState:UIControlStateNormal];
+
+    self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.backBtn.adjustsImageWhenHighlighted = NO;
+
+    [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
+    self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    
     self.titleLabel = [UILabel new];
-    self.titleLabel.font = ASSB(28);
+    self.titleLabel.font = ASSB(24);
     self.titleLabel.textColor = UIColor.blackColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
 
@@ -400,7 +402,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     UIImage *img = [UIImage imageNamed:@"ic_play"];
     [self.playBtn setImage:[img imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]
                   forState:UIControlStateNormal];
-    self.playBtn.layer.cornerRadius = 18;
+    self.playBtn.layer.cornerRadius = 11;
     self.playBtn.layer.masksToBounds = YES;
     [self.playBtn addTarget:self action:@selector(onPlay) forControlEvents:UIControlEventTouchUpInside];
 
@@ -414,7 +416,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 
 
     // playBtn 覆盖在 thumb 上（加到 preview 上也可以）
-    [preview addSubview:self.playBtn];
+    [self.thumbView addSubview:self.playBtn];
     self.thumbView.translatesAutoresizingMaskIntoConstraints = NO;
     self.playBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -487,10 +489,10 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [info.centerYAnchor constraintEqualToAnchor:self.thumbView.centerYAnchor],
 
         // play button 覆盖在 thumb 上
-        [self.playBtn.leadingAnchor constraintEqualToAnchor:self.thumbView.leadingAnchor constant:12],
-        [self.playBtn.topAnchor constraintEqualToAnchor:self.thumbView.topAnchor constant:12],
-        [self.playBtn.widthAnchor constraintEqualToConstant:36],
-        [self.playBtn.heightAnchor constraintEqualToConstant:36],
+        [self.playBtn.leadingAnchor constraintEqualToAnchor:self.thumbView.leadingAnchor constant:11],
+        [self.playBtn.topAnchor constraintEqualToAnchor:self.thumbView.topAnchor constant:11],
+        [self.playBtn.widthAnchor constraintEqualToConstant:22],
+        [self.playBtn.heightAnchor constraintEqualToConstant:22],
 
         // info labels（高度闭合很关键）
         [self.sizeKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
@@ -532,12 +534,11 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.afterLabel.textColor = ASBlue();
 
     self.arrowView = [UIImageView new];
-    if (@available(iOS 13.0, *)) {
-        self.arrowView.image = [[UIImage systemImageNamed:@"arrow.right"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-        self.arrowView.tintColor = ASBlue();
-    }
-    self.arrowView.contentMode = UIViewContentModeScaleAspectFit;
-
+    
+    UIImage *toImg = [[UIImage imageNamed:@"ic_compress_to"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    self.arrowView.image = toImg;
+    self.arrowView.contentMode = UIViewContentModeCenter;
+    
     UIView *ba = [UIView new];
     [self.view addSubview:ba];
     ba.translatesAutoresizingMaskIntoConstraints = NO;
@@ -546,7 +547,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     baStack.axis = UILayoutConstraintAxisHorizontal;
     baStack.alignment = UIStackViewAlignmentCenter;
     baStack.distribution = UIStackViewDistributionFill;
-    baStack.spacing = 17;                 // ✅ 你要的间隔 17
+    baStack.spacing = 17;                 
     baStack.translatesAutoresizingMaskIntoConstraints = NO;
     [ba addSubview:baStack];
 
@@ -621,7 +622,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [header.heightAnchor constraintEqualToConstant:headerH],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:12],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:6],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
         [self.backBtn.widthAnchor constraintEqualToConstant:44],
         [self.backBtn.heightAnchor constraintEqualToConstant:44],
@@ -636,11 +637,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 
         [self.thumbView.widthAnchor constraintEqualToConstant:thumbW],
         [self.thumbView.heightAnchor constraintEqualToConstant:thumbH],
-
-        [self.playBtn.leadingAnchor constraintEqualToAnchor:self.thumbView.leadingAnchor constant:12],
-        [self.playBtn.topAnchor constraintEqualToAnchor:self.thumbView.topAnchor constant:12],
-        [self.playBtn.widthAnchor constraintEqualToConstant:36],
-        [self.playBtn.heightAnchor constraintEqualToConstant:36],
 
         // thumb 固定尺寸保持
         [self.thumbView.widthAnchor constraintEqualToConstant:thumbW],

@@ -1,5 +1,6 @@
 #import "ImageCompressionProgressViewController.h"
 #import "ImageCompressionResultViewController.h"
+#import "LivePhotoCoverFrameManager.h"
 
 static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; }
 static inline UIColor *ASGrayBG(void){ return [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0]; }
@@ -45,16 +46,19 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
 
         self.icon = [UIImageView new];
         self.icon.contentMode = UIViewContentModeScaleAspectFit;
-        if (@available(iOS 13.0,*)) self.icon.image = [UIImage systemImageNamed:@"paperplane.fill"]; // 占位
-        self.icon.tintColor = ASBlue();
+
+        self.icon.image = [[UIImage imageNamed:@"ic_speed"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        self.icon.tintColor = nil;
+
+        self.icon.layer.zPosition = 9999;
 
         self.bubble = [UIView new];
         self.bubble.backgroundColor = ASBlue();
-        self.bubble.layer.cornerRadius = 10;
+        self.bubble.layer.cornerRadius = 8;
         self.bubble.layer.masksToBounds = YES;
 
         self.bubbleLabel = [UILabel new];
-        self.bubbleLabel.font = ASSB(18);
+        self.bubbleLabel.font = ASSB(15);
         self.bubbleLabel.textColor = UIColor.whiteColor;
         self.bubbleLabel.textAlignment = NSTextAlignmentCenter;
         self.bubbleLabel.text = @"0%";
@@ -86,9 +90,9 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
             [self.fill.bottomAnchor constraintEqualToAnchor:self.track.bottomAnchor],
 
             // icon 覆盖在进度条上方（不被裁切）
-            [self.icon.centerYAnchor constraintEqualToAnchor:self.track.centerYAnchor],
-            [self.icon.widthAnchor constraintEqualToConstant:26],
-            [self.icon.heightAnchor constraintEqualToConstant:26],
+            [self.icon.centerYAnchor constraintEqualToAnchor:self.track.centerYAnchor constant:2],
+            [self.icon.widthAnchor constraintEqualToConstant:28],
+            [self.icon.heightAnchor constraintEqualToConstant:28],
 
             [self.bubble.bottomAnchor constraintEqualToAnchor:self.track.topAnchor constant:-10],
             // ✅ bubble 高度加大，匹配上下内边距 8
@@ -131,9 +135,8 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     CGFloat fill = w * self.progress;
     self.fillW.constant = fill;
 
-    CGFloat iconW = 26;
+    CGFloat iconW = 28;
 
-    // ✅ 用 AutoLayout 计算 bubble 实际宽度（避免 0 导致 clamp 不准）
     CGFloat bubbleW = [self.bubble systemLayoutSizeFittingSize:UILayoutFittingCompressedSize].width;
     if (bubbleW <= 0) bubbleW = 60;
 
@@ -163,13 +166,15 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
 
 @interface ASProgCell : UICollectionViewCell
 @property (nonatomic, strong) UIImageView *iv;
+@property (nonatomic, copy) NSString *representedAssetId;
 @end
+
 @implementation ASProgCell
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
         self.iv = [UIImageView new];
         self.iv.contentMode = UIViewContentModeScaleAspectFill;
-        self.iv.layer.cornerRadius = 18;
+        self.iv.layer.cornerRadius = 11;
         self.iv.layer.masksToBounds = YES;
         self.iv.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1];
         self.iv.translatesAutoresizingMaskIntoConstraints = NO;
@@ -183,11 +188,28 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     }
     return self;
 }
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.iv.image = nil;
+    self.representedAssetId = nil;
+}
 @end
 
 #pragma mark - VC
 
 @interface ImageCompressionProgressViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate>
+
+typedef NS_ENUM(NSInteger, ASProgressMode) {
+    ASProgressModeImageCompress = 0,
+    ASProgressModeLiveCover     = 1,
+};
+
+@property (nonatomic) ASProgressMode mode;
+@property (nonatomic) BOOL deleteOriginalLive;
+
+@property (nonatomic, strong) LivePhotoCoverFrameManager *liveManager;
+
 @property (nonatomic, weak) id<UIGestureRecognizerDelegate> popDelegateBackup;
 
 @property (nonatomic, strong) NSArray<PHAsset *> *assets;
@@ -215,6 +237,22 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
 @end
 
 @implementation ImageCompressionProgressViewController
+
+- (instancetype)initWithLiveAssets:(NSArray<PHAsset *> *)assets
+                   totalBeforeBytes:(uint64_t)beforeBytes
+                estimatedAfterBytes:(uint64_t)afterBytes
+                      deleteOriginal:(BOOL)deleteOriginal {
+    if (self = [super init]) {
+        _assets = assets ?: @[];
+        _mode = ASProgressModeLiveCover;
+        _deleteOriginalLive = deleteOriginal;
+        _totalBeforeBytes = beforeBytes;
+        _estimatedAfterBytes = afterBytes;
+        _showingCancelAlert = NO;
+        _didExit = NO;
+    }
+    return self;
+}
 
 - (instancetype)initWithAssets:(NSArray<PHAsset *> *)assets
                        quality:(ASImageCompressionQuality)quality
@@ -298,15 +336,19 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     header.translatesAutoresizingMaskIntoConstraints = NO;
     [self.topCard addSubview:header];
 
-    self.backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.backBtn.tintColor = ASBlue();
-    if (@available(iOS 13.0,*)) [self.backBtn setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
+    self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.backBtn setImage:backImg forState:UIControlStateNormal];
+
+    self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.backBtn.adjustsImageWhenHighlighted = NO;
+
     [self.backBtn addTarget:self action:@selector(onCancelTapped) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
     self.titleLabel = [UILabel new];
     self.titleLabel.text = @"In Process";
-    self.titleLabel.font = ASSB(28);
+    self.titleLabel.font = ASSB(24);
     self.titleLabel.textColor = UIColor.blackColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -330,11 +372,11 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     [self.topCard addSubview:self.grid];
 
     self.beforeLabel = [UILabel new];
-    self.beforeLabel.font = ASRG(22);
+    self.beforeLabel.font = ASRG(15);
     self.beforeLabel.textColor = UIColor.blackColor;
 
     self.afterLabel = [UILabel new];
-    self.afterLabel.font = ASSB(22);
+    self.afterLabel.font = ASSB(15);
     self.afterLabel.textColor = ASBlue();
 
     self.bar = [ASImageBubbleProgressBarView new];
@@ -344,7 +386,6 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[self.beforeLabel, self.bar, self.afterLabel]];
     row.axis = UILayoutConstraintAxisHorizontal;
 
-    // ✅ 底部对齐（进度条底部与两边文案底部对齐）
     row.alignment = UIStackViewAlignmentBottom;
 
     row.spacing = 16;
@@ -358,9 +399,10 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     self.tipLabel.font = ASRG(17);
     self.tipLabel.textColor = [UIColor colorWithWhite:0.15 alpha:1];
     self.tipLabel.numberOfLines = 0;
-    self.tipLabel.lineBreakMode = NSLineBreakByWordWrapping; // ✅ 多行更稳
+    self.tipLabel.lineBreakMode = NSLineBreakByWordWrapping;
+    self.tipLabel.preferredMaxLayoutWidth = UIScreen.mainScreen.bounds.size.width - 60;
     self.tipLabel.textAlignment = NSTextAlignmentCenter;
-    self.tipLabel.text = @"It is recommended not to minimize\nor close the app...";
+    self.tipLabel.text = @"It is recommended not to minimize or close the app...";
     self.tipLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.tipLabel];
 
@@ -379,7 +421,6 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     self.cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.cancelBtn];
 
-    // ✅ gridSide = 114*3 + 5*2 = 352
     CGFloat gridSide = 352;
 
     [NSLayoutConstraint activateConstraints:@[
@@ -392,7 +433,7 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
         [header.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor],
         [header.heightAnchor constraintEqualToConstant:56],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:12],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:6],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
         [self.backBtn.widthAnchor constraintEqualToConstant:44],
         [self.backBtn.heightAnchor constraintEqualToConstant:44],
@@ -400,13 +441,11 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:header.centerXAnchor],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
 
-        // ✅ 九宫格距离 titlebar 10
         [self.grid.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:10],
         [self.grid.centerXAnchor constraintEqualToAnchor:self.topCard.centerXAnchor],
         [self.grid.widthAnchor constraintEqualToConstant:gridSide],
         [self.grid.heightAnchor constraintEqualToConstant:gridSide],
 
-        // ✅ 九宫格到气泡/进度条这一行 30
         [row.topAnchor constraintEqualToAnchor:self.grid.bottomAnchor constant:30],
         [row.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:side],
         [row.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor constant:-side],
@@ -414,9 +453,9 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
         [self.bar.heightAnchor constraintEqualToConstant:60],
         [self.bar.widthAnchor constraintGreaterThanOrEqualToConstant:150],
 
-        [self.topCard.bottomAnchor constraintEqualToAnchor:row.bottomAnchor constant:66],
+        [self.topCard.bottomAnchor constraintEqualToAnchor:row.bottomAnchor constant:46],
 
-        [self.tipLabel.topAnchor constraintEqualToAnchor:self.topCard.bottomAnchor constant:46],
+        [self.tipLabel.topAnchor constraintEqualToAnchor:self.topCard.bottomAnchor constant:40],
         [self.tipLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:30],
         [self.tipLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-30],
 
@@ -440,9 +479,53 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
 #pragma mark - Compress
 
 - (void)startCompress {
-    self.manager = [ImageCompressionManager new];
-
     __weak typeof(self) weakSelf = self;
+
+    if (self.mode == ASProgressModeLiveCover) {
+        self.liveManager = [LivePhotoCoverFrameManager new];
+
+        [self.liveManager convertLiveAssets:self.assets
+                              deleteOriginal:self.deleteOriginalLive
+                                    progress:^(NSInteger currentIndex, NSInteger totalCount, float overallProgress, PHAsset *currentAsset) {
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (weakSelf.didExit) return;
+                int percent = (int)lrintf(overallProgress * 100.0f);
+                percent = MAX(0, MIN(100, percent));
+                [weakSelf.bar setProgress:overallProgress percentText:[NSString stringWithFormat:@"%d%%", percent]];
+            });
+
+        } completion:^(ASImageCompressionSummary * _Nullable summary, NSError * _Nullable error) {
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (weakSelf.didExit) return;
+
+                if (error) {
+                    if (error.code == -999) {
+                        [weakSelf.navigationController popViewControllerAnimated:YES];
+                        return;
+                    }
+                    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Convert Failed"
+                                                                                message:error.localizedDescription ?: @"Unknown error"
+                                                                         preferredStyle:UIAlertControllerStyleAlert];
+                    [ac addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
+                        [weakSelf.navigationController popViewControllerAnimated:YES];
+                    }]];
+                    [weakSelf presentViewController:ac animated:YES completion:nil];
+                    return;
+                }
+
+                ImageCompressionResultViewController *vc =
+                [[ImageCompressionResultViewController alloc] initWithSummary:summary];
+                [weakSelf.navigationController pushViewController:vc animated:YES];
+            });
+
+        }];
+        return;
+    }
+
+    // ====== 图片压缩逻辑 ======
+    self.manager = [ImageCompressionManager new];
     [self.manager compressAssets:self.assets
                          quality:self.quality
                         progress:^(NSInteger currentIndex, NSInteger totalCount, float overallProgress, PHAsset *currentAsset) {
@@ -455,25 +538,19 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
         });
 
     } completion:^(ASImageCompressionSummary * _Nullable summary, NSError * _Nullable error) {
-
         dispatch_async(dispatch_get_main_queue(), ^{
             if (weakSelf.didExit) return;
-
             if (error) {
-                if (error.code == -999) { // cancel
-                    [weakSelf.navigationController popViewControllerAnimated:YES];
-                    return;
-                }
+                if (error.code == -999) { [weakSelf.navigationController popViewControllerAnimated:YES]; return; }
                 UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Compress Failed"
                                                                             message:error.localizedDescription ?: @"Unknown error"
                                                                      preferredStyle:UIAlertControllerStyleAlert];
-                [ac addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                [ac addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
                     [weakSelf.navigationController popViewControllerAnimated:YES];
                 }]];
                 [weakSelf presentViewController:ac animated:YES completion:nil];
                 return;
             }
-
             ImageCompressionResultViewController *vc =
             [[ImageCompressionResultViewController alloc] initWithSummary:summary];
             [weakSelf.navigationController pushViewController:vc animated:YES];
@@ -505,7 +582,11 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     [ac addAction:[UIAlertAction actionWithTitle:@"YES" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         weakSelf.showingCancelAlert = NO;
         weakSelf.didExit = YES;
-        [weakSelf.manager cancel];
+        if (weakSelf.mode == ASProgressModeLiveCover) {
+            [weakSelf.liveManager cancel];
+        } else {
+            [weakSelf.manager cancel];
+        }
         [weakSelf.navigationController popViewControllerAnimated:YES];
     }]];
 
@@ -517,20 +598,33 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
     return MIN(self.assets.count, 9);
 }
+
 - (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     ASProgCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"p" forIndexPath:indexPath];
     PHAsset *a = self.assets[indexPath.item];
 
+    cell.representedAssetId = a.localIdentifier;
+    cell.iv.image = nil;
+
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.networkAccessAllowed = YES;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeFastFormat;
+    opt.resizeMode = PHImageRequestOptionsResizeModeExact;
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    opt.synchronous = NO;
+
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGFloat px = 114.0 * scale * 2.0;
+    CGSize target = CGSizeMake(px, px);
 
     [[PHImageManager defaultManager] requestImageForAsset:a
-                                              targetSize:CGSizeMake(500, 500)
+                                              targetSize:target
                                              contentMode:PHImageContentModeAspectFill
                                                  options:opt
                                            resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
-        if (result) cell.iv.image = result;
+        if (!result) return;
+        if ([cell.representedAssetId isEqualToString:a.localIdentifier]) {
+            cell.iv.image = result;
+        }
     }];
     return cell;
 }

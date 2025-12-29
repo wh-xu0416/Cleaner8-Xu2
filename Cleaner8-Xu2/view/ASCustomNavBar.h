@@ -8,7 +8,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, readonly) UILabel  *titleLabel;
 @property (nonatomic, strong, readonly) UIButton *rightButton;
 
-@property (nonatomic, assign) BOOL allSelected;
+@property (nonatomic, assign) BOOL allSelected;   
 @property (nonatomic, assign) BOOL showRightButton;
 
 @property (nonatomic, copy) void (^onBack)(void);

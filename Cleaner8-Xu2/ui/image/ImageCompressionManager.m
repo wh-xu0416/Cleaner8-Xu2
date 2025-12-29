@@ -153,7 +153,7 @@ static uint64_t ASAssetFileSize(PHAsset *asset) {
             NSURL *url = [NSURL fileURLWithPath:tmp];
             [jpg writeToURL:url atomically:YES];
 
-            // ✅ 保存到系统相册 + 加入 My Studio album + 拿到 assetId
+            // 保存到系统相册 + 加入 My Studio album + 拿到 assetId
             dispatch_semaphore_t saveSema = dispatch_semaphore_create(0);
             __block BOOL saveOK = NO;
             __block NSString *createdAssetId = nil;
@@ -176,7 +176,7 @@ static uint64_t ASAssetFileSize(PHAsset *asset) {
             [[NSFileManager defaultManager] removeItemAtURL:url error:nil];
 
             if (saveOK && createdAssetId.length > 0) {
-                // ✅ 写入索引（历史记录）
+                // 写入索引（历史记录）
                 ASStudioItem *item = [ASStudioItem new];
                 item.assetId = createdAssetId;
                 item.type = ASStudioMediaTypePhoto;

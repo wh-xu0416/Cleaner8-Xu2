@@ -4,6 +4,13 @@
 #import <Photos/Photos.h>
 
 #pragma mark - Helpers
+static NSString * const kASVidSizeCachePlist = @"as_vid_size_cache_v2.plist";
+
+static inline NSString *ASVidSizeCachePath(void) {
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
+    NSString *dir = paths.firstObject ?: NSTemporaryDirectory();
+    return [dir stringByAppendingPathComponent:kASVidSizeCachePlist];
+}
 
 static inline UIColor *ASBlue(void) {
     // #024DFFFF
@@ -70,6 +77,7 @@ static NSString *ASDurationText(NSTimeInterval duration) {
 #pragma mark - Cell (Screenshot style)
 
 @interface ASVideoCell : UICollectionViewCell
+@property (nonatomic, assign) PHImageRequestID requestId;
 @property (nonatomic, strong) UIImageView *thumbView;
 @property (nonatomic, strong) UIImageView *playIcon;
 @property (nonatomic, strong) UIButton *savePill;
@@ -77,6 +85,21 @@ static NSString *ASDurationText(NSTimeInterval duration) {
 @end
 
 @implementation ASVideoCell
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+
+    // ✅ 真·胶囊：圆角永远 = 高度/2
+    CGFloat r = self.savePill.bounds.size.height * 0.5;
+    self.savePill.layer.cornerRadius = r;
+    self.savePill.clipsToBounds = YES;
+
+    // ✅ 更顺滑的圆角（iOS 13+）
+    if (@available(iOS 13.0, *)) {
+        self.savePill.layer.cornerCurve = kCACornerCurveContinuous;
+    }
+}
+
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
 
@@ -90,7 +113,6 @@ static NSString *ASDurationText(NSTimeInterval duration) {
         _thumbView.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:_thumbView];
 
-        // ✅ play icon：直接显示资源图，无背景
         _playIcon = [UIImageView new];
         _playIcon.contentMode = UIViewContentModeScaleAspectFit;
         _playIcon.translatesAutoresizingMaskIntoConstraints = NO;
@@ -102,23 +124,30 @@ static NSString *ASDurationText(NSTimeInterval duration) {
         _savePill.adjustsImageWhenHighlighted = NO;
         _savePill.showsTouchWhenHighlighted = NO;
         _savePill.backgroundColor = ASBlue();
-        _savePill.layer.cornerRadius = 20;
+
+        _savePill.layer.cornerRadius = 26;
         _savePill.layer.masksToBounds = YES;
-        _savePill.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+
+        _savePill.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
         [_savePill setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+
         _savePill.userInteractionEnabled = NO;
-        _savePill.contentEdgeInsets = UIEdgeInsetsMake(10, 16, 10, 16);
+
+        _savePill.contentEdgeInsets = UIEdgeInsetsMake(8, 10, 8, 12);
+
+        [_savePill setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        [_savePill setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        [_savePill.titleLabel setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+
         _savePill.translatesAutoresizingMaskIntoConstraints = NO;
 
-        if (@available(iOS 13.0, *)) {
-            UIImage *chev = [[UIImage systemImageNamed:@"chevron.right"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-            [_savePill setImage:chev forState:UIControlStateNormal];
-            _savePill.tintColor = UIColor.whiteColor;
-            _savePill.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
-            _savePill.imageEdgeInsets = UIEdgeInsetsMake(0, 6, 0, -6);
-        }
+        UIImage *todo = [[UIImage imageNamed:@"ic_more"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        [_savePill setImage:todo forState:UIControlStateNormal];
+        _savePill.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+        _savePill.imageEdgeInsets = UIEdgeInsetsMake(0, 6, 0, -6);
 
         [self.contentView addSubview:_savePill];
+
 
         [NSLayoutConstraint activateConstraints:@[
             [_thumbView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
@@ -126,7 +155,6 @@ static NSString *ASDurationText(NSTimeInterval duration) {
             [_thumbView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
             [_thumbView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            // ✅ 图标直接贴左上（24x24），无底
             [_playIcon.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:10],
             [_playIcon.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:10],
             [_playIcon.widthAnchor constraintEqualToConstant:24],
@@ -134,20 +162,45 @@ static NSString *ASDurationText(NSTimeInterval duration) {
 
             [_savePill.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
             [_savePill.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-14],
-            [_savePill.heightAnchor constraintEqualToConstant:40],
+            [_savePill.heightAnchor constraintEqualToConstant:36],
         ]];
+        
+        self.requestId = PHInvalidImageRequestID;
+        self.thumbView.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1.0];
     }
     return self;
 }
-@end
 
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.representedAssetIdentifier = nil;
+    self.requestId = PHInvalidImageRequestID;
+    self.thumbView.image = nil;
+}
+
+@end
 
 #pragma mark - VC
 
 @interface VideoCompressionMainViewController () <
 UICollectionViewDelegate,
-UICollectionViewDataSource
+UICollectionViewDataSource,
+UICollectionViewDataSourcePrefetching
 >
+@property (nonatomic, strong) NSObject *statsLock;
+@property (nonatomic, assign) uint64_t statsKnownBytes;
+@property (nonatomic, assign) NSInteger statsPending;
+@property (nonatomic, assign) NSInteger statsFailed;
+
+// caches
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary *> *sizeMetaCache; // {id: {s:bytes, m:ts}}
+@property (nonatomic, assign) BOOL sizeCacheSaveScheduled;
+
+@property (nonatomic, assign) BOOL didStartComputeAll;
+@property (nonatomic, strong) PHCachingImageManager *cachingMgr;
+
+// async token (可选，用于防止筛选切换串线程)
+@property (nonatomic, assign) NSInteger filterToken;
 
 // Header (blue)
 @property (nonatomic, strong) UIView *blueHeader;
@@ -223,15 +276,49 @@ UICollectionViewDataSource
     self.view.backgroundColor = UIColor.whiteColor;
     self.navigationController.navigationBarHidden = YES;
 
+    self.statsLock = [NSObject new];
+
     self.sizeCache = [NSMutableDictionary dictionary];
-    self.sizeQueue = [[NSOperationQueue alloc] init];
-    self.sizeQueue.maxConcurrentOperationCount = 2;
+
+    NSDictionary *disk = [NSDictionary dictionaryWithContentsOfFile:ASVidSizeCachePath()];
+    self.sizeMetaCache = [(disk ?: @{}) mutableCopy];
+
+    self.sizeQueue = [NSOperationQueue new];
+    self.sizeQueue.maxConcurrentOperationCount = 1;
+
+    self.cachingMgr = [PHCachingImageManager new];
 
     self.filterIndex = 0;
 
     [self setupHeaderAndCardUI];
 
+    self.collectionView.prefetchDataSource = self;
+
     [self loadAssetsFastThenComputeSizesInBackground];
+}
+
+- (void)scheduleSaveSizeCache {
+    @synchronized (self) {
+        if (self.sizeCacheSaveScheduled) return;
+        self.sizeCacheSaveScheduled = YES;
+    }
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSDictionary *snap = nil;
+        @synchronized (self.sizeMetaCache) { snap = [self.sizeMetaCache copy]; }
+        [snap writeToFile:ASVidSizeCachePath() atomically:YES];
+
+        @synchronized (self) { self.sizeCacheSaveScheduled = NO; }
+    });
+}
+
+- (void)as_cancelCellRequestIfNeeded:(ASVideoCell *)cell {
+    if (!cell) return;
+    if (cell.requestId != PHInvalidImageRequestID) {
+        [self.cachingMgr cancelImageRequest:cell.requestId];
+        cell.requestId = PHInvalidImageRequestID;
+    }
 }
 
 - (void)viewDidLayoutSubviews {
@@ -259,11 +346,11 @@ UICollectionViewDataSource
     self.blueHeader.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.blueHeader];
 
-    self.backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    if (@available(iOS 13.0, *)) {
-        [self.backBtn setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
-    }
-    self.backBtn.tintColor = UIColor.whiteColor;
+    self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+
+    UIImage *backImg = [[UIImage imageNamed:@"ic_return_white"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.backBtn setImage:backImg forState:UIControlStateNormal];
+
     [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.blueHeader addSubview:self.backBtn];
@@ -310,7 +397,6 @@ UICollectionViewDataSource
     self.filterScroll.bounces = YES;
     self.filterScroll.decelerationRate = UIScrollViewDecelerationRateFast;
 
-    // ✅ 关键：让“按钮”不吞滑动手势（你之前 delaysContentTouches=NO 很容易导致滑不动）
     self.filterScroll.delaysContentTouches = YES;
     self.filterScroll.canCancelContentTouches = YES;
 
@@ -375,7 +461,7 @@ UICollectionViewDataSource
         [self.blueHeader.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
 
         // back
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:16],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:6],
         [self.backBtn.topAnchor constraintEqualToAnchor:self.blueHeader.safeAreaLayoutGuide.topAnchor constant:10],
         [self.backBtn.widthAnchor constraintEqualToConstant:44],
         [self.backBtn.heightAnchor constraintEqualToConstant:44],
@@ -419,7 +505,6 @@ UICollectionViewDataSource
 
     b.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightRegular];
 
-    // ✅ 你要的边距：左右15 上下5
     b.contentEdgeInsets = UIEdgeInsetsMake(7, 15, 7, 15);
 
     b.tag = tag;
@@ -435,7 +520,7 @@ UICollectionViewDataSource
             b.backgroundColor = ASBlue();
             [b setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         } else {
-            b.backgroundColor = ASBlue10(); // ✅ 10% 透明蓝
+            b.backgroundColor = ASBlue10();
             [b setTitleColor:[UIColor colorWithWhite:0 alpha:0.9] forState:UIControlStateNormal];
         }
     }
@@ -526,12 +611,47 @@ UICollectionViewDataSource
             [arr addObject:obj];
         }];
 
+        // ✅ 预热：从磁盘 metaCache 验证 modificationDate 是否匹配
+        NSDictionary *metaSnap = nil;
+        @synchronized (self.sizeMetaCache) { metaSnap = [self.sizeMetaCache copy]; }
+
+        uint64_t known = 0;
+        NSInteger pending = 0;
+        NSMutableDictionary<NSString *, NSNumber *> *warm = [NSMutableDictionary dictionary];
+
+        for (PHAsset *a in arr) {
+            NSString *aid = a.localIdentifier ?: @"";
+            NSDictionary *rec = metaSnap[aid];
+            if (rec) {
+                uint64_t s = [rec[@"s"] unsignedLongLongValue];
+                NSTimeInterval cachedM = [rec[@"m"] doubleValue];
+                NSTimeInterval curM = a.modificationDate ? a.modificationDate.timeIntervalSince1970 : 0;
+
+                if (s > 0 && fabs(curM - cachedM) < 1.0) {
+                    warm[aid] = @(s);
+                    known += s;
+                    continue;
+                }
+            }
+            pending += 1;
+        }
+
         dispatch_async(dispatch_get_main_queue(), ^{
             self.allVideos = [arr copy];
-            [self applyFilterIndex:self.filterIndex];
-            [self refreshHeaderStatsPossiblyUnknown:YES];
 
-            [self computeSizesForAssetsIfNeeded:self.allVideos rebuildSectionsWhenFinished:YES];
+            @synchronized (self.sizeCache) {
+                [self.sizeCache addEntriesFromDictionary:warm];
+            }
+
+            @synchronized (self.statsLock) {
+                self.statsKnownBytes = known;
+                self.statsPending = pending;
+                self.statsFailed = 0;
+            }
+
+            [self refreshHeaderStatsPossiblyUnknown:YES];
+            [self applyFilterIndex:self.filterIndex];      // 先用缓存分组/展示
+            [self startComputeAllSizesIfNeeded];           // 后台补算缺失的
         });
     });
 }
@@ -547,14 +667,24 @@ UICollectionViewDataSource
 }
 
 - (void)applyFilterIndex:(NSInteger)idx {
-    NSDate *now = [NSDate date];
     NSArray<PHAsset *> *base = self.allVideos ?: @[];
-    self.displayVideos = [self filteredVideosByIndex:idx fromVideos:base now:now];
+    NSDate *now = [NSDate date];
 
-    [self rebuildSectionsFromDisplayVideos];
-    [self.collectionView reloadData];
+    NSInteger token = ++self.filterToken;
+    __weak typeof(self) weakSelf = self;
+
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSArray<PHAsset *> *filtered = [weakSelf filteredVideosByIndex:idx fromVideos:base now:now];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (token != weakSelf.filterToken) return;
+
+            weakSelf.displayVideos = filtered;
+            [weakSelf rebuildSectionsFromDisplayVideos];
+            [weakSelf.collectionView reloadData];
+        });
+    });
 }
-
 
 - (NSArray<PHAsset *> *)filteredVideosByIndex:(NSInteger)idx
                                    fromVideos:(NSArray<PHAsset *> *)videos
@@ -630,28 +760,23 @@ UICollectionViewDataSource
 #pragma mark - Header Stats (Top Blue)
 
 - (void)refreshHeaderStatsPossiblyUnknown:(BOOL)possiblyUnknown {
-    // ✅ 顶部永远统计 allVideos，不跟筛选走
-    NSArray<PHAsset *> *videos = self.allVideos ?: @[];
-
-    uint64_t total = 0;
-    NSInteger unknown = 0;
-
-    for (PHAsset *a in videos) {
-        NSNumber *n = nil;
-        @synchronized (self.sizeCache) {
-            n = self.sizeCache[a.localIdentifier];
-        }
-        if (!n) { unknown++; continue; }
-        uint64_t s = n.unsignedLongLongValue;
-        if (s == 0) { unknown++; continue; }
-        total += s;
+    uint64_t known = 0;
+    NSInteger pending = 0;
+    NSInteger failed = 0;
+    @synchronized (self.statsLock) {
+        known = self.statsKnownBytes;
+        pending = self.statsPending;
+        failed = self.statsFailed;
     }
 
-    uint64_t saved = total / 2;
+    uint64_t saved = known / 2;
 
-    self.headerTotal.text = (total > 0) ? ASHumanSizeShort(total) : @"--";
+    NSString *totalText = known > 0 ? ASHumanSizeShort(known) : @"--";
+    if (possiblyUnknown && known > 0 && (pending > 0 || failed > 0)) {
+        totalText = [totalText stringByAppendingString:@"+"];
+    }
 
-    NSString *savedText = (saved > 0) ? ASHumanSizeShort(saved) : @"--";
+    NSString *savedText = saved > 0 ? ASHumanSizeShort(saved) : @"--";
     NSString *prefix = @"Total storage space saved by compressed videos ";
     NSString *full = [prefix stringByAppendingString:savedText];
 
@@ -662,10 +787,100 @@ UICollectionViewDataSource
               range:NSMakeRange(prefix.length, savedText.length)];
     [att addAttribute:NSForegroundColorAttributeName value:UIColor.whiteColor
               range:NSMakeRange(prefix.length, savedText.length)];
-    self.headerSubtitle.attributedText = att;
 
-    if (possiblyUnknown && unknown > 0 && total > 0) {
-        self.headerTotal.text = [self.headerTotal.text stringByAppendingString:@"+"];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    self.headerTotal.text = totalText;
+    self.headerSubtitle.attributedText = att;
+    [CATransaction commit];
+}
+
+- (void)startComputeAllSizesIfNeeded {
+    if (self.didStartComputeAll) return;
+    self.didStartComputeAll = YES;
+
+    __weak typeof(self) weakSelf = self;
+    NSArray<PHAsset *> *assets = self.allVideos ?: @[];
+
+    // ✅ 只算缺失的
+    NSMutableArray<PHAsset *> *missing = [NSMutableArray array];
+    for (PHAsset *a in assets) {
+        NSNumber *n = nil;
+        @synchronized (weakSelf.sizeCache) { n = weakSelf.sizeCache[a.localIdentifier]; }
+        if (!n || n.unsignedLongLongValue == 0) [missing addObject:a];
+    }
+
+    if (missing.count == 0) {
+        [self refreshHeaderStatsPossiblyUnknown:NO];
+        [self applyFilterIndex:self.filterIndex];
+        return;
+    }
+
+    [self.sizeQueue addOperationWithBlock:^{
+        @autoreleasepool {
+            NSInteger tick = 0;
+
+            for (PHAsset *a in missing) {
+                uint64_t size = [weakSelf fileSizeForAsset:a];
+
+                NSString *aid = a.localIdentifier ?: @"";
+                NSTimeInterval mod = a.modificationDate ? a.modificationDate.timeIntervalSince1970 : 0;
+
+                @synchronized (weakSelf.sizeCache) {
+                    weakSelf.sizeCache[aid] = @(size);
+                }
+                @synchronized (weakSelf.sizeMetaCache) {
+                    weakSelf.sizeMetaCache[aid] = @{@"s": @(size), @"m": @(mod)};
+                }
+
+                @synchronized (weakSelf.statsLock) {
+                    if (weakSelf.statsPending > 0) weakSelf.statsPending -= 1;
+                    if (size > 0) weakSelf.statsKnownBytes += size;
+                    else weakSelf.statsFailed += 1;
+                }
+
+                tick++;
+                if (tick % 60 == 0) {
+                    [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+                        [weakSelf refreshHeaderStatsPossiblyUnknown:YES];
+                        [weakSelf updateVisibleSavePillsOnly];
+                    }];
+                    [weakSelf scheduleSaveSizeCache];
+                }
+            }
+
+            [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+                [weakSelf refreshHeaderStatsPossiblyUnknown:NO];
+                [weakSelf scheduleSaveSizeCache];
+                // ✅ 最终只刷新一次分组/列表
+                [weakSelf applyFilterIndex:weakSelf.filterIndex];
+            }];
+        }
+    }];
+}
+
+- (void)updateVisibleSavePillsOnly {
+    
+    NSArray<NSIndexPath *> *visible = self.collectionView.indexPathsForVisibleItems;
+    for (NSIndexPath *ip in visible) {
+        if (ip.section >= self.sections.count) continue;
+        NSArray<PHAsset *> *arr = self.sections[ip.section].assets;
+        if (ip.item >= arr.count) continue;
+
+        PHAsset *a = arr[ip.item];
+        ASVideoCell *cell = (ASVideoCell *)[self.collectionView cellForItemAtIndexPath:ip];
+        if (!cell) continue;
+        if (![cell.representedAssetIdentifier isEqualToString:a.localIdentifier]) continue;
+
+        uint64_t bytes = [self cachedFileSizeForAsset:a];
+        NSString *t = [self savePillTextForBytes:bytes];
+        NSString *old = [cell.savePill titleForState:UIControlStateNormal] ?: @"";
+        if ([old isEqualToString:t]) continue;
+
+        [UIView performWithoutAnimation:^{
+            [cell.savePill setTitle:t forState:UIControlStateNormal];
+            [cell.savePill layoutIfNeeded];
+        }];
     }
 }
 
@@ -674,69 +889,62 @@ UICollectionViewDataSource
 - (void)computeSizesForAssetsIfNeeded:(NSArray<PHAsset *> *)assets rebuildSectionsWhenFinished:(BOOL)rebuild {
     if (assets.count == 0) return;
 
-    if (rebuild && self.isComputingAllSizes) return;
-    if (rebuild) self.isComputingAllSizes = YES;
-
-    NSObject *lock = [NSObject new];
-    __block NSInteger done = 0;
-    __block NSInteger scheduled = 0;
-
+    // 只计算缺失的
+    NSMutableArray<PHAsset *> *missing = [NSMutableArray array];
     for (PHAsset *a in assets) {
         BOOL hasCached = NO;
         @synchronized (self.sizeCache) {
             hasCached = (self.sizeCache[a.localIdentifier] != nil);
         }
-        if (hasCached) continue;
-
-        scheduled += 1;
-
-        __weak typeof(self) weakSelf = self;
-        [self.sizeQueue addOperationWithBlock:^{
-            uint64_t size = [weakSelf fileSizeForAsset:a];
-
-            @synchronized (weakSelf.sizeCache) {
-                weakSelf.sizeCache[a.localIdentifier] = @(size);
-            }
-
-            NSInteger c = 0;
-            @synchronized (lock) { done += 1; c = done; }
-
-            if (c % 60 == 0 || c == scheduled) {
-                [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-                    [weakSelf refreshHeaderStatsPossiblyUnknown:YES];
-                    if (rebuild) {
-                        [weakSelf rebuildSectionsFromDisplayVideos];
-                        [weakSelf.collectionView reloadData];
-                    } else {
-                        NSArray<NSIndexPath *> *visible = weakSelf.collectionView.indexPathsForVisibleItems;
-                        if (visible.count > 0) [weakSelf.collectionView reloadItemsAtIndexPaths:visible];
-                    }
-                }];
-            }
-        }];
+        if (!hasCached) [missing addObject:a];
     }
 
-    if (scheduled == 0) {
-        if (rebuild) self.isComputingAllSizes = NO;
+    if (missing.count == 0) {
         [self refreshHeaderStatsPossiblyUnknown:NO];
         if (rebuild) {
             [self rebuildSectionsFromDisplayVideos];
             [self.collectionView reloadData];
+        } else {
+            [self updateVisibleSavePillsOnly];
         }
         return;
     }
 
     __weak typeof(self) weakSelf = self;
+
     [self.sizeQueue addOperationWithBlock:^{
-        for (int i = 0; i < 200; i++) { [NSThread sleepForTimeInterval:0.05]; }
-        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-            if (rebuild) weakSelf.isComputingAllSizes = NO;
-            [weakSelf refreshHeaderStatsPossiblyUnknown:NO];
-            if (rebuild) {
-                [weakSelf rebuildSectionsFromDisplayVideos];
-                [weakSelf.collectionView reloadData];
+        @autoreleasepool {
+            NSInteger tick = 0;
+
+            for (PHAsset *a in missing) {
+                uint64_t size = [weakSelf fileSizeForAsset:a];
+
+                @synchronized (weakSelf.sizeCache) {
+                    weakSelf.sizeCache[a.localIdentifier] = @(size);
+                }
+
+                tick++;
+                //  中途别 reload：只更新 header + 可见 pill（减少抖动/闪）
+                if (tick % 60 == 0) {
+                    [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+                        [weakSelf refreshHeaderStatsPossiblyUnknown:YES];
+                        [weakSelf updateVisibleSavePillsOnly];
+                    }];
+                }
             }
-        }];
+
+            [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+                [weakSelf refreshHeaderStatsPossiblyUnknown:NO];
+
+                if (rebuild) {
+                    //  最终只重建一次 section + reload 一次
+                    [weakSelf rebuildSectionsFromDisplayVideos];
+                    [weakSelf.collectionView reloadData];
+                } else {
+                    [weakSelf updateVisibleSavePillsOnly];
+                }
+            }];
+        }
     }];
 }
 
@@ -766,7 +974,6 @@ UICollectionViewDataSource
 }
 
 - (NSString *)savePillTextForBytes:(uint64_t)bytes {
-    // 截图样式：Save 234MB
     if (bytes == 0) return @"Save --MB";
     uint64_t saveBytes = bytes / 2;
     double mb = (double)saveBytes / (1024.0 * 1024.0);
@@ -783,39 +990,110 @@ UICollectionViewDataSource
     return self.sections[section].assets.count;
 }
 
+- (void)collectionView:(UICollectionView *)collectionView
+  didEndDisplayingCell:(UICollectionViewCell *)cell
+    forItemAtIndexPath:(NSIndexPath *)indexPath {
+
+    if (![cell isKindOfClass:ASVideoCell.class]) return;
+    ASVideoCell *c = (ASVideoCell *)cell;
+    [self as_cancelCellRequestIfNeeded:c];
+}
+
 - (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     ASVideoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ASVideoCell" forIndexPath:indexPath];
 
     PHAsset *asset = self.sections[indexPath.section].assets[indexPath.item];
-    cell.representedAssetIdentifier = asset.localIdentifier;
+    NSString *newId = asset.localIdentifier ?: @"";
+    NSString *capturedId = [newId copy];
+
+    if (cell.representedAssetIdentifier.length && ![cell.representedAssetIdentifier isEqualToString:newId]) {
+        [self as_cancelCellRequestIfNeeded:cell];
+        cell.thumbView.image = nil;
+    }
+    cell.representedAssetIdentifier = newId;
 
     uint64_t bytes = [self cachedFileSizeForAsset:asset];
     NSString *t = [self savePillTextForBytes:bytes];
-    [UIView performWithoutAnimation:^{
-        [cell.savePill setTitle:t forState:UIControlStateNormal];
-        [cell.savePill layoutIfNeeded];
-    }];
+    NSString *oldT = [cell.savePill titleForState:UIControlStateNormal] ?: @"";
+    if (![oldT isEqualToString:t]) {
+        [UIView performWithoutAnimation:^{
+            [cell.savePill setTitle:t forState:UIControlStateNormal];
+            [cell.savePill layoutIfNeeded];
+        }];
+    }
 
-    cell.thumbView.image = nil;
+    if (!cell.thumbView.image && cell.requestId == PHInvalidImageRequestID) {
 
-    PHImageRequestOptions *opt = [PHImageRequestOptions new];
-    opt.networkAccessAllowed = YES;
-    opt.resizeMode = PHImageRequestOptionsResizeModeExact;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
+        PHImageRequestOptions *opt = [PHImageRequestOptions new];
+        opt.networkAccessAllowed = YES;
+        opt.resizeMode = PHImageRequestOptionsResizeModeExact;
+        opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
 
-    CGSize target = CGSizeEqualToSize(self.thumbPixelSize, CGSizeZero) ? CGSizeMake(1000, 1000) : self.thumbPixelSize;
+        CGSize target = CGSizeEqualToSize(self.thumbPixelSize, CGSizeZero) ? CGSizeMake(1000, 1000) : self.thumbPixelSize;
 
-    [[PHImageManager defaultManager] requestImageForAsset:asset
-                                              targetSize:target
-                                             contentMode:PHImageContentModeAspectFill
-                                                 options:opt
-                                           resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
-        if (!result) return;
-        if (![cell.representedAssetIdentifier isEqualToString:asset.localIdentifier]) return;
-        cell.thumbView.image = result;
-    }];
+        __weak typeof(cell) weakCell = cell;
+        cell.requestId =
+        [self.cachingMgr requestImageForAsset:asset
+                                   targetSize:target
+                                  contentMode:PHImageContentModeAspectFill
+                                      options:opt
+                                resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+
+            if (!result) return;
+            if (![weakCell.representedAssetIdentifier isEqualToString:capturedId]) return;
+
+            BOOL cancelled = [info[PHImageCancelledKey] boolValue];
+            if (cancelled) return;
+
+            BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
+
+            // ✅ degraded 去抖：已经有图就不要低清覆盖，避免闪一下
+            if (degraded && weakCell.thumbView.image) return;
+
+            weakCell.thumbView.image = result;
+
+            // ✅ 高清到达后释放 requestId
+            if (!degraded) weakCell.requestId = PHInvalidImageRequestID;
+        }];
+    }
 
     return cell;
+}
+
+- (void)collectionView:(UICollectionView *)collectionView prefetchItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
+    if (CGSizeEqualToSize(self.thumbPixelSize, CGSizeZero)) return;
+
+    NSMutableArray<PHAsset *> *assets = [NSMutableArray arrayWithCapacity:indexPaths.count];
+    for (NSIndexPath *ip in indexPaths) {
+        if (ip.section < self.sections.count) {
+            NSArray *arr = self.sections[ip.section].assets;
+            if (ip.item < arr.count) [assets addObject:arr[ip.item]];
+        }
+    }
+    if (assets.count == 0) return;
+
+    [self.cachingMgr startCachingImagesForAssets:assets
+                                      targetSize:self.thumbPixelSize
+                                     contentMode:PHImageContentModeAspectFill
+                                         options:nil];
+}
+
+- (void)collectionView:(UICollectionView *)collectionView cancelPrefetchingForItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
+    if (CGSizeEqualToSize(self.thumbPixelSize, CGSizeZero)) return;
+
+    NSMutableArray<PHAsset *> *assets = [NSMutableArray arrayWithCapacity:indexPaths.count];
+    for (NSIndexPath *ip in indexPaths) {
+        if (ip.section < self.sections.count) {
+            NSArray *arr = self.sections[ip.section].assets;
+            if (ip.item < arr.count) [assets addObject:arr[ip.item]];
+        }
+    }
+    if (assets.count == 0) return;
+
+    [self.cachingMgr stopCachingImagesForAssets:assets
+                                     targetSize:self.thumbPixelSize
+                                    contentMode:PHImageContentModeAspectFill
+                                        options:nil];
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {

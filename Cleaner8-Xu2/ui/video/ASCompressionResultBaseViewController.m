@@ -1,0 +1,748 @@
+#import "ASCompressionResultBaseViewController.h"
+#import "ASMyStudioViewController.h"
+
+#pragma mark - Helpers
+
+static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; }
+static inline UIColor *ASGrayBG(void){ return [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0]; }
+static inline UIColor *ASE5EDFF(void){ return [UIColor colorWithRed:229/255.0 green:237/255.0 blue:255/255.0 alpha:1.0]; }
+static inline UIFont *ASFont(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:s weight:w]; }
+
+static NSString *ASHumanSize(uint64_t bytes) {
+    double b = (double)bytes;
+    if (b < 1024) return [NSString stringWithFormat:@"%.0f B", b];
+    b /= 1024; if (b < 1024) return [NSString stringWithFormat:@"%.1f KB", b];
+    b /= 1024; if (b < 1024) return [NSString stringWithFormat:@"%.1f MB", b];
+    b /= 1024; return [NSString stringWithFormat:@"%.2f GB", b];
+}
+
+#pragma mark - Bottom Sheet
+
+typedef void(^ASDeleteSheetBlock)(void);
+
+@interface ASDeleteOriginalBottomSheet : UIView
++ (void)presentInViewController:(UIViewController *)vc
+                          title:(NSString *)title
+                        onDelete:(ASDeleteSheetBlock)onDelete;
+@end
+
+@interface ASDeleteOriginalBottomSheet ()
+@property (nonatomic, strong) UIView *dimView;
+@property (nonatomic, strong) UIView *sheetShadowView;
+@property (nonatomic, strong) UIView *sheetView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UIButton *reserveBtn;
+@property (nonatomic, strong) UIButton *deleteBtn;
+@property (nonatomic, copy) ASDeleteSheetBlock onDelete;
+@end
+
+@implementation ASDeleteOriginalBottomSheet
+
++ (void)presentInViewController:(UIViewController *)vc
+                          title:(NSString *)title
+                        onDelete:(ASDeleteSheetBlock)onDelete {
+    if (!vc.view.window && vc.presentedViewController) vc = vc.presentedViewController;
+
+    ASDeleteOriginalBottomSheet *v = [ASDeleteOriginalBottomSheet new];
+    v.onDelete = onDelete;
+    [v buildUIWithTitle:title ?: @"Delete original ?"];
+
+    [vc.view addSubview:v];
+    v.translatesAutoresizingMaskIntoConstraints = NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [v.leadingAnchor constraintEqualToAnchor:vc.view.leadingAnchor],
+        [v.trailingAnchor constraintEqualToAnchor:vc.view.trailingAnchor],
+        [v.topAnchor constraintEqualToAnchor:vc.view.topAnchor],
+        [v.bottomAnchor constraintEqualToAnchor:vc.view.bottomAnchor],
+    ]];
+
+    [vc.view layoutIfNeeded];
+    [v animateIn];
+}
+
+- (void)buildUIWithTitle:(NSString *)title {
+    self.backgroundColor = UIColor.clearColor;
+
+    self.dimView = [UIView new];
+    self.dimView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.dimView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.10];
+    [self addSubview:self.dimView];
+
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onTapDim:)];
+    tap.cancelsTouchesInView = NO;
+    [self.dimView addGestureRecognizer:tap];
+    self.dimView.userInteractionEnabled = YES;
+
+    self.sheetShadowView = [UIView new];
+    self.sheetShadowView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self addSubview:self.sheetShadowView];
+
+    self.sheetView = [UIView new];
+    self.sheetView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sheetView.backgroundColor = UIColor.whiteColor;
+    self.sheetView.layer.cornerRadius = 16;
+    if (@available(iOS 11.0, *)) {
+        self.sheetView.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+    }
+    self.sheetView.layer.masksToBounds = YES;
+    if (@available(iOS 13.0, *)) self.sheetView.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.sheetShadowView addSubview:self.sheetView];
+
+    self.titleLabel = [UILabel new];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.text = title;
+    self.titleLabel.textColor = UIColor.blackColor;
+    self.titleLabel.font = ASFont(20, UIFontWeightMedium);
+    self.titleLabel.textAlignment = NSTextAlignmentCenter;
+    [self.sheetView addSubview:self.titleLabel];
+
+    self.reserveBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.reserveBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.reserveBtn setTitle:@"Reserve" forState:UIControlStateNormal];
+    self.reserveBtn.titleLabel.font = ASFont(20, UIFontWeightRegular);
+    [self.reserveBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    self.reserveBtn.backgroundColor = ASBlue();
+    self.reserveBtn.clipsToBounds = YES;
+    if (@available(iOS 13.0, *)) self.reserveBtn.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.reserveBtn addTarget:self action:@selector(onReserve) forControlEvents:UIControlEventTouchUpInside];
+    [self.sheetView addSubview:self.reserveBtn];
+
+    self.deleteBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.deleteBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.deleteBtn setTitle:@"Delete" forState:UIControlStateNormal];
+    self.deleteBtn.titleLabel.font = ASFont(20, UIFontWeightMedium);
+    [self.deleteBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+    self.deleteBtn.backgroundColor = ASGrayBG();
+    self.deleteBtn.clipsToBounds = YES;
+    if (@available(iOS 13.0, *)) self.deleteBtn.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.deleteBtn addTarget:self action:@selector(onDelete) forControlEvents:UIControlEventTouchUpInside];
+    [self.sheetView addSubview:self.deleteBtn];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.dimView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.dimView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.dimView.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [self.dimView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+
+        [self.sheetShadowView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.sheetShadowView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.sheetShadowView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+
+        [self.sheetView.leadingAnchor constraintEqualToAnchor:self.sheetShadowView.leadingAnchor],
+        [self.sheetView.trailingAnchor constraintEqualToAnchor:self.sheetShadowView.trailingAnchor],
+        [self.sheetView.topAnchor constraintEqualToAnchor:self.sheetShadowView.topAnchor],
+        [self.sheetView.bottomAnchor constraintEqualToAnchor:self.sheetShadowView.bottomAnchor],
+
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.sheetView.topAnchor constant:30],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.sheetView.leadingAnchor constant:20],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.sheetView.trailingAnchor constant:-20],
+
+        [self.reserveBtn.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:37],
+        [self.reserveBtn.leadingAnchor constraintEqualToAnchor:self.sheetView.leadingAnchor constant:20],
+        [self.reserveBtn.trailingAnchor constraintEqualToAnchor:self.sheetView.trailingAnchor constant:-20],
+        [self.reserveBtn.heightAnchor constraintEqualToConstant:51],
+
+        [self.deleteBtn.topAnchor constraintEqualToAnchor:self.reserveBtn.bottomAnchor constant:15],
+        [self.deleteBtn.leadingAnchor constraintEqualToAnchor:self.reserveBtn.leadingAnchor],
+        [self.deleteBtn.trailingAnchor constraintEqualToAnchor:self.reserveBtn.trailingAnchor],
+        [self.deleteBtn.heightAnchor constraintEqualToConstant:51],
+
+        [self.deleteBtn.bottomAnchor constraintEqualToAnchor:self.sheetView.safeAreaLayoutGuide.bottomAnchor constant:-20],
+    ]];
+
+    self.sheetShadowView.layer.shadowColor = [UIColor colorWithWhite:0 alpha:(0x33/255.0)].CGColor;
+    self.sheetShadowView.layer.shadowOpacity = 1.0;
+    self.sheetShadowView.layer.shadowOffset = CGSizeMake(0, -5);
+    self.sheetShadowView.layer.shadowRadius = 10.0;
+
+    self.dimView.alpha = 0.0;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGFloat pill = self.reserveBtn.bounds.size.height * 0.5;
+    self.reserveBtn.layer.cornerRadius = pill;
+    self.deleteBtn.layer.cornerRadius  = pill;
+
+    CGRect r = self.sheetShadowView.bounds;
+    if (!CGRectIsEmpty(r)) {
+        UIBezierPath *p = [UIBezierPath bezierPathWithRoundedRect:r
+                                               byRoundingCorners:(UIRectCornerTopLeft|UIRectCornerTopRight)
+                                                     cornerRadii:CGSizeMake(16, 16)];
+        self.sheetShadowView.layer.shadowPath = p.CGPath;
+    }
+}
+
+- (void)animateIn {
+    [self layoutIfNeeded];
+    CGFloat h = self.sheetShadowView.bounds.size.height;
+    self.sheetShadowView.transform = CGAffineTransformMakeTranslation(0, h);
+
+    [UIView animateWithDuration:0.28 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        self.dimView.alpha = 1.0;
+        self.sheetShadowView.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
+- (void)animateOut:(void(^)(void))completion {
+    CGFloat h = self.sheetShadowView.bounds.size.height;
+    [UIView animateWithDuration:0.22 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+        self.dimView.alpha = 0.0;
+        self.sheetShadowView.transform = CGAffineTransformMakeTranslation(0, h);
+    } completion:^(BOOL finished) {
+        [self removeFromSuperview];
+        if (completion) completion();
+    }];
+}
+
+- (void)onTapDim:(UITapGestureRecognizer *)gr {
+    CGPoint p = [gr locationInView:self];
+    if (CGRectContainsPoint(self.sheetShadowView.frame, p)) return;
+    [self onReserve];
+}
+- (void)onReserve { [self animateOut:nil]; }
+- (void)onDelete {
+    __weak typeof(self) weakSelf = self;
+    [self animateOut:^{
+        if (weakSelf.onDelete) weakSelf.onDelete();
+    }];
+}
+@end
+
+#pragma mark - Base VC
+
+@interface ASCompressionResultBaseViewController ()
+@property (nonatomic, strong) id<ASCompressionResultSummary> summary;
+
+@property (nonatomic, strong) UIView *topCard;
+@property (nonatomic, strong) UIView *navBar;
+@property (nonatomic, strong) UIButton *backBtn;
+@property (nonatomic, strong) UIButton *homeBtn;
+
+// preview：视频是 thumb，图片是 static icon
+@property (nonatomic, strong) UIImageView *thumbView;
+@property (nonatomic, strong) UIImageView *playIcon;
+@property (nonatomic, strong) UIImageView *starFloat;
+@property (nonatomic, strong) UIImageView *staticIconView;
+
+@property (nonatomic, strong) UILabel *greatLabel;
+@property (nonatomic, strong) UILabel *infoLabel;
+
+@property (nonatomic, strong) UIView *table;
+@property (nonatomic, strong) UILabel *vBefore;
+@property (nonatomic, strong) UILabel *vAfter;
+@property (nonatomic, strong) UILabel *vSaved;
+
+@property (nonatomic, strong) UIControl *studioRow;
+@property (nonatomic, strong) UIImageView *studioIcon;
+@property (nonatomic, strong) UILabel *studioLabel;
+@property (nonatomic, strong) UIButton *todoBtn;
+@end
+
+@implementation ASCompressionResultBaseViewController
+
+- (instancetype)initWithSummary:(id<ASCompressionResultSummary>)summary {
+    if (self = [super init]) _summary = summary;
+    return self;
+}
+
+#pragma mark - 子类覆盖点
+
+- (BOOL)useStaticPreviewIcon { return NO; }
+- (NSString *)staticPreviewIconName { return nil; }
+- (CGSize)staticPreviewSize { return CGSizeMake(180, 170); }
+- (NSString *)deleteSheetTitle { return @"Delete original ?"; }
+- (NSString *)itemSingular { return @"item"; }
+- (NSString *)itemPlural   { return @"items"; }
+- (NSString *)homeIconName { return @"ic_back_home"; }
+- (BOOL)shouldShowHomeButton { return YES; }
+
+#pragma mark - Life
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = ASGrayBG();
+    self.navigationController.navigationBarHidden = YES;
+
+    [self buildUI];
+    [self fillData];
+
+    if (![self useStaticPreviewIcon]) {
+        [self loadThumbIfNeeded];
+    }
+
+    [self askDeleteOriginalIfNeeded];
+}
+
+#pragma mark - UI
+
+- (void)buildUI {
+    self.topCard = [UIView new];
+    self.topCard.backgroundColor = UIColor.whiteColor;
+    self.topCard.translatesAutoresizingMaskIntoConstraints = NO;
+    self.topCard.layer.cornerRadius = 34;
+    if (@available(iOS 11.0,*)) {
+        self.topCard.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+    }
+    self.topCard.layer.masksToBounds = YES;
+    [self.view addSubview:self.topCard];
+
+    self.navBar = [UIView new];
+    self.navBar.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.topCard addSubview:self.navBar];
+
+    self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.backBtn setImage:backImg forState:UIControlStateNormal];
+    self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.backBtn.adjustsImageWhenHighlighted = NO;
+    [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
+    self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.navBar addSubview:self.backBtn];
+
+    self.homeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    UIImage *homeImg = [UIImage imageNamed:[self homeIconName]];
+    if (!homeImg && @available(iOS 13.0, *)) {
+        homeImg = [UIImage systemImageNamed:@"house"];
+        homeImg = [homeImg imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        self.homeBtn.tintColor = ASBlue();
+    } else {
+        homeImg = [homeImg imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    }
+    [self.homeBtn setImage:homeImg forState:UIControlStateNormal];
+    self.homeBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.homeBtn.adjustsImageWhenHighlighted = NO;
+    self.homeBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    self.homeBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
+    [self.homeBtn addTarget:self action:@selector(onHome) forControlEvents:UIControlEventTouchUpInside];
+    [self.navBar addSubview:self.homeBtn];
+    self.homeBtn.hidden = ![self shouldShowHomeButton];
+
+    UIView *previewRef = nil;
+
+    if ([self useStaticPreviewIcon]) {
+        self.staticIconView = [UIImageView new];
+        self.staticIconView.translatesAutoresizingMaskIntoConstraints = NO;
+        self.staticIconView.contentMode = UIViewContentModeScaleAspectFit;
+        self.staticIconView.image = [[UIImage imageNamed:[self staticPreviewIconName]] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        [self.topCard addSubview:self.staticIconView];
+        previewRef = self.staticIconView;
+    } else {
+        self.thumbView = [UIImageView new];
+        self.thumbView.translatesAutoresizingMaskIntoConstraints = NO;
+        self.thumbView.contentMode = UIViewContentModeScaleAspectFill;
+        self.thumbView.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
+        self.thumbView.layer.cornerRadius = 22;
+        self.thumbView.layer.masksToBounds = YES;
+        [self.topCard addSubview:self.thumbView];
+
+        self.playIcon = [UIImageView new];
+        self.playIcon.translatesAutoresizingMaskIntoConstraints = NO;
+        self.playIcon.image = [[UIImage imageNamed:@"ic_play"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        self.playIcon.contentMode = UIViewContentModeScaleAspectFit;
+        [self.thumbView addSubview:self.playIcon];
+
+        self.starFloat = [UIImageView new];
+        self.starFloat.translatesAutoresizingMaskIntoConstraints = NO;
+        self.starFloat.image = [[UIImage imageNamed:@"ic_star_float"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        self.starFloat.contentMode = UIViewContentModeScaleAspectFit;
+        [self.topCard addSubview:self.starFloat];
+
+        previewRef = self.thumbView;
+    }
+
+    self.greatLabel = [UILabel new];
+    self.greatLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.greatLabel.text = @"Great!";
+    self.greatLabel.textColor = UIColor.blackColor;
+    self.greatLabel.font = ASFont(34, UIFontWeightMedium);
+    self.greatLabel.textAlignment = NSTextAlignmentCenter;
+    [self.topCard addSubview:self.greatLabel];
+
+    self.infoLabel = [UILabel new];
+    self.infoLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.infoLabel.textColor = UIColor.blackColor;
+    self.infoLabel.font = ASFont(12, UIFontWeightMedium);
+    self.infoLabel.textAlignment = NSTextAlignmentCenter;
+    self.infoLabel.numberOfLines = 0;
+    [self.topCard addSubview:self.infoLabel];
+
+    self.table = [self buildStatsTable];
+    [self.topCard addSubview:self.table];
+
+    self.studioRow = [UIControl new];
+    self.studioRow.translatesAutoresizingMaskIntoConstraints = NO;
+    self.studioRow.backgroundColor = UIColor.whiteColor;
+    self.studioRow.layer.cornerRadius = 24;
+    self.studioRow.layer.masksToBounds = NO;
+    [self.studioRow addTarget:self action:@selector(onStudio) forControlEvents:UIControlEventTouchUpInside];
+    self.studioRow.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.08].CGColor;
+    self.studioRow.layer.shadowOpacity = 1.0;
+    self.studioRow.layer.shadowOffset = CGSizeMake(0, 10);
+    self.studioRow.layer.shadowRadius = 20;
+    [self.view addSubview:self.studioRow];
+
+    self.studioIcon = [UIImageView new];
+    self.studioIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    self.studioIcon.image = [[UIImage imageNamed:@"ic_studio"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    self.studioIcon.contentMode = UIViewContentModeScaleAspectFit;
+    [self.studioRow addSubview:self.studioIcon];
+
+    self.studioLabel = [UILabel new];
+    self.studioLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.studioLabel.text = @"My studio";
+    self.studioLabel.textColor = UIColor.blackColor;
+    self.studioLabel.font = ASFont(24, UIFontWeightMedium);
+    [self.studioRow addSubview:self.studioLabel];
+
+    self.todoBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.todoBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    UIImage *todo = [[UIImage imageNamed:@"ic_todo_big"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.todoBtn setImage:todo forState:UIControlStateNormal];
+    self.todoBtn.adjustsImageWhenHighlighted = NO;
+    [self.todoBtn addTarget:self action:@selector(onStudio) forControlEvents:UIControlEventTouchUpInside];
+    [self.studioRow addSubview:self.todoBtn];
+
+    CGFloat side20 = 20;
+
+    NSMutableArray<NSLayoutConstraint *> *cs = [NSMutableArray arrayWithArray:@[
+        [self.topCard.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.topCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.topCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+
+        [self.navBar.topAnchor constraintEqualToAnchor:self.topCard.safeAreaLayoutGuide.topAnchor],
+        [self.navBar.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor],
+        [self.navBar.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor],
+        [self.navBar.heightAnchor constraintEqualToConstant:56],
+
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.navBar.leadingAnchor constant:6],
+        [self.backBtn.centerYAnchor constraintEqualToAnchor:self.navBar.centerYAnchor],
+        [self.backBtn.widthAnchor constraintEqualToConstant:44],
+        [self.backBtn.heightAnchor constraintEqualToConstant:44],
+
+        [self.homeBtn.trailingAnchor constraintEqualToAnchor:self.navBar.trailingAnchor constant:-12],
+        [self.homeBtn.centerYAnchor constraintEqualToAnchor:self.navBar.centerYAnchor],
+        [self.homeBtn.widthAnchor constraintEqualToConstant:44],
+        [self.homeBtn.heightAnchor constraintEqualToConstant:44],
+    ]];
+
+    if ([self useStaticPreviewIcon]) {
+        CGSize sz = [self staticPreviewSize];
+        [cs addObjectsFromArray:@[
+            [self.staticIconView.topAnchor constraintEqualToAnchor:self.navBar.bottomAnchor constant:18],
+            [self.staticIconView.centerXAnchor constraintEqualToAnchor:self.topCard.centerXAnchor],
+            [self.staticIconView.widthAnchor constraintEqualToConstant:sz.width],
+            [self.staticIconView.heightAnchor constraintEqualToConstant:sz.height],
+        ]];
+    } else {
+        [cs addObjectsFromArray:@[
+            [self.thumbView.topAnchor constraintEqualToAnchor:self.navBar.bottomAnchor constant:10],
+            [self.thumbView.centerXAnchor constraintEqualToAnchor:self.topCard.centerXAnchor],
+            [self.thumbView.widthAnchor constraintEqualToConstant:180],
+            [self.thumbView.heightAnchor constraintEqualToConstant:240],
+
+            [self.playIcon.leadingAnchor constraintEqualToAnchor:self.thumbView.leadingAnchor constant:13],
+            [self.playIcon.topAnchor constraintEqualToAnchor:self.thumbView.topAnchor constant:13],
+            [self.playIcon.widthAnchor constraintEqualToConstant:26],
+            [self.playIcon.heightAnchor constraintEqualToConstant:26],
+
+            [self.starFloat.centerXAnchor constraintEqualToAnchor:self.thumbView.centerXAnchor],
+            [self.starFloat.centerYAnchor constraintEqualToAnchor:self.thumbView.centerYAnchor],
+            [self.starFloat.widthAnchor constraintEqualToConstant:267],
+            [self.starFloat.heightAnchor constraintEqualToConstant:216],
+        ]];
+    }
+
+    [cs addObjectsFromArray:@[
+        [self.greatLabel.topAnchor constraintEqualToAnchor:previewRef.bottomAnchor constant:18],
+        [self.greatLabel.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:side20],
+        [self.greatLabel.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor constant:-side20],
+
+        [self.infoLabel.topAnchor constraintEqualToAnchor:self.greatLabel.bottomAnchor constant:12],
+        [self.infoLabel.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:40],
+        [self.infoLabel.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor constant:-40],
+
+        [self.table.topAnchor constraintEqualToAnchor:self.infoLabel.bottomAnchor constant:20],
+        [self.table.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:20],
+        [self.table.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor constant:-20],
+        [self.table.heightAnchor constraintEqualToConstant:110],
+
+        [self.topCard.bottomAnchor constraintEqualToAnchor:self.table.bottomAnchor constant:35],
+
+        [self.studioRow.topAnchor constraintEqualToAnchor:self.topCard.bottomAnchor constant:30],
+        [self.studioRow.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
+        [self.studioRow.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.studioRow.heightAnchor constraintEqualToConstant:110],
+        [self.studioRow.bottomAnchor constraintLessThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-22],
+
+        [self.studioIcon.leadingAnchor constraintEqualToAnchor:self.studioRow.leadingAnchor constant:22],
+        [self.studioIcon.centerYAnchor constraintEqualToAnchor:self.studioRow.centerYAnchor],
+        [self.studioIcon.widthAnchor constraintEqualToConstant:72],
+        [self.studioIcon.heightAnchor constraintEqualToConstant:72],
+
+        [self.studioLabel.leadingAnchor constraintEqualToAnchor:self.studioIcon.trailingAnchor constant:18],
+        [self.studioLabel.centerYAnchor constraintEqualToAnchor:self.studioRow.centerYAnchor],
+
+        [self.todoBtn.trailingAnchor constraintEqualToAnchor:self.studioRow.trailingAnchor constant:-22],
+        [self.todoBtn.centerYAnchor constraintEqualToAnchor:self.studioRow.centerYAnchor],
+        [self.todoBtn.widthAnchor constraintEqualToConstant:60],
+        [self.todoBtn.heightAnchor constraintEqualToConstant:36],
+    ]];
+
+    [NSLayoutConstraint activateConstraints:cs];
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.studioRow.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.studioRow.bounds cornerRadius:24].CGPath;
+    });
+}
+
+#pragma mark - Table（稳定三等分+分割线）
+
+- (UIView *)vSep {
+    UIView *v = [UIView new];
+    v.translatesAutoresizingMaskIntoConstraints = NO;
+    v.backgroundColor = [ASBlue() colorWithAlphaComponent:0.25];
+    [v.widthAnchor constraintEqualToConstant:1].active = YES;
+    return v;
+}
+
+- (UIView *)wrapCenter:(UIView *)view {
+    UIView *c = [UIView new];
+    c.translatesAutoresizingMaskIntoConstraints = NO;
+    [c addSubview:view];
+    view.translatesAutoresizingMaskIntoConstraints = NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [view.centerXAnchor constraintEqualToAnchor:c.centerXAnchor],
+        [view.centerYAnchor constraintEqualToAnchor:c.centerYAnchor],
+    ]];
+    return c;
+}
+
+- (UILabel *)makeValueLabel:(UIColor *)color {
+    UILabel *l = [UILabel new];
+    l.textAlignment = NSTextAlignmentCenter;
+    l.textColor = color;
+    l.font = ASFont(16, UIFontWeightSemibold);
+    l.text = @"--";
+    return l;
+}
+
+- (UIView *)makeTitleCellTop:(NSString *)top bottom:(NSString *)bottom {
+    UILabel *t = [UILabel new];
+    t.translatesAutoresizingMaskIntoConstraints = NO;
+    t.textAlignment = NSTextAlignmentCenter;
+    t.numberOfLines = 2;
+
+    NSMutableAttributedString *att = [NSMutableAttributedString new];
+    NSDictionary *aTop = @{ NSFontAttributeName: ASFont(15, UIFontWeightSemibold), NSForegroundColorAttributeName: UIColor.blackColor };
+    NSDictionary *aBottom = @{ NSFontAttributeName: ASFont(12, UIFontWeightSemibold), NSForegroundColorAttributeName: UIColor.blackColor };
+    [att appendAttributedString:[[NSAttributedString alloc] initWithString:top attributes:aTop]];
+    [att appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n" attributes:aTop]];
+    [att appendAttributedString:[[NSAttributedString alloc] initWithString:bottom attributes:aBottom]];
+    t.attributedText = att;
+
+    UIView *wrap = [UIView new];
+    wrap.translatesAutoresizingMaskIntoConstraints = NO;
+    [wrap addSubview:t];
+    [NSLayoutConstraint activateConstraints:@[
+        [t.centerXAnchor constraintEqualToAnchor:wrap.centerXAnchor],
+        [t.centerYAnchor constraintEqualToAnchor:wrap.centerYAnchor],
+        [t.leadingAnchor constraintGreaterThanOrEqualToAnchor:wrap.leadingAnchor constant:6],
+        [t.trailingAnchor constraintLessThanOrEqualToAnchor:wrap.trailingAnchor constant:-6],
+    ]];
+    return wrap;
+}
+
+- (UIView *)makeTitleCellSingle:(NSString *)title {
+    UILabel *t = [UILabel new];
+    t.translatesAutoresizingMaskIntoConstraints = NO;
+    t.textAlignment = NSTextAlignmentCenter;
+    t.textColor = UIColor.blackColor;
+    t.font = ASFont(15, UIFontWeightSemibold);
+    t.text = title;
+
+    UIView *wrap = [UIView new];
+    wrap.translatesAutoresizingMaskIntoConstraints = NO;
+    [wrap addSubview:t];
+    [NSLayoutConstraint activateConstraints:@[
+        [t.centerXAnchor constraintEqualToAnchor:wrap.centerXAnchor],
+        [t.centerYAnchor constraintEqualToAnchor:wrap.centerYAnchor],
+        [t.leadingAnchor constraintGreaterThanOrEqualToAnchor:wrap.leadingAnchor constant:6],
+        [t.trailingAnchor constraintLessThanOrEqualToAnchor:wrap.trailingAnchor constant:-6],
+    ]];
+    return wrap;
+}
+
+- (UIView *)buildStatsTable {
+    UIView *table = [UIView new];
+    table.translatesAutoresizingMaskIntoConstraints = NO;
+    table.layer.cornerRadius = 16;
+    table.layer.borderWidth = 2.0;
+    table.layer.borderColor = ASBlue().CGColor;
+    table.layer.masksToBounds = YES;
+
+    UIView *topRow = [UIView new];
+    topRow.translatesAutoresizingMaskIntoConstraints = NO;
+    topRow.backgroundColor = ASE5EDFF();
+    [table addSubview:topRow];
+
+    UIView *bottomRow = [UIView new];
+    bottomRow.translatesAutoresizingMaskIntoConstraints = NO;
+    [table addSubview:bottomRow];
+
+    UIView *hSep = [UIView new];
+    hSep.translatesAutoresizingMaskIntoConstraints = NO;
+    hSep.backgroundColor = [ASBlue() colorWithAlphaComponent:0.25];
+    [table addSubview:hSep];
+
+    UIView *t1 = [self makeTitleCellTop:@"Before" bottom:@"Compression"];
+    UIView *t2 = [self makeTitleCellTop:@"After" bottom:@"Compression"];
+    UIView *t3 = [self makeTitleCellSingle:@"Space Saved"];
+
+    UIStackView *topStack = [[UIStackView alloc] initWithArrangedSubviews:@[t1, [self vSep], t2, [self vSep], t3]];
+    topStack.translatesAutoresizingMaskIntoConstraints = NO;
+    topStack.axis = UILayoutConstraintAxisHorizontal;
+    topStack.distribution = UIStackViewDistributionFill;
+    [topRow addSubview:topStack];
+    [t1.widthAnchor constraintEqualToAnchor:t2.widthAnchor].active = YES;
+    [t2.widthAnchor constraintEqualToAnchor:t3.widthAnchor].active = YES;
+
+    self.vBefore = [self makeValueLabel:UIColor.blackColor];
+    self.vAfter  = [self makeValueLabel:ASBlue()];
+    self.vSaved  = [self makeValueLabel:ASBlue()];
+
+    UIView *b1 = [self wrapCenter:self.vBefore];
+    UIView *b2 = [self wrapCenter:self.vAfter];
+    UIView *b3 = [self wrapCenter:self.vSaved];
+
+    UIStackView *bottomStack = [[UIStackView alloc] initWithArrangedSubviews:@[b1, [self vSep], b2, [self vSep], b3]];
+    bottomStack.translatesAutoresizingMaskIntoConstraints = NO;
+    bottomStack.axis = UILayoutConstraintAxisHorizontal;
+    bottomStack.distribution = UIStackViewDistributionFill;
+    [bottomRow addSubview:bottomStack];
+    [b1.widthAnchor constraintEqualToAnchor:b2.widthAnchor].active = YES;
+    [b2.widthAnchor constraintEqualToAnchor:b3.widthAnchor].active = YES;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [topRow.topAnchor constraintEqualToAnchor:table.topAnchor],
+        [topRow.leadingAnchor constraintEqualToAnchor:table.leadingAnchor],
+        [topRow.trailingAnchor constraintEqualToAnchor:table.trailingAnchor],
+        [topRow.heightAnchor constraintEqualToConstant:55],
+
+        [hSep.topAnchor constraintEqualToAnchor:topRow.bottomAnchor],
+        [hSep.leadingAnchor constraintEqualToAnchor:table.leadingAnchor],
+        [hSep.trailingAnchor constraintEqualToAnchor:table.trailingAnchor],
+        [hSep.heightAnchor constraintEqualToConstant:1],
+
+        [bottomRow.topAnchor constraintEqualToAnchor:hSep.bottomAnchor],
+        [bottomRow.leadingAnchor constraintEqualToAnchor:table.leadingAnchor],
+        [bottomRow.trailingAnchor constraintEqualToAnchor:table.trailingAnchor],
+        [bottomRow.bottomAnchor constraintEqualToAnchor:table.bottomAnchor],
+
+        [topStack.topAnchor constraintEqualToAnchor:topRow.topAnchor],
+        [topStack.bottomAnchor constraintEqualToAnchor:topRow.bottomAnchor],
+        [topStack.leadingAnchor constraintEqualToAnchor:topRow.leadingAnchor],
+        [topStack.trailingAnchor constraintEqualToAnchor:topRow.trailingAnchor],
+
+        [bottomStack.topAnchor constraintEqualToAnchor:bottomRow.topAnchor],
+        [bottomStack.bottomAnchor constraintEqualToAnchor:bottomRow.bottomAnchor],
+        [bottomStack.leadingAnchor constraintEqualToAnchor:bottomRow.leadingAnchor],
+        [bottomStack.trailingAnchor constraintEqualToAnchor:bottomRow.trailingAnchor],
+    ]];
+
+    return table;
+}
+
+#pragma mark - Data
+
+- (void)fillData {
+    NSInteger count = self.summary.inputCount;
+    NSString *noun = (count == 1) ? [self itemSingular] : [self itemPlural];
+    NSString *aux  = (count == 1) ? @"has" : @"have"; // 1 image has been / 2 images have been
+
+    self.infoLabel.text = [NSString stringWithFormat:@"%ld %@ %@ been compressed and saved to your system album",
+                           (long)count, noun, aux];
+
+    self.vBefore.text = ASHumanSize(self.summary.beforeBytes) ?: @"--";
+    self.vAfter.text  = ASHumanSize(self.summary.afterBytes)  ?: @"--";
+    self.vSaved.text  = ASHumanSize(self.summary.savedBytes)  ?: @"--";
+}
+
+- (void)loadThumbIfNeeded {
+    // 用 originalAssets[0] 做封面
+    PHAsset *asset = self.summary.originalAssets.firstObject;
+    if (!asset) return;
+
+    PHImageRequestOptions *opt = [PHImageRequestOptions new];
+    opt.networkAccessAllowed = YES;
+    opt.resizeMode = PHImageRequestOptionsResizeModeExact;
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGSize target = CGSizeMake(180.0 * scale * 2.0, 240.0 * scale * 2.0);
+
+    __weak typeof(self) weakSelf = self;
+    [[PHImageManager defaultManager] requestImageForAsset:asset
+                                              targetSize:target
+                                             contentMode:PHImageContentModeAspectFill
+                                                 options:opt
+                                           resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+        if (!result) return;
+        NSNumber *degraded = info[PHImageResultIsDegradedKey];
+        if (degraded.boolValue) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            weakSelf.thumbView.image = result;
+        });
+    }];
+}
+
+#pragma mark - Delete original
+
+- (void)askDeleteOriginalIfNeeded {
+    if (self.summary.originalAssets.count == 0) return;
+
+    __weak typeof(self) weakSelf = self;
+    [ASDeleteOriginalBottomSheet presentInViewController:self
+                                                  title:[self deleteSheetTitle]
+                                                onDelete:^{
+        NSArray<PHAsset *> *toDelete = weakSelf.summary.originalAssets ?: @[];
+        if (toDelete.count == 0) return;
+
+        [PHPhotoLibrary.sharedPhotoLibrary performChanges:^{
+            [PHAssetChangeRequest deleteAssets:toDelete];
+        } completionHandler:^(BOOL success, NSError * _Nullable error) {
+            // optional
+        }];
+    }];
+}
+
+#pragma mark - Actions
+
+- (void)onBack { [self.navigationController popToRootViewControllerAnimated:YES]; }
+
+- (void)onHome {
+    UINavigationController *nav = self.navigationController;
+    if (!nav) return;
+
+    Class homeCls = NSClassFromString(@"VideoViewController");
+    if (homeCls) {
+        for (UIViewController *vc in nav.viewControllers) {
+            if ([vc isKindOfClass:homeCls]) {
+                [nav popToViewController:vc animated:YES];
+                return;
+            }
+        }
+    }
+    [nav popToRootViewControllerAnimated:YES];
+}
+
+- (void)onStudio {
+    ASMyStudioViewController *studio = [ASMyStudioViewController new];
+    UINavigationController *nav = self.navigationController;
+    if (!nav) return;
+
+    UIViewController *root = nav.viewControllers.firstObject;
+    [nav setViewControllers:@[root, studio] animated:YES];
+}
+
+@end

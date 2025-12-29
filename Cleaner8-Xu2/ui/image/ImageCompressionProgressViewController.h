@@ -7,4 +7,9 @@
                        quality:(ASImageCompressionQuality)quality
                totalBeforeBytes:(uint64_t)beforeBytes
             estimatedAfterBytes:(uint64_t)afterBytes;
+
+- (instancetype)initWithLiveAssets:(NSArray<PHAsset *> *)assets
+                   totalBeforeBytes:(uint64_t)beforeBytes
+                estimatedAfterBytes:(uint64_t)afterBytes
+                      deleteOriginal:(BOOL)deleteOriginal;
 @end

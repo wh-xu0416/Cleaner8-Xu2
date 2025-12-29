@@ -1,6 +1,5 @@
-#import <UIKit/UIKit.h>
-#import "VideoCompressionManager.h"
+#import "ASCompressionResultBaseViewController.h"
+#import "UIKit/UIKit.h"
 
-@interface VideoCompressionResultViewController : UIViewController
-- (instancetype)initWithSummary:(ASCompressionSummary *)summary;
+@interface VideoCompressionResultViewController : ASCompressionResultBaseViewController
 @end

@@ -52,11 +52,9 @@ static NSString * const kASStudioAlbumIdKey = @"ASStudioAlbumLocalId";
 
 - (void)fetchOrCreateAlbum:(void(^)(PHAssetCollection * _Nullable album, NSError * _Nullable error))completion {
 
-    // 1) try cached id
     PHAssetCollection *cached = [self fetchAlbumById:[self cachedAlbumId]];
     if (cached) { if (completion) completion(cached, nil); return; }
 
-    // 2) try title
     PHAssetCollection *byTitle = [self fetchAlbumByTitle:self.albumTitle];
     if (byTitle) {
         [self setCachedAlbumId:byTitle.localIdentifier];
@@ -64,7 +62,6 @@ static NSString * const kASStudioAlbumIdKey = @"ASStudioAlbumLocalId";
         return;
     }
 
-    // 3) create
     __block NSString *createdId = nil;
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
         PHAssetCollectionChangeRequest *req =
