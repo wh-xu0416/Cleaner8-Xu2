@@ -1,10 +1,7 @@
 #import "MainTabBarController.h"
 #import "ASFloatingTabBar.h"
-#import "HomeViewController.h"
 #import "VideoViewController.h"
-#import "SecretViewController.h"
 #import "SetViewController.h"
-#import "SwipeViewController.h"
 
 @interface MainTabBarController ()
 <
@@ -77,7 +74,7 @@ UIGestureRecognizerDelegate
       willShowViewController:(UIViewController *)vc
                     animated:(BOOL)animated {
 
-    BOOL hide = [vc isKindOfClass:HomeViewController.class];
+    BOOL hide = [vc isKindOfClass:VideoViewController.class];
     [nav setNavigationBarHidden:hide animated:animated];
 }
 

@@ -1,6 +1,7 @@
 #import "SceneDelegate.h"
 #import "OnboardingViewController.h"
 #import "VideoViewController.h"
+#import "MainTabBarController.h"
 
 @implementation SceneDelegate
 
@@ -22,7 +23,7 @@ options:(UISceneConnectionOptions *)connectionOptions {
         rootVC = [[OnboardingViewController alloc] init];
     } else {
         NSLog(@"➡️ 显示主界面");
-        rootVC = [[VideoViewController alloc] init];
+        rootVC = [[MainTabBarController alloc] init];
     }
 
     UINavigationController *rootNav =
