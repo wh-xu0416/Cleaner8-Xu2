@@ -869,35 +869,65 @@ UICollectionViewDataSourcePrefetching
         UICollectionViewCompositionalLayout *layout =
         [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection * _Nullable(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment>  _Nonnull environment) {
 
-            CGFloat containerW = environment.container.effectiveContentSize.width;
-
-            CGFloat inter = 5.0;
+            CGFloat inter   = 5.0;
             CGFloat leading = 20.0;
+            NSInteger columns = 3;
 
-            CGFloat contentW = containerW - leading * 2.0;
-            CGFloat itemSide = floor(contentW / 3.2);
-            if (itemSide < 90) itemSide = 90;
+            // ✅ 取当前 section 的 item 数
+            NSInteger itemCount = 0;
+            if (weakSelf && sectionIndex < weakSelf.sections.count) {
+                itemCount = weakSelf.sections[sectionIndex].assets.count;
+            }
 
+            // ✅ 不满一行：rows=1；最多两行：rows<=2
+            NSInteger rows = 1;
+            if (itemCount > 0) {
+                rows = (NSInteger)ceil((double)itemCount / (double)columns);
+                rows = MAX(1, MIN(2, rows));
+            }
+
+            CGFloat containerW = environment.container.effectiveContentSize.width;
+            CGFloat contentW   = containerW - leading * 2.0;
+
+            // ✅ 计算正方形边长（像素对齐）
+            CGFloat scale = UIScreen.mainScreen.scale;
+            CGFloat rawSide = (contentW - inter * (columns - 1)) / (CGFloat)columns;
+            CGFloat itemSide = floor(rawSide * scale) / scale;
+            if (itemSide < 90) itemSide = 90; // 你的原逻辑里有兜底，这里保留
+
+            // ✅ 一行的宽度（3列）
+            CGFloat rowW = itemSide * columns + inter * (columns - 1);
+
+            // item（正方形）
             NSCollectionLayoutSize *itemSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]
                                           heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
 
-            NSCollectionLayoutSize *groupSize =
-            [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]
-                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:(itemSide * 2 + inter)]];
+            // row = 3 列
+            NSCollectionLayoutSize *rowSize =
+            [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:rowW]
+                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]];
+            NSCollectionLayoutGroup *row =
+            [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:rowSize subitem:item count:columns];
+            row.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:inter];
 
+            // group = 1 或 2 行
+            CGFloat groupH = itemSide * rows + inter * (rows - 1);
+            NSCollectionLayoutSize *groupSize =
+            [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:rowW]
+                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:groupH]];
             NSCollectionLayoutGroup *group =
-            [NSCollectionLayoutGroup verticalGroupWithLayoutSize:groupSize subitem:item count:2];
+            [NSCollectionLayoutGroup verticalGroupWithLayoutSize:groupSize subitem:row count:rows];
             group.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:inter];
 
             NSCollectionLayoutSection *sec = [NSCollectionLayoutSection sectionWithGroup:group];
             sec.orthogonalScrollingBehavior = UICollectionLayoutSectionOrthogonalScrollingBehaviorContinuous;
             sec.interGroupSpacing = inter;
-
             sec.contentInsets = NSDirectionalEdgeInsetsMake(0, leading, 0, leading);
             sec.supplementariesFollowContentInsets = NO;
 
+            // header
             NSCollectionLayoutSize *headerSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
                                           heightDimension:[NSCollectionLayoutDimension absoluteDimension:40]];
@@ -907,7 +937,7 @@ UICollectionViewDataSourcePrefetching
                                                                                       alignment:NSRectAlignmentTop];
             sec.boundarySupplementaryItems = @[header];
 
-            CGFloat scale = UIScreen.mainScreen.scale;
+            // ✅ 同步你的 thumbPixelSize
             weakSelf.thumbPixelSize = CGSizeMake(itemSide * scale * 1.6, itemSide * scale * 1.6);
 
             return sec;

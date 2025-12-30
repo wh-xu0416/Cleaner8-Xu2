@@ -1,5 +1,6 @@
 #import "OnboardingViewController.h"
 #import "VideoViewController.h"
+#import "MainTabBarController.h"
 
 @interface OnboardingViewController ()
 
@@ -27,7 +28,7 @@
         setBool:YES
         forKey:@"hasCompletedOnboarding"];
 
-    VideoViewController *main = [VideoViewController new];
+    MainTabBarController *main = [MainTabBarController new];
 
     UINavigationController *rootNav =
         (UINavigationController *)self.view.window.rootViewController;

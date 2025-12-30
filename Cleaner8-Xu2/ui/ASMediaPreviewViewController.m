@@ -209,6 +209,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 }
 - (void)prepareForDisplay {
     if (!self.asset) return;
+
     NSString *aid = self.asset.localIdentifier ?: @"";
     self.representedId = aid;
     self.iv.image = nil;
@@ -216,27 +217,34 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.networkAccessAllowed = YES;
-    opt.resizeMode = PHImageRequestOptionsResizeModeExact;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
+    opt.resizeMode   = PHImageRequestOptionsResizeModeFast;
 
     CGFloat scale = UIScreen.mainScreen.scale;
-    CGSize target = CGSizeMake(self.bounds.size.width * scale * 2.0,
-                               self.bounds.size.height * scale * 2.0);
+    CGSize target = CGSizeMake(self.bounds.size.width * scale,
+                               self.bounds.size.height * scale);
 
     __weak typeof(self) weakSelf = self;
+    if (self.rid != PHInvalidImageRequestID) [self.mgr cancelImageRequest:self.rid];
+
     self.rid = [self.mgr requestImageForAsset:self.asset
-                                  targetSize:target
-                                 contentMode:PHImageContentModeAspectFit
-                                     options:opt
-                               resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+                                   targetSize:target
+                                  contentMode:PHImageContentModeAspectFit
+                                      options:opt
+                                resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
         if (!result) return;
         if (![weakSelf.representedId isEqualToString:aid]) return;
+
+        // degraded=YES 是快速图；degraded=NO 是最终高清图
         BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
         if (degraded && weakSelf.iv.image) return;
+
         weakSelf.iv.image = result;
         if (!degraded) weakSelf.rid = PHInvalidImageRequestID;
     }];
 }
+
 - (void)endDisplay {
     if (self.rid != PHInvalidImageRequestID) [self.mgr cancelImageRequest:self.rid];
     self.rid = PHInvalidImageRequestID;
@@ -289,7 +297,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     PHVideoRequestOptions *opt = [PHVideoRequestOptions new];
     opt.networkAccessAllowed = YES;
-    opt.deliveryMode = PHVideoRequestOptionsDeliveryModeHighQualityFormat;
+    opt.deliveryMode = PHVideoRequestOptionsDeliveryModeFastFormat;
 
     __weak typeof(self) weakSelf = self;
     self.rid = [self.mgr requestPlayerItemForVideo:self.asset
@@ -484,7 +492,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 - (void)prepareForDisplay {
     if (!self.asset) return;
 
-    // ✅ 先触发一次，让 layoutSubviews 跑一遍，第一次就能用 asset 的尺寸定位
     [self setNeedsLayout];
     [self layoutIfNeeded];
 
@@ -494,11 +501,11 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     PHLivePhotoRequestOptions *opt = [PHLivePhotoRequestOptions new];
     opt.networkAccessAllowed = YES;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
 
     CGFloat scale = UIScreen.mainScreen.scale;
-    CGSize target = CGSizeMake(self.bounds.size.width * scale * 2.0,
-                               self.bounds.size.height * scale * 2.0);
+    CGSize target = CGSizeMake(self.bounds.size.width * scale,
+                               self.bounds.size.height * scale);
 
     __weak typeof(self) weakSelf = self;
     self.rid = [self.mgr requestLivePhotoForAsset:self.asset
@@ -683,6 +690,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     self.best.hidden = YES;
     [self applyCurrent:NO];
     [self applyChecked:NO];
+    self.rid = PHInvalidImageRequestID;
 }
 
 - (void)applyChecked:(BOOL)checked {
@@ -1078,7 +1086,19 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     }
 }
 
-- (void)collectionView:(UICollectionView *)collectionView didEndDisplayingCell:(UICollectionViewCell *)cell forItemAtIndexPath:(NSIndexPath *)indexPath {
+- (void)collectionView:(UICollectionView *)collectionView
+ didEndDisplayingCell:(UICollectionViewCell *)cell
+   forItemAtIndexPath:(NSIndexPath *)indexPath {
+
+    if (collectionView == self.thumbs && [cell isKindOfClass:ASPreviewThumbCell.class]) {
+        ASPreviewThumbCell *c = (ASPreviewThumbCell *)cell;
+        if (c.rid != PHInvalidImageRequestID) {
+            [self.mgr cancelImageRequest:c.rid];
+            c.rid = PHInvalidImageRequestID;
+        }
+        return;
+    }
+
     if (collectionView != self.pager) return;
     if ([cell isKindOfClass:ASPreviewBaseCell.class]) {
         [(ASPreviewBaseCell *)cell endDisplay];

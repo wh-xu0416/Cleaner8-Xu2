@@ -5,8 +5,10 @@
 #import "ASMyStudioViewController.h"
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
+#import <Network/Network.h>
 
 #pragma mark - UI Helpers
+static NSString * const kASLastPhotoAuthStatusKey = @"as_last_photo_auth_status_v1";
 
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
@@ -45,6 +47,11 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
 @property(nonatomic,strong) NSArray<UIView *> *shadowViews;
 
+@property(nonatomic,assign) BOOL hasShownNoNetworkAlertThisAppear;
+
+@property(nonatomic,assign) nw_path_monitor_t pathMonitor;
+@property(nonatomic,assign) BOOL hasNetwork;
+
 @end
 
 @implementation VideoViewController
@@ -63,16 +70,73 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [super viewDidLoad];
     self.view.backgroundColor = ASRGB(246, 248, 251);
     [self buildUI];
+    [self startNetworkMonitor];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+
     if (self.navigationController) {
         self.navigationController.interactivePopGestureRecognizer.enabled = YES;
         self.navigationController.interactivePopGestureRecognizer.delegate = nil;
     }
-    self.hasPresentedLimitedPickerThisAppear = NO;
+
+    self.hasShownNoNetworkAlertThisAppear = NO;
+
     [self requestAndApplyPhotoPermission];
+    [self checkNetworkAndMaybeAlert];
+}
+
+- (void)startNetworkMonitor {
+    if (@available(iOS 12.0, *)) {
+        if (self.pathMonitor) return;
+
+        self.hasNetwork = YES; // 默认先认为有网，避免刚进来就误弹
+
+        nw_path_monitor_t m = nw_path_monitor_create();
+        self.pathMonitor = m;
+
+        dispatch_queue_t q = dispatch_queue_create("as.net.monitor", DISPATCH_QUEUE_SERIAL);
+        nw_path_monitor_set_queue(m, q);
+
+        __weak typeof(self) weakSelf = self;
+        nw_path_monitor_set_update_handler(m, ^(nw_path_t  _Nonnull path) {
+            BOOL ok = (nw_path_get_status(path) == nw_path_status_satisfied);
+            weakSelf.hasNetwork = ok;
+
+            // 网络变差时，如果页面可见，弹一次
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (!weakSelf) return;
+                if (!ok) {
+                    [weakSelf checkNetworkAndMaybeAlert];
+                }
+            });
+        });
+
+        nw_path_monitor_start(m);
+    }
+}
+
+- (void)checkNetworkAndMaybeAlert {
+    // 页面不可见就不弹
+    if (!self.isViewLoaded || self.view.window == nil) return;
+
+    // 每次 appear 只弹一次
+    if (self.hasShownNoNetworkAlertThisAppear) return;
+
+    if (!self.hasNetwork) {
+        self.hasShownNoNetworkAlertThisAppear = YES;
+//        [self showNoNetworkAlert];
+    }
+}
+
+- (void)dealloc {
+    if (@available(iOS 12.0, *)) {
+        if (self.pathMonitor) {
+            nw_path_monitor_cancel(self.pathMonitor);
+            self.pathMonitor = nil;
+        }
+    }
 }
 
 - (void)viewDidLayoutSubviews {
@@ -120,23 +184,32 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 - (void)applyPhotoAuthStatus:(PHAuthorizationStatus)status {
     BOOL deniedOrRestricted = (status == PHAuthorizationStatusDenied || status == PHAuthorizationStatusRestricted);
     BOOL limited = (status == PHAuthorizationStatusLimited);
-    BOOL authorized = (status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited);
 
     // Denied/Restricted：禁用入口 + 显示 settingBar
     [self setFeatureButtonsEnabled:!deniedOrRestricted];
     self.settingBar.hidden = !deniedOrRestricted;
 
-    // Limited：拉起系统 picker（仅 iOS14+ 且 SDK >=14）
+    NSUserDefaults *ud = NSUserDefaults.standardUserDefaults;
+    NSInteger lastStatus = [ud integerForKey:kASLastPhotoAuthStatusKey];
+    [ud setInteger:status forKey:kASLastPhotoAuthStatusKey];
+    [ud synchronize];
+
+    if (!limited) {
+        self.hasPresentedLimitedPickerThisAppear = NO;
+        return;
+    }
+
+    // Limited：仅在“刚切到 limited 的那一次”自动弹一次
 #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
     if (@available(iOS 14, *)) {
-        if (limited && !self.hasPresentedLimitedPickerThisAppear) {
+        BOOL justBecameLimited = (lastStatus != PHAuthorizationStatusLimited);
+
+        if (justBecameLimited && !self.hasPresentedLimitedPickerThisAppear) {
             self.hasPresentedLimitedPickerThisAppear = YES;
             [PHPhotoLibrary.sharedPhotoLibrary presentLimitedLibraryPickerFromViewController:self];
         }
     }
 #endif
-
-    (void)authorized;
 }
 
 #pragma mark - UI enable/disable

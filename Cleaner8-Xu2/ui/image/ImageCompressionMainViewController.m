@@ -5,6 +5,12 @@
 #import <Photos/Photos.h>
 
 #pragma mark - Helpers (static)
+static NSString *ASImageSavePillText(uint64_t bytes) {
+    if (bytes == 0) return @"Save --MB";
+    uint64_t saveBytes = bytes / 2; // 固定 50%
+    double mb = (double)saveBytes / (1024.0 * 1024.0);
+    return [NSString stringWithFormat:@"Save %.0fMB", mb];
+}
 
 static NSString * const kASImgSizeCachePlist = @"as_img_size_cache_v2.plist";
 
@@ -951,37 +957,71 @@ UICollectionViewDataSourcePrefetching
         UICollectionViewCompositionalLayout *layout =
         [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection * _Nullable(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment>  _Nonnull environment) {
 
-            CGFloat containerW = environment.container.effectiveContentSize.width;
-
-            CGFloat inter = 5.0;
+            CGFloat inter   = 5.0;
             CGFloat leading = 20.0;
+            NSInteger columns = 3; // ✅ 和 Image 页保持一致，才能对齐
 
+            // ✅ 取本 section 的 itemCount（按你 LivePhoto 的数据结构改这里）
+            NSInteger itemCount = 0;
+            if (weakSelf && sectionIndex < weakSelf.sections.count) {
+                itemCount = weakSelf.sections[sectionIndex].assets.count;
+            }
+
+            // ✅ 不满一行：rows=1；最多两行：rows<=2
+            NSInteger rows = 1;
+            if (itemCount > 0) {
+                rows = (NSInteger)ceil((double)itemCount / (double)columns);
+                rows = MAX(1, MIN(2, rows));
+            }
+
+            CGFloat containerW = environment.container.effectiveContentSize.width;
             CGFloat contentW = containerW - leading * 2.0;
-            CGFloat itemSide = floor(contentW / 3.2);
-            if (itemSide < 90) itemSide = 90;
 
+            // ✅ 像素对齐，保证“视觉上严格正方形”
+            CGFloat scale = UIScreen.mainScreen.scale;
+            CGFloat rawSide = (contentW - inter * (columns - 1)) / (CGFloat)columns;
+            CGFloat itemSide = floor(rawSide * scale) / scale;
+
+            // ✅ 行宽固定（避免系统均分拉伸）
+            CGFloat rowW = itemSide * columns + inter * (columns - 1);
+
+            // item（正方形）
             NSCollectionLayoutSize *itemSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]
                                           heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]];
-            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
 
+            // ✅ 用 subitems 固定每个 item 的 absolute 尺寸，避免 count 版本“均分”
+            NSMutableArray<NSCollectionLayoutItem *> *subitems = [NSMutableArray array];
+            for (NSInteger i = 0; i < columns; i++) {
+                [subitems addObject:[NSCollectionLayoutItem itemWithLayoutSize:itemSize]];
+            }
+
+            NSCollectionLayoutSize *rowSize =
+            [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:rowW]
+                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]];
+            NSCollectionLayoutGroup *row =
+            [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:rowSize subitems:subitems];
+            row.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:inter];
+
+            // ✅ rows 决定高度：1 行就 itemSide；2 行就 itemSide*2+inter
+            CGFloat groupH = itemSide * rows + inter * (rows - 1);
             NSCollectionLayoutSize *groupSize =
-            [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]
-                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:(itemSide * 2 + inter)]];
-
+            [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:rowW]
+                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:groupH]];
             NSCollectionLayoutGroup *group =
-            [NSCollectionLayoutGroup verticalGroupWithLayoutSize:groupSize subitem:item count:2];
+            [NSCollectionLayoutGroup verticalGroupWithLayoutSize:groupSize subitem:row count:rows];
             group.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:inter];
 
             NSCollectionLayoutSection *sec = [NSCollectionLayoutSection sectionWithGroup:group];
+
+            // ✅ 你 LivePhoto 页原来怎么滚就怎么保留
+            // 如果你也是横向分组滚动：
             sec.orthogonalScrollingBehavior = UICollectionLayoutSectionOrthogonalScrollingBehaviorContinuous;
             sec.interGroupSpacing = inter;
-
             sec.contentInsets = NSDirectionalEdgeInsetsMake(0, leading, 0, leading);
-
             sec.supplementariesFollowContentInsets = NO;
 
-
+            // header（如果 LivePhoto 有分组标题就保留；没有就删掉这段）
             NSCollectionLayoutSize *headerSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
                                           heightDimension:[NSCollectionLayoutDimension absoluteDimension:40]];
@@ -991,23 +1031,29 @@ UICollectionViewDataSourcePrefetching
                                                                                       alignment:NSRectAlignmentTop];
             sec.boundarySupplementaryItems = @[header];
 
-            CGFloat scale = UIScreen.mainScreen.scale;
+            // ✅ 同步 thumbPixelSize（如果 LivePhoto 也用 cachingMgr）
             weakSelf.thumbPixelSize = CGSizeMake(itemSide * scale * 1.6, itemSide * scale * 1.6);
 
             return sec;
         }];
 
         UICollectionViewCompositionalLayoutConfiguration *config = [UICollectionViewCompositionalLayoutConfiguration new];
-        config.interSectionSpacing = 18;
+        config.interSectionSpacing = 18; // ✅ 和 Image 页一致
         layout.configuration = config;
         return layout;
     }
 
+    // iOS12- fallback：按你原来的写法即可（重点是 itemSize = 正方形）
     UICollectionViewFlowLayout *fl = [UICollectionViewFlowLayout new];
     fl.scrollDirection = UICollectionViewScrollDirectionVertical;
-    fl.minimumLineSpacing = 10;
-    fl.minimumInteritemSpacing = 10;
-    fl.itemSize = CGSizeMake(120, 120);
+    fl.sectionInset = UIEdgeInsetsMake(0, 20, 0, 20);
+    fl.minimumLineSpacing = 5;
+    fl.minimumInteritemSpacing = 5;
+
+    CGFloat contentW = UIScreen.mainScreen.bounds.size.width - 20*2;
+    NSInteger columns = 3;
+    CGFloat side = floor((contentW - 5*(columns-1)) / columns);
+    fl.itemSize = CGSizeMake(side, side);
     return fl;
 }
 
@@ -1335,7 +1381,7 @@ UICollectionViewDataSourcePrefetching
         if (![cell.representedAssetIdentifier isEqualToString:a.localIdentifier]) continue;
 
         uint64_t bytes = [self cachedFileSizeForAsset:a];
-        NSString *txt = ASMBPillSaved(bytes);
+        NSString *txt = ASImageSavePillText(bytes);
         if (![cell.pill.text isEqualToString:txt]) cell.pill.text = txt;
     }
 }
@@ -1427,15 +1473,29 @@ UICollectionViewDataSourcePrefetching
         else if (mb >= 1.0) [g1 addObject:a];        // [1,3)
         else [g0 addObject:a];                        // <1
     }
+    
+    NSComparator descBySize = ^NSComparisonResult(PHAsset *a1, PHAsset *a2) {
+        uint64_t s1 = [self cachedFileSizeForAsset:a1];
+        uint64_t s2 = [self cachedFileSizeForAsset:a2];
+
+        // 0（未知）永远放最后
+        if (s1 == 0 && s2 == 0) return NSOrderedSame;
+        if (s1 == 0) return NSOrderedDescending;
+        if (s2 == 0) return NSOrderedAscending;
+
+        if (s1 > s2) return NSOrderedAscending;   // 注意：Ascending = “排前面”
+        if (s1 < s2) return NSOrderedDescending;
+        return NSOrderedSame;
+    };
 
     NSMutableArray<ASImgSizeSection *> *secs = [NSMutableArray array];
 
-    if (g0.count)   { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@"<1MB";      s.assets=g0;   [secs addObject:s]; }
-    if (g1.count)   { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@"1MB–3MB";   s.assets=g1;   [secs addObject:s]; }
-    if (g3.count)   { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@"3MB–5MB";   s.assets=g3;   [secs addObject:s]; }
-    if (g5.count)   { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@"5MB–8MB";   s.assets=g5;   [secs addObject:s]; }
-    if (g8.count)   { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@"8MB–10MB";  s.assets=g8;   [secs addObject:s]; }
     if (g10p.count) { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@">10MB";     s.assets=g10p; [secs addObject:s]; }
+    if (g8.count)   { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@"8MB–10MB";  s.assets=g8;   [secs addObject:s]; }
+    if (g5.count)   { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@"5MB–8MB";   s.assets=g5;   [secs addObject:s]; }
+    if (g3.count)   { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@"3MB–5MB";   s.assets=g3;   [secs addObject:s]; }
+    if (g1.count)   { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@"1MB–3MB";   s.assets=g1;   [secs addObject:s]; }
+    if (g0.count)   { ASImgSizeSection *s=[ASImgSizeSection new]; s.title=@"<1MB";      s.assets=g0;   [secs addObject:s]; }
 
     return [secs copy];
 }
@@ -1585,7 +1645,7 @@ UICollectionViewDataSourcePrefetching
     BOOL sel = [self.selectedAssets containsObject:asset];
     [cell applySelectedUI:sel];
     uint64_t bytes = [self cachedFileSizeForAsset:asset];
-    cell.pill.text = ASMBPillSaved(bytes);
+    cell.pill.text = ASImageSavePillText(bytes);
 
     // thumb：只有当当前没有图时才请求
     if (!cell.thumbView.image && cell.requestId == PHInvalidImageRequestID) {

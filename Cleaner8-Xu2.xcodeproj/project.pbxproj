@@ -306,6 +306,7 @@
 				DEVELOPMENT_TEAM = 357A26CRTD;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Cleaner8-Xu2/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Compressly;
 				INFOPLIST_KEY_NSContactsUsageDescription = "";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "";
@@ -343,6 +344,7 @@
 				DEVELOPMENT_TEAM = 357A26CRTD;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Cleaner8-Xu2/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Compressly;
 				INFOPLIST_KEY_NSContactsUsageDescription = "";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "";
