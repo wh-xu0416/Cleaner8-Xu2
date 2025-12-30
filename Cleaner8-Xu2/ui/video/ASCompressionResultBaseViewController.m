@@ -1,5 +1,7 @@
 #import "ASCompressionResultBaseViewController.h"
 #import "ASMyStudioViewController.h"
+#import "ASMediaPreviewViewController.h"
+#import <Photos/Photos.h>
 
 #pragma mark - Helpers
 
@@ -27,13 +29,14 @@ typedef void(^ASDeleteSheetBlock)(void);
 @end
 
 @interface ASDeleteOriginalBottomSheet ()
+@property (nonatomic, strong) NSLayoutConstraint *deleteBottomC;
 @property (nonatomic, strong) UIView *dimView;
 @property (nonatomic, strong) UIView *sheetShadowView;
 @property (nonatomic, strong) UIView *sheetView;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UIButton *reserveBtn;
 @property (nonatomic, strong) UIButton *deleteBtn;
-@property (nonatomic, copy) ASDeleteSheetBlock onDelete;
+@property (nonatomic, copy, nullable) void (^onDelete)(void);
 @end
 
 @implementation ASDeleteOriginalBottomSheet
@@ -41,22 +44,41 @@ typedef void(^ASDeleteSheetBlock)(void);
 + (void)presentInViewController:(UIViewController *)vc
                           title:(NSString *)title
                         onDelete:(ASDeleteSheetBlock)onDelete {
+
     if (!vc.view.window && vc.presentedViewController) vc = vc.presentedViewController;
 
     ASDeleteOriginalBottomSheet *v = [ASDeleteOriginalBottomSheet new];
     v.onDelete = onDelete;
     [v buildUIWithTitle:title ?: @"Delete original ?"];
 
-    [vc.view addSubview:v];
+    UIView *container = vc.view.window;
+    if (!container) {
+        if (@available(iOS 13.0, *)) {
+            for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+                if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+                if (![scene isKindOfClass:UIWindowScene.class]) continue;
+                for (UIWindow *w in ((UIWindowScene *)scene).windows) {
+                    if (w.isKeyWindow) { container = w; break; }
+                }
+                if (container) break;
+            }
+        } else {
+            container = UIApplication.sharedApplication.keyWindow;
+        }
+    }
+    if (!container) container = vc.view;
+
+    [container addSubview:v];
     v.translatesAutoresizingMaskIntoConstraints = NO;
     [NSLayoutConstraint activateConstraints:@[
-        [v.leadingAnchor constraintEqualToAnchor:vc.view.leadingAnchor],
-        [v.trailingAnchor constraintEqualToAnchor:vc.view.trailingAnchor],
-        [v.topAnchor constraintEqualToAnchor:vc.view.topAnchor],
-        [v.bottomAnchor constraintEqualToAnchor:vc.view.bottomAnchor],
+        [v.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [v.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [v.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [v.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
     ]];
 
-    [vc.view layoutIfNeeded];
+    [container layoutIfNeeded];
+    [v layoutIfNeeded];
     [v animateIn];
 }
 
@@ -115,24 +137,44 @@ typedef void(^ASDeleteSheetBlock)(void);
     self.deleteBtn.backgroundColor = ASGrayBG();
     self.deleteBtn.clipsToBounds = YES;
     if (@available(iOS 13.0, *)) self.deleteBtn.layer.cornerCurve = kCACornerCurveContinuous;
-    [self.deleteBtn addTarget:self action:@selector(onDelete) forControlEvents:UIControlEventTouchUpInside];
+    [self.deleteBtn addTarget:self action:@selector(onTapDelete) forControlEvents:UIControlEventTouchUpInside];
     [self.sheetView addSubview:self.deleteBtn];
 
-    [NSLayoutConstraint activateConstraints:@[
+    self.reserveBtn.layer.cornerRadius = 25.5;
+    self.deleteBtn.layer.cornerRadius  = 25.5;
+    self.reserveBtn.layer.masksToBounds = YES;
+    self.deleteBtn.layer.masksToBounds  = YES;
+    NSMutableArray<NSLayoutConstraint *> *cs = [NSMutableArray array];
+    self.deleteBottomC = [self.deleteBtn.bottomAnchor constraintEqualToAnchor:self.sheetView.bottomAnchor constant:-20];
+    [self.deleteBottomC setActive:YES];
+
+    // dim 覆盖全屏
+    [cs addObjectsFromArray:@[
         [self.dimView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.dimView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.dimView.topAnchor constraintEqualToAnchor:self.topAnchor],
         [self.dimView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+    ]];
 
+    // sheetShadowView 横向贴边，底部贴 safeArea
+    [cs addObjectsFromArray:@[
         [self.sheetShadowView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.sheetShadowView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-        [self.sheetShadowView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+        [self.sheetShadowView.topAnchor constraintGreaterThanOrEqualToAnchor:self.topAnchor], // 兜底，防止高度不确定
+    ]];
 
+    [cs addObject:[self.sheetShadowView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]];
+
+    // sheetView 填满 shadow 容器
+    [cs addObjectsFromArray:@[
         [self.sheetView.leadingAnchor constraintEqualToAnchor:self.sheetShadowView.leadingAnchor],
         [self.sheetView.trailingAnchor constraintEqualToAnchor:self.sheetShadowView.trailingAnchor],
         [self.sheetView.topAnchor constraintEqualToAnchor:self.sheetShadowView.topAnchor],
         [self.sheetView.bottomAnchor constraintEqualToAnchor:self.sheetShadowView.bottomAnchor],
+    ]];
 
+    // 内容布局
+    [cs addObjectsFromArray:@[
         [self.titleLabel.topAnchor constraintEqualToAnchor:self.sheetView.topAnchor constant:30],
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.sheetView.leadingAnchor constant:20],
         [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.sheetView.trailingAnchor constant:-20],
@@ -146,9 +188,10 @@ typedef void(^ASDeleteSheetBlock)(void);
         [self.deleteBtn.leadingAnchor constraintEqualToAnchor:self.reserveBtn.leadingAnchor],
         [self.deleteBtn.trailingAnchor constraintEqualToAnchor:self.reserveBtn.trailingAnchor],
         [self.deleteBtn.heightAnchor constraintEqualToConstant:51],
-
-        [self.deleteBtn.bottomAnchor constraintEqualToAnchor:self.sheetView.safeAreaLayoutGuide.bottomAnchor constant:-20],
+//        [self.deleteBtn.bottomAnchor constraintEqualToAnchor:self.sheetView.bottomAnchor constant:-20],
     ]];
+
+    [NSLayoutConstraint activateConstraints:cs];
 
     self.sheetShadowView.layer.shadowColor = [UIColor colorWithWhite:0 alpha:(0x33/255.0)].CGColor;
     self.sheetShadowView.layer.shadowOpacity = 1.0;
@@ -160,9 +203,18 @@ typedef void(^ASDeleteSheetBlock)(void);
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGFloat pill = self.reserveBtn.bounds.size.height * 0.5;
-    self.reserveBtn.layer.cornerRadius = pill;
-    self.deleteBtn.layer.cornerRadius  = pill;
+
+    CGFloat h1 = CGRectGetHeight(self.reserveBtn.bounds);
+    CGFloat h2 = CGRectGetHeight(self.deleteBtn.bounds);
+    if (h1 > 0) self.reserveBtn.layer.cornerRadius = h1 * 0.5;
+    if (h2 > 0) self.deleteBtn.layer.cornerRadius  = h2 * 0.5;
+
+    if (@available(iOS 13.0, *)) {
+        self.reserveBtn.layer.cornerCurve = kCACornerCurveContinuous;
+        self.deleteBtn.layer.cornerCurve  = kCACornerCurveContinuous;
+    }
+    self.reserveBtn.layer.masksToBounds = YES;
+    self.deleteBtn.layer.masksToBounds  = YES;
 
     CGRect r = self.sheetShadowView.bounds;
     if (!CGRectIsEmpty(r)) {
@@ -171,6 +223,12 @@ typedef void(^ASDeleteSheetBlock)(void);
                                                      cornerRadii:CGSizeMake(16, 16)];
         self.sheetShadowView.layer.shadowPath = p.CGPath;
     }
+}
+
+
+- (void)safeAreaInsetsDidChange {
+    [super safeAreaInsetsDidChange];
+    self.deleteBottomC.constant = -(20.0 + self.safeAreaInsets.bottom);
 }
 
 - (void)animateIn {
@@ -201,12 +259,23 @@ typedef void(^ASDeleteSheetBlock)(void);
     [self onReserve];
 }
 - (void)onReserve { [self animateOut:nil]; }
-- (void)onDelete {
-    __weak typeof(self) weakSelf = self;
+- (void)onTapDelete {
+    ASDeleteSheetBlock deleteBlock = self.onDelete; // 先缓存出来，避免动画过程中属性变化
+
     [self animateOut:^{
-        if (weakSelf.onDelete) weakSelf.onDelete();
+        if (!deleteBlock) return;
+
+        // 下一帧再执行，避免在动画 completion 的栈里直接 present
+        dispatch_async(dispatch_get_main_queue(), ^{
+            @try {
+                deleteBlock();
+            } @catch (NSException *e) {
+                NSLog(@"[DeleteSheet] onDelete exception: %@ %@", e.name, e.reason);
+            }
+        });
     }];
 }
+
 @end
 
 #pragma mark - Base VC
@@ -237,6 +306,9 @@ typedef void(^ASDeleteSheetBlock)(void);
 @property (nonatomic, strong) UIImageView *studioIcon;
 @property (nonatomic, strong) UILabel *studioLabel;
 @property (nonatomic, strong) UIButton *todoBtn;
+
+@property (nonatomic, assign) BOOL hasAskedDelete;
+
 @end
 
 @implementation ASCompressionResultBaseViewController
@@ -270,8 +342,133 @@ typedef void(^ASDeleteSheetBlock)(void);
     if (![self useStaticPreviewIcon]) {
         [self loadThumbIfNeeded];
     }
+}
 
-    [self askDeleteOriginalIfNeeded];
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    if (!self.hasAskedDelete) {
+        self.hasAskedDelete = YES;
+        [self askDeleteOriginalIfNeeded];
+    }
+}
+
+- (NSArray<PHAsset *> *)as_deletableAssetsFrom:(NSArray<PHAsset *> *)assets
+                               blockedCountOut:(NSInteger *)blockedCountOut {
+    NSMutableArray<PHAsset *> *ok = [NSMutableArray array];
+    NSInteger blocked = 0;
+
+    for (PHAsset *a in assets) {
+        BOOL canDelete = YES;
+        if (@available(iOS 8.0, *)) {
+            canDelete = [a canPerformEditOperation:PHAssetEditOperationDelete];
+        }
+        if (canDelete) [ok addObject:a];
+        else blocked++;
+    }
+
+    if (blockedCountOut) *blockedCountOut = blocked;
+    return ok.copy;
+}
+
+- (UIViewController *)as_topPresentingVC {
+    UIViewController *vc = self.navigationController ?: self;
+    vc = vc.presentedViewController ?: vc;
+
+    while (vc.presentedViewController) {
+        vc = vc.presentedViewController;
+    }
+
+    // 如果最顶层已经是 UIAlertController，就回退到它的 presentingVC
+    if ([vc isKindOfClass:UIAlertController.class] && vc.presentingViewController) {
+        vc = vc.presentingViewController;
+    }
+    return vc;
+}
+
+- (void)as_presentSystemDeleteConfirmForAssets:(NSArray<PHAsset *> *)assets {
+    if (assets.count == 0) return;
+
+    UIViewController *vc = [self as_topPresentingVC];
+    if (!vc.view.window) return; // 兜底：不在窗口里就别 present（避免直接异常）
+
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Delete original?"
+                                                                message:(assets.count==1 ? @"This will delete the original from your photo library."
+                                                                                       : @"This will delete the originals from your photo library.")
+                                                         preferredStyle:UIAlertControllerStyleAlert];
+
+    [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+
+    __weak typeof(self) weakSelf = self;
+    [ac addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
+        [weakSelf as_deleteOriginalAssetsSafely:assets];
+    }]];
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [vc presentViewController:ac animated:YES completion:nil];
+    });
+}
+
+- (void)as_deleteOriginalAssetsSafely:(NSArray<PHAsset *> *)assets {
+    if (assets.count == 0) return;
+
+    PHAuthorizationStatus st;
+    if (@available(iOS 14.0, *)) st = [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+    else st = [PHPhotoLibrary authorizationStatus];
+
+    if (!(st == PHAuthorizationStatusAuthorized || st == PHAuthorizationStatusLimited)) {
+        [self as_showSimpleAlert:@"No Permission"
+                         message:@"Please allow Photos access to delete originals."];
+        return;
+    }
+
+    NSMutableArray<NSString *> *ids = [NSMutableArray arrayWithCapacity:assets.count];
+    for (PHAsset *a in assets) {
+        if (a.localIdentifier.length) [ids addObject:a.localIdentifier];
+    }
+    if (ids.count == 0) return;
+
+    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
+    if (fr.count == 0) {
+        [self as_showSimpleAlert:@"Not Found"
+                         message:@"These photos are no longer available."];
+        return;
+    }
+
+    __block NSString *exceptionMsg = nil;
+
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+        @try {
+            [PHAssetChangeRequest deleteAssets:fr];
+        } @catch (NSException *e) {
+            exceptionMsg = [NSString stringWithFormat:@"%@: %@", e.name ?: @"Exception", e.reason ?: @""];
+        }
+    } completionHandler:^(BOOL success, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+//            if (exceptionMsg.length) {
+//                [self as_showSimpleAlert:@"Delete Failed"
+//                                 message:exceptionMsg];
+//                return;
+//            }
+//            if (!success || error) {
+//                [self as_showSimpleAlert:@"Delete Failed"
+//                                 message:error.localizedDescription ?: @"Unknown error"];
+//                return;
+//            }
+
+            // 删除成功
+            // [self.navigationController popToRootViewControllerAnimated:YES];
+        });
+    }];
+}
+
+- (void)as_showSimpleAlert:(NSString *)title message:(NSString *)msg {
+    UIViewController *vc = self;
+    while (vc.presentedViewController) vc = vc.presentedViewController;
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:title
+                                                                message:msg
+                                                         preferredStyle:UIAlertControllerStyleAlert];
+    [ac addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [vc presentViewController:ac animated:YES completion:nil];
 }
 
 #pragma mark - UI
@@ -341,6 +538,9 @@ typedef void(^ASDeleteSheetBlock)(void);
         self.playIcon.image = [[UIImage imageNamed:@"ic_play"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         self.playIcon.contentMode = UIViewContentModeScaleAspectFit;
         [self.thumbView addSubview:self.playIcon];
+        self.thumbView.userInteractionEnabled = YES;
+        UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onTapPreview)];
+        [self.thumbView addGestureRecognizer:tap];
 
         self.starFloat = [UIImageView new];
         self.starFloat.translatesAutoresizingMaskIntoConstraints = NO;
@@ -494,6 +694,36 @@ typedef void(^ASDeleteSheetBlock)(void);
     dispatch_async(dispatch_get_main_queue(), ^{
         self.studioRow.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.studioRow.bounds cornerRadius:24].CGPath;
     });
+}
+
+- (void)onTapPreview {
+    NSArray<PHAsset *> *assets = self.summary.originalAssets ?: @[];
+    if (assets.count == 0) return;
+
+    // 如果你只想预览第一条，改成：NSArray *previewAssets = @[assets.firstObject];
+    NSArray<PHAsset *> *previewAssets = assets;
+
+    NSIndexSet *preSel = [NSIndexSet indexSet]; // 结果页一般没“勾选态”，传空即可
+
+    ASMediaPreviewViewController *p =
+    [[ASMediaPreviewViewController alloc] initWithAssets:previewAssets
+                                           initialIndex:0
+                                        selectedIndexes:preSel];
+
+    p.bestIndex = 0;
+    p.showsBestBadge = YES;
+
+    // __weak typeof(self) weakSelf = self;
+    // p.onBack = ^(NSArray<PHAsset *> *selectedAssets, NSIndexSet *selectedIndexes) {
+    // };
+
+    if (self.navigationController) {
+        [self.navigationController pushViewController:p animated:YES];
+    } else {
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:p];
+        nav.modalPresentationStyle = UIModalPresentationFullScreen;
+        [self presentViewController:nav animated:YES completion:nil];
+    }
 }
 
 #pragma mark - Table（稳定三等分+分割线）
@@ -699,22 +929,34 @@ typedef void(^ASDeleteSheetBlock)(void);
 #pragma mark - Delete original
 
 - (void)askDeleteOriginalIfNeeded {
-    if (self.summary.originalAssets.count == 0) return;
+    NSArray<PHAsset *> *originals = self.summary.originalAssets ?: @[];
+    if (originals.count == 0) return;
+
+    NSInteger blocked = 0;
+    NSArray<PHAsset *> *deletable = [self as_deletableAssetsFrom:originals blockedCountOut:&blocked];
+
+    if (deletable.count == 0) {
+        // 一个都删不了：别弹 Delete，给提示
+        [self as_showSimpleAlert:@"Can't delete"
+                         message:@"These photos can't be deleted (shared/synced or restricted)."];
+        return;
+    }
 
     __weak typeof(self) weakSelf = self;
     [ASDeleteOriginalBottomSheet presentInViewController:self
                                                   title:[self deleteSheetTitle]
                                                 onDelete:^{
-        NSArray<PHAsset *> *toDelete = weakSelf.summary.originalAssets ?: @[];
-        if (toDelete.count == 0) return;
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
 
-        [PHPhotoLibrary.sharedPhotoLibrary performChanges:^{
-            [PHAssetChangeRequest deleteAssets:toDelete];
-        } completionHandler:^(BOOL success, NSError * _Nullable error) {
-            // optional
-        }];
+        // 可选：有 blocked 的话也提示一下
+        if (blocked > 0) {
+            // 你也可以把这句话合并到系统确认 message 里
+        }
+        [self as_deleteOriginalAssetsSafely:deletable];
     }];
 }
+
 
 #pragma mark - Actions
 

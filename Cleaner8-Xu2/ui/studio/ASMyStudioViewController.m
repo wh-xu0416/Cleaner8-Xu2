@@ -426,17 +426,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     if (idx < 0 || idx >= self.data.count) return;
 
     ASStudioItem *it = self.data[idx];
-
-    NSString *title = (it.type == ASStudioMediaTypePhoto)
-    ? @"Are you sure you want to delete this image?"
-    : @"Are you sure you want to delete this video?";
-
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleAlert];
-    [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [ac addAction:[UIAlertAction actionWithTitle:@"Confirm Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        [self deleteItem:it];
-    }]];
-    [self presentViewController:ac animated:YES completion:nil];
+    [self deleteItem:it];
 }
 
 - (void)deleteItem:(ASStudioItem *)it {
