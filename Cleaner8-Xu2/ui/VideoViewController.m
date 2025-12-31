@@ -253,7 +253,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
     self.titleLab = [UILabel new];
     self.titleLab.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLab.text = @"HOME";
+    self.titleLab.text = @"Compressly";
     self.titleLab.textColor = UIColor.blackColor;
     self.titleLab.font = ASFont(28, UIFontWeightSemibold);
     self.titleLab.textAlignment = NSTextAlignmentCenter;
