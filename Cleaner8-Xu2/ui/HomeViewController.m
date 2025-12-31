@@ -777,6 +777,11 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     if (self.playerLayer) {
         self.playerLayer.frame = self.img1.bounds;
     }
+    
+    UIBezierPath *path =
+        [UIBezierPath bezierPathWithRoundedRect:self.cardView.bounds
+                                   cornerRadius:self.cardView.layer.cornerRadius];
+    self.shadowContainer.layer.shadowPath = path.CGPath;
 }
 
 - (void)prepareForReuse {
@@ -998,9 +1003,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
     // 首屏先渲染一波（即使没权限也能显示缓存摘要 + 占位）
     [self rebuildModulesAndReloadAsyncFinal:NO];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self rebuildModulesAndReloadAsyncFinal:YES];
-    });
+  
     // gate 按钮补上点击
     [self.permissionGateButton addTarget:self
                                   action:@selector(onTapPermissionGate)
@@ -1279,65 +1282,116 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
 #pragma mark - Data Build
 
-- (void)rebuildModulesAndReload {
-    CFTimeInterval t0 = CFAbsoluteTimeGetCurrent();
-    CFTimeInterval t = t0;
+- (NSString *)contentKeyForVM:(ASHomeModuleVM *)vm {
+    return [NSString stringWithFormat:@"%lu|%@|%llu|%lu|%@|%d|%d",
+            (unsigned long)vm.type,
+            vm.thumbKey ?: @"",
+            (unsigned long long)vm.totalBytes,
+            (unsigned long)vm.totalCount,
+            vm.countText ?: @"",
+            vm.showsTwoThumbs,
+            vm.isVideoCover];
+}
 
-    [self computeDiskSpace];
-    ASLogCost(@"computeDiskSpace", t); t = CFAbsoluteTimeGetCurrent();
-
-    if (self.scanMgr.snapshot.state == ASScanStateScanning) {
-        [self scheduleScanUIUpdateCoalesced];
-        ASLogCost(@"scanning fast return", t);
-        ASLogCost(@"TOTAL rebuildModulesAndReload", t0);
-        return;
-    }
-
-    NSArray<ASHomeModuleVM *> *old = self.modules ?: @[];
-    NSArray<ASHomeModuleVM *> *newMods = [self buildModulesFromManagerAndComputeClutterIsFinal:YES];
-    ASLogCost(@"buildModulesFromManager", t); t = CFAbsoluteTimeGetCurrent();
-
-    self.modules = newMods;
-
-    if (old.count == 0 || old.count != newMods.count) {
-        [self.cv reloadData];
-        ASLogCost(@"reloadData", t);
-        ASLogCost(@"TOTAL rebuildModulesAndReload", t0);
-        return;
-    }
-
-    NSMutableArray<NSIndexPath *> *reloadIPs = [NSMutableArray array];
-    for (NSInteger i = 0; i < newMods.count; i++) {
-        NSString *ok = [self coverKeyForVM:old[i]];
-        NSString *nk = [self coverKeyForVM:newMods[i]];
-        if (![ok isEqualToString:nk]) {
-            [reloadIPs addObject:[NSIndexPath indexPathForItem:i inSection:0]];
-        }
-    }
-    ASLogCost(@"diff coverKey", t); t = CFAbsoluteTimeGetCurrent();
-
-    if (reloadIPs.count > 0) {
-        [self.cv reloadItemsAtIndexPaths:reloadIPs];
-    }
-    ASLogCost(@"reloadItems", t); t = CFAbsoluteTimeGetCurrent();
-
-    [self updateHeaderDuringScanning];
-    ASLogCost(@"updateHeader", t); t = CFAbsoluteTimeGetCurrent();
-
+- (void)refreshVisibleCellsAndCovers {
     NSArray<NSIndexPath *> *vis = [self.cv indexPathsForVisibleItems];
-    ASLogCost(@"indexPathsForVisibleItems", t); t = CFAbsoluteTimeGetCurrent();
-
     for (NSIndexPath *ip in vis) {
         if (ip.item >= self.modules.count) continue;
+
         HomeModuleCell *cell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:ip];
-        if (!cell) continue;
+        if (![cell isKindOfClass:HomeModuleCell.class]) continue;
+
         ASHomeModuleVM *vm = self.modules[ip.item];
+
+        // 1) 刷文字/徽标
         [cell applyVM:vm humanSizeFn:^NSString *(uint64_t bytes) {
             return [HomeModuleCell humanSize:bytes];
         }];
-    }
-    ASLogCost(@"applyVM visible loop", t);
 
+        // 2) 如果 thumbLocalIds 这次才变成有值，而 cell 已在屏幕上，
+        //    willDisplay 不会再触发，所以这里必须主动触发一次封面请求
+        [self requestCoverIfNeededForCell:cell vm:vm indexPath:ip];
+    }
+}
+
+- (void)rebuildModulesAndReload {
+    CFTimeInterval t0 = CFAbsoluteTimeGetCurrent();
+
+    if (self.scanMgr.snapshot.state == ASScanStateScanning) {
+        [self scheduleScanUIUpdateCoalesced];
+        ASLogCost(@"TOTAL rebuildModulesAndReload (scanning)", t0);
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(self.homeBuildQueue, ^{
+        @autoreleasepool {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+
+            // ✅ 后台：disk + build
+            NSDictionary *attrs = [[NSFileManager defaultManager]
+                                   attributesOfFileSystemForPath:NSHomeDirectory()
+                                   error:nil];
+            uint64_t total = [attrs[NSFileSystemSize] unsignedLongLongValue];
+            uint64_t free  = [attrs[NSFileSystemFreeSize] unsignedLongLongValue];
+
+            // ⚠️ 不要在后台线程写 self.xxx（避免竞态），先放局部变量
+            uint64_t totalLocal = total;
+            uint64_t freeLocal  = free;
+
+            // buildModules 内部会用 diskTotal/free 来算 appData/clutter，所以临时用局部值喂进去：
+            // 最简单：先把 self.diskTotal/free 也用局部变量覆盖，但要在同一后台队列里用完，不要依赖主线程读
+            self.diskTotalBytes = totalLocal;
+            self.diskFreeBytes  = freeLocal;
+
+            NSArray<ASHomeModuleVM *> *newMods =
+            [self buildModulesFromManagerAndComputeClutterIsFinal:YES];
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) self = weakSelf;
+                if (!self) return;
+
+                // ✅ 主线程：写回 disk（供 header 用）
+                self.diskTotalBytes = totalLocal;
+                self.diskFreeBytes  = freeLocal;
+
+                NSArray<ASHomeModuleVM *> *old = self.modules ?: @[];
+                self.modules = newMods;
+
+                if (old.count == 0 || old.count != newMods.count) {
+                    [self.cv reloadData];
+                } else {
+                    // ✅ 不要只 diff coverKey，要 diff “内容key”
+                    NSMutableArray<NSIndexPath *> *reloadIPs = [NSMutableArray array];
+                    for (NSInteger i = 0; i < newMods.count; i++) {
+                        NSString *ok = [self contentKeyForVM:old[i]];
+                        NSString *nk = [self contentKeyForVM:newMods[i]];
+                        if (![ok isEqualToString:nk]) {
+                            [reloadIPs addObject:[NSIndexPath indexPathForItem:i inSection:0]];
+                        }
+                    }
+
+                    if (reloadIPs.count) {
+                        [UIView performWithoutAnimation:^{
+                            [self.cv reloadItemsAtIndexPaths:reloadIPs];
+                        }];
+                    }
+                }
+
+                // ✅ header：只 apply，不再 computeDiskSpace（你得保证 updateHeaderDuringScanning 里不要再算disk）
+                [self updateHeaderDuringScanning];
+
+                // ✅ 关键补丁：无论 reloadIPs 是否为空，都要刷新可见 cell 文本 + 触发封面加载
+                //    （尤其是 thumbLocalIds 从空变有的那一刻）
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self refreshVisibleCellsAndCovers];
+                });
+
+                ASLogCost(@"TOTAL rebuildModulesAndReload (async)", t0);
+            });
+        }
+    });
 }
 
 
@@ -1531,7 +1585,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
 - (void)updateHeaderDuringScanning {
     // 更新磁盘信息（free 会变）
-    [self computeDiskSpace];
+//    [self computeDiskSpace];
 
     // 触发 header 更新：不 reloadData，直接拿当前 header
     ASHomeHeaderView *hv = (ASHomeHeaderView *)[self.cv supplementaryViewForElementKind:UICollectionElementKindSectionHeader
