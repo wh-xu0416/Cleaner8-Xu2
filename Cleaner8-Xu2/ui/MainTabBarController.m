@@ -3,8 +3,8 @@
 #import "HomeViewController.h"
 #import "VideoViewController.h"
 #import "SecretViewController.h"
-#import "SetViewController.h"
 #import "SwipeViewController.h"
+#import "MoreViewController.h"
 
 @interface MainTabBarController ()
 <
@@ -35,7 +35,7 @@ UIGestureRecognizerDelegate
         [self navWithVC:[VideoViewController new]    title:@"Video" image:@""],
         [self navWithVC:[SwipeViewController new]    title:@"Swipe" image:@""],
         [self navWithVC:[SecretViewController new] title:@"Private" image:@""],
-        [self navWithVC:[SetViewController new]    title:@"More" image:@""],
+        [self navWithVC:[MoreViewController new]    title:@"More" image:@""],
     ];
 
     self.tabBar.hidden = YES;

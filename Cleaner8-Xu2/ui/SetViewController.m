@@ -16,11 +16,16 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 @property(nonatomic,strong) UIImageView *bgTop;
 @property(nonatomic,strong) UILabel *titleLab;
 
+@property(nonatomic,strong) UIScrollView *scroll;
+@property(nonatomic,strong) UIView *content;
+
 @property(nonatomic,strong) UIControl *termsCard;
 @property(nonatomic,strong) UIControl *privacyCard;
 @property(nonatomic,strong) UIControl *versionCard;
+@property(nonatomic,strong) UIButton *backBtn;
 
 @end
+
 
 @implementation SetViewController
 
@@ -52,16 +57,36 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     self.bgTop.clipsToBounds = YES;
     [self.view addSubview:self.bgTop];
 
-    // 标题
+    // ✅ scroll + content（titlebar风格跟 Video 一致）
+    self.scroll = [UIScrollView new];
+    self.scroll.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scroll.backgroundColor = UIColor.clearColor;
+    self.scroll.showsVerticalScrollIndicator = NO;
+    [self.view addSubview:self.scroll];
+
+    self.content = [UIView new];
+    self.content.translatesAutoresizingMaskIntoConstraints = NO;
+    self.content.backgroundColor = UIColor.clearColor;
+    [self.scroll addSubview:self.content];
+
+    // 标题（放在 content 上）
     self.titleLab = [UILabel new];
     self.titleLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLab.text = @"Setting";
     self.titleLab.textColor = UIColor.blackColor;
     self.titleLab.font = ASFont(28, UIFontWeightSemibold);
     self.titleLab.textAlignment = NSTextAlignmentCenter;
-    [self.view addSubview:self.titleLab];
+    [self.content addSubview:self.titleLab];
 
-    // 三个卡片
+    self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.backBtn setImage:backImg forState:UIControlStateNormal];
+    self.backBtn.adjustsImageWhenHighlighted = NO;
+    [self.backBtn addTarget:self action:@selector(tapBack) forControlEvents:UIControlEventTouchUpInside];
+    [self.content addSubview:self.backBtn];
+
+    // 三个卡片（加到 content）
     self.termsCard = [self buildCardWithLeftText:@"Terms of User"
                                       rightType:@"image"
                                      rightValue:@"ic_todo_small"
@@ -72,31 +97,47 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
                                        rightValue:@"ic_todo_small"
                                            action:@selector(tapPrivacy)];
 
-    NSString *ver = [self appVersionString]; // 真实版本号
+    NSString *ver = [self appVersionString];
     self.versionCard = [self buildCardWithLeftText:@"Version"
                                          rightType:@"version"
                                         rightValue:ver
                                             action:nil];
 
-    [self.view addSubview:self.termsCard];
-    [self.view addSubview:self.privacyCard];
-    [self.view addSubview:self.versionCard];
+    [self.content addSubview:self.termsCard];
+    [self.content addSubview:self.privacyCard];
+    [self.content addSubview:self.versionCard];
 
     [NSLayoutConstraint activateConstraints:@[
-        // 背景
+        // bg
         [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.bgTop.heightAnchor constraintEqualToConstant:360],
 
-        // 标题
-        [self.titleLab.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:13],
-        [self.titleLab.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        // scroll
+        [self.scroll.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.scroll.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
-        // 卡片：左右 20，占满；纵向排列；间距 20
+        // content
+        [self.content.topAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.topAnchor],
+        [self.content.leadingAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.leadingAnchor],
+        [self.content.trailingAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.trailingAnchor],
+        [self.content.bottomAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.bottomAnchor],
+        [self.content.widthAnchor constraintEqualToAnchor:self.scroll.frameLayoutGuide.widthAnchor],
+
+        [self.titleLab.topAnchor constraintEqualToAnchor:self.content.safeAreaLayoutGuide.topAnchor constant:13],
+        [self.titleLab.centerXAnchor constraintEqualToAnchor:self.content.centerXAnchor],
+
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:20],
+        [self.backBtn.centerYAnchor constraintEqualToAnchor:self.titleLab.centerYAnchor],
+        [self.backBtn.widthAnchor constraintEqualToConstant:24],
+        [self.backBtn.heightAnchor constraintEqualToConstant:24],
+
         [self.termsCard.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:64],
-        [self.termsCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.termsCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.termsCard.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:20],
+        [self.termsCard.trailingAnchor constraintEqualToAnchor:self.content.trailingAnchor constant:-20],
 
         [self.privacyCard.topAnchor constraintEqualToAnchor:self.termsCard.bottomAnchor constant:20],
         [self.privacyCard.leadingAnchor constraintEqualToAnchor:self.termsCard.leadingAnchor],
@@ -105,12 +146,13 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         [self.versionCard.topAnchor constraintEqualToAnchor:self.privacyCard.bottomAnchor constant:20],
         [self.versionCard.leadingAnchor constraintEqualToAnchor:self.termsCard.leadingAnchor],
         [self.versionCard.trailingAnchor constraintEqualToAnchor:self.termsCard.trailingAnchor],
+
+        [self.versionCard.bottomAnchor constraintEqualToAnchor:self.content.bottomAnchor constant:-34],
     ]];
 }
 
 #pragma mark - Card Builder
 
-/// rightType: @"image" / @"version"
 - (UIControl *)buildCardWithLeftText:(NSString *)leftText
                            rightType:(NSString *)rightType
                           rightValue:(NSString *)rightValue
@@ -122,7 +164,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     card.layer.cornerRadius = 24;
     card.layer.masksToBounds = NO;
 
-    // 阴影（跟你 HOME row 风格接近）
     card.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.08].CGColor;
     card.layer.shadowOpacity = 1.0;
     card.layer.shadowOffset = CGSizeMake(0, 10);
@@ -169,14 +210,11 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         ]];
     }
 
-    // 内边距：左 30，右 20，上下 23
-    // 用 top/bottom 约束把卡片高度撑起来（不写死高度）
     [NSLayoutConstraint activateConstraints:@[
         [leftLab.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:30],
         [leftLab.topAnchor constraintEqualToAnchor:card.topAnchor constant:23],
         [leftLab.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-23],
 
-        // 左文右内容间距（避免重叠）
         [leftLab.trailingAnchor constraintLessThanOrEqualToAnchor:rightView.leadingAnchor constant:-12],
     ]];
 
@@ -194,6 +232,14 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 }
 
 #pragma mark - Actions
+
+- (void)tapBack {
+    if (self.navigationController && self.navigationController.viewControllers.count > 1) {
+        [self.navigationController popViewControllerAnimated:YES];
+    } else {
+        [self dismissViewControllerAnimated:YES completion:nil];
+    }
+}
 
 - (void)tapTerms {
     [self as_openInBrowser:@"https://www.baidu.com"];
