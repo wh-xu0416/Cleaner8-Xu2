@@ -11,8 +11,10 @@ typedef NS_ENUM(NSInteger, ASAssetSortMode) {
     ASAssetSortModeLargest,
     ASAssetSortModeSmallest
 };
+
 static inline UIColor *ASBgColor(void) {
-    return [UIColor colorWithRed:0xF6/255.0 green:0xF6/255.0 blue:0xF6/255.0 alpha:1.0];
+    // LaunchViewController: ASRGB(246, 248, 251)
+    return [UIColor colorWithRed:246/255.0 green:248/255.0 blue:251/255.0 alpha:1.0];
 }
 
 static inline NSString *ASHumanSize(uint64_t bytes) {
@@ -1174,16 +1176,25 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = ASBgColor(); // #F6F6F6FF
-    UIImage *bg = [UIImage imageNamed:@"ic_home_bg"];
-    UIImageView *iv = [[UIImageView alloc] initWithImage:bg];
-    iv.contentMode = UIViewContentModeScaleAspectFill;
-    iv.clipsToBounds = YES;
-    iv.userInteractionEnabled = NO;
-    [self.view addSubview:iv];
-    [self.view sendSubviewToBack:iv];
-    self.homeBgImageView = iv;
-  
+    self.view.backgroundColor = ASBgColor(); // #F6F8FBFF
+
+    UIImageView *bgTop = [UIImageView new];
+    bgTop.translatesAutoresizingMaskIntoConstraints = NO;
+    bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
+    bgTop.contentMode = UIViewContentModeScaleAspectFill;
+    bgTop.clipsToBounds = YES;
+    bgTop.userInteractionEnabled = NO;
+    [self.view addSubview:bgTop];
+    [self.view sendSubviewToBack:bgTop];
+    self.homeBgImageView = bgTop;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [bgTop.heightAnchor constraintEqualToConstant:236],
+    ]];
+
     // 只隐藏系统 nav，不影响手势
     self.navigationController.navigationBarHidden = YES;
 
@@ -1303,21 +1314,6 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     CGFloat insetBottom = bottomSafe + (self.deleteBtn.hidden ? 0 : floatBtnH);
     self.cv.contentInset = UIEdgeInsetsMake(0, 0, insetBottom, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
-
-    if (self.homeBgImageView.image) {
-        CGFloat w = self.view.bounds.size.width;
-
-        UIImage *img = self.homeBgImageView.image;
-        CGFloat h = 0;
-        if (img.size.width > 0) {
-            h = w * (img.size.height / img.size.width);
-        }
-
-        CGFloat minH = CGRectGetMaxY(self.topToolbar.frame);
-        if (h < minH) h = minH;
-
-        self.homeBgImageView.frame = CGRectMake(0, 0, w, h);
-    }
     
     [self.view bringSubviewToFront:self.navBar];
     [self.view bringSubviewToFront:self.topToolbar];
