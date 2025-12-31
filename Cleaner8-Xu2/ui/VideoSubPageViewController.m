@@ -113,7 +113,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
         _cardContainer = [UIView new];
         _cardContainer.backgroundColor = UIColor.clearColor;
-        _cardContainer.layer.cornerRadius = 14;
+        _cardContainer.layer.cornerRadius = 22;
         _cardContainer.clipsToBounds = YES;
         [_shadowContainer addSubview:_cardContainer];
 
@@ -124,14 +124,14 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
         _whiteContent = [UIView new];
         _whiteContent.backgroundColor = UIColor.whiteColor;
-        _whiteContent.layer.cornerRadius = 14;
+        _whiteContent.layer.cornerRadius = 22;
         if (@available(iOS 11.0, *)) {
             _whiteContent.layer.maskedCorners = (kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner); // 上直角，下圆角
         }
         [_cardContainer addSubview:_whiteContent];
 
         _titleLabel = [UILabel new];
-        _titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+        _titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
         _titleLabel.textColor = UIColor.blackColor;
         [_whiteContent addSubview:_titleLabel];
 
@@ -144,10 +144,10 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
         _badgeBtn.backgroundColor = ASBlue();
         _badgeBtn.layer.cornerRadius = 18;
         _badgeBtn.clipsToBounds = YES;
-        _badgeBtn.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+        _badgeBtn.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
         [_badgeBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         _badgeBtn.userInteractionEnabled = NO;
-        _badgeBtn.contentEdgeInsets = UIEdgeInsetsMake(8, 14, 8, 16);
+        _badgeBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 16, 10, 18);
         _badgeBtn.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
 
         UIImage *todo = [[UIImage imageNamed:@"ic_todo"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
@@ -206,43 +206,54 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     CGFloat w = self.cardContainer.bounds.size.width;
     CGFloat h = self.cardContainer.bounds.size.height;
 
-    CGFloat topDecorH = 44; // 顶部装饰图高度
+    CGFloat topDecorH = 30;
     CGFloat gap = 6;
 
     self.topDecor.frame = CGRectMake(0, 0, w, topDecorH);
 
     CGFloat contentY = topDecorH + gap;
-    self.whiteContent.frame = CGRectMake(0, contentY, w, h - contentY);
 
-    CGFloat pad = 15;
+    CGFloat whiteH = MIN(150.0, h - contentY);
+    self.whiteContent.frame = CGRectMake(0, contentY, w, whiteH);
 
-    self.titleLabel.frame = CGRectMake(pad, pad, w - pad*2 - 140, 20);
-    self.countLabel.frame = CGRectMake(pad, CGRectGetMaxY(self.titleLabel.frame) + 4, w - pad*2 - 140, 16);
+    CGFloat padX = 16;
+    CGFloat padY = 20;
 
-    // badge
+    CGFloat bigW = 92,  bigH = 120;
+    CGFloat smallW = 60, smallH = 80;
+
+    CGFloat rightInset = 22;
+    CGFloat bigY = padY;
+
+    CGFloat smallX = w - rightInset - smallW;
+
+    CGFloat bigX = smallX + 30 - bigW;
+
+    CGFloat smallY = bigY + (bigH - smallH) * 0.5;
+
+    self.img2.frame = CGRectMake(smallX, smallY, smallW, smallH);
+    self.img1.frame = CGRectMake(bigX,   bigY,   bigW,   bigH);
+
+    [self.whiteContent bringSubviewToFront:self.play2];
+    [self.whiteContent bringSubviewToFront:self.img1];
+    [self.whiteContent bringSubviewToFront:self.play1];
+
+    self.play1.frame = CGRectMake(CGRectGetMinX(self.img1.frame) + 10, CGRectGetMinY(self.img1.frame) + 10, 18, 18);
+    self.play2.frame = CGRectMake(CGRectGetMinX(self.img2.frame) + 10, CGRectGetMinY(self.img2.frame) + 10, 18, 18);
+
+    CGFloat textW = MAX(0, bigX - padX - 12);
+    self.titleLabel.frame = CGRectMake(padX, padY, textW, 24);
+    self.countLabel.frame = CGRectMake(padX, CGRectGetMaxY(self.titleLabel.frame) + 4, textW, 16);
+
     NSString *t = self.badgeBtn.currentTitle ?: @"";
-    CGSize ts = [t sizeWithAttributes:@{NSFontAttributeName:self.badgeBtn.titleLabel.font ?: [UIFont systemFontOfSize:14]}];
+    CGSize ts = [t sizeWithAttributes:@{NSFontAttributeName:self.badgeBtn.titleLabel.font ?: [UIFont systemFontOfSize:20]}];
     UIImage *bi = [self.badgeBtn imageForState:UIControlStateNormal];
     CGFloat spacing = bi ? 8 : 0;
     UIEdgeInsets in = self.badgeBtn.contentEdgeInsets;
     CGFloat badgeW = ceil(in.left + ts.width + spacing + (bi?bi.size.width:0) + in.right);
-    CGFloat badgeH = 36;
-    self.badgeBtn.frame = CGRectMake(pad, CGRectGetMaxY(self.countLabel.frame) + 10, badgeW, badgeH);
-
-    // thumbs right side
-    CGFloat bigW = 90, bigH = 120;
-    CGFloat smallW = 60, smallH = 80;
-
-    CGFloat bigX = w - pad - bigW;
-    CGFloat bigY = pad;
-    self.img1.frame = CGRectMake(bigX, bigY, bigW, bigH);
-
-    CGFloat smallX = bigX + 30;
-    CGFloat smallY = bigY + bigH - smallH + 10;
-    self.img2.frame = CGRectMake(smallX, smallY, smallW, smallH);
-
-    self.play1.frame = CGRectMake(CGRectGetMinX(self.img1.frame) + 6, CGRectGetMinY(self.img1.frame) + 6, 18, 18);
-    self.play2.frame = CGRectMake(CGRectGetMinX(self.img2.frame) + 6, CGRectGetMinY(self.img2.frame) + 6, 18, 18);
+    CGFloat badgeH = 48;
+    self.badgeBtn.layer.cornerRadius = badgeH / 2.0;
+    self.badgeBtn.frame = CGRectMake(padX, CGRectGetMaxY(self.countLabel.frame) + 14, badgeW, badgeH);
 }
 
 - (void)prepareForReuse {
@@ -267,7 +278,6 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     self.countLabel.text = vm.countText ?: @"";
     [self.badgeBtn setTitle:ASHumanSize(vm.totalBytes) forState:UIControlStateNormal];
 
-    // 顶部装饰图：按 type 切换
     switch (vm.type) {
         case ASVideoSubCardTypeSimilar:    self.topDecor.image = [UIImage imageNamed:@"ic_video_tip"]; break;
         case ASVideoSubCardTypeDuplicate:  self.topDecor.image = [UIImage imageNamed:@"ic_video_tip"]; break;
@@ -275,7 +285,6 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
         case ASVideoSubCardTypeBig:        self.topDecor.image = [UIImage imageNamed:@"ic_video_tip"]; break;
     }
 
-    // 播放 icon 永远显示（你说两张都有）
     self.play1.hidden = NO;
     self.play2.hidden = NO;
 }
@@ -307,7 +316,6 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 @property (nonatomic, strong) ASPhotoScanManager *scanMgr;
 @property (nonatomic, strong) NSArray<ASVideoSubCardVM *> *modules;
 
-// throttle
 @property (nonatomic, strong) NSTimer *scanUITimer;
 @property (nonatomic) BOOL pendingScanUIUpdate;
 @property (nonatomic) CFTimeInterval lastScanUIFire;
@@ -347,7 +355,6 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     self.imgMgr = [[PHCachingImageManager alloc] init];
     self.scanMgr = [ASPhotoScanManager shared];
 
-    // 首屏先 build 一次
     [self rebuildModulesAndReloadIsFinal:(self.scanMgr.snapshot.state != ASScanStateScanning)];
 
     __weak typeof(self) weakSelf = self;
@@ -780,7 +787,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
                   layout:(UICollectionViewLayout *)collectionViewLayout
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
     CGFloat cellW = collectionView.bounds.size.width - 30 * 2;
-    CGFloat cellH = 260;
+    CGFloat cellH = 30 + 6 + 150;
     return CGSizeMake(cellW, cellH);
 }
 
@@ -913,8 +920,6 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
 - (void)setPageTitle:(NSString *)pageTitle {
     _pageTitle = [pageTitle copy];
-    // 如果 ASCustomNavBar 支持动态改标题，这里同步一下
-    // self.navBar.title = _pageTitle;
 }
 
 @end

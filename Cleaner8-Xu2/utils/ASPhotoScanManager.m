@@ -3036,6 +3036,9 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
 #pragma mark - Load Cache
 
 -(BOOL)loadCacheIfExists {
+    if (self.didLoadCacheFromDisk && self.snapshot != nil) {
+        return YES;
+    }
     NSString *path = ASCachePath();
     NSDictionary *attr = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil];
     NSLog(@"[CACHE] load path=%@ size=%llu", path, [attr[NSFileSize] unsignedLongLongValue]);

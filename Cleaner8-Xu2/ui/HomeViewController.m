@@ -16,6 +16,10 @@ typedef NS_ENUM(NSInteger, ASPhotoAuthLevel) {
     ASPhotoAuthLevelFull    = 2
 };
 
+static inline void ASLogCost(NSString *name, CFTimeInterval start) {
+    NSLog(@"⏱️ %@ %.2fms", name, (CFAbsoluteTimeGetCurrent() - start) * 1000.0);
+}
+
 static NSString * const kASLastPhotoAuthLevelKey = @"as_last_photo_auth_level_v1";
 
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
@@ -875,7 +879,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 @property (nonatomic) BOOL pendingScanUIUpdate;
 @property (nonatomic) CFTimeInterval lastScanUIFire;
 
-// 去重集合（如果你别处要用）
+// 去重集合
 @property (nonatomic, strong) NSSet<NSString *> *allCleanableIds;
 @property (nonatomic) uint64_t allCleanableBytes;
 @end
@@ -964,7 +968,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     [super viewDidLoad];
     [self setupUI];
 
-    self.imgMgr = [[PHCachingImageManager alloc] init];   // ✅ 必须
+    self.imgMgr = [[PHCachingImageManager alloc] init];
     self.scanMgr = [ASPhotoScanManager shared];
 
     __weak typeof(self) weakSelf = self;
@@ -987,10 +991,10 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
                                                  name:UIApplicationDidBecomeActiveNotification
                                                object:nil];
 
-    // ✅ 首屏先渲染一波（即使没权限也能显示缓存摘要 + 占位）
+    // 首屏先渲染一波（即使没权限也能显示缓存摘要 + 占位）
     [self rebuildModulesAndReload];
 
-    // ✅ gate 按钮补上点击（见下面第3点）
+    // gate 按钮补上点击
     [self.permissionGateButton addTarget:self
                                   action:@selector(onTapPermissionGate)
                         forControlEvents:UIControlEventTouchUpInside];
@@ -1001,7 +1005,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
     // 1) 未决定：直接弹系统授权
     if (st == PHAuthorizationStatusNotDetermined) {
-        [self bootstrapScanFlow];  // 你 bootstrapScanFlow 里已经写了 requestAuthorization
+        [self bootstrapScanFlow];
         return;
     }
 
@@ -1025,16 +1029,12 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     PHAuthorizationStatus st = [self currentPHAuthStatus];
     ASPhotoAuthLevel curLevel = [self mapToAuthLevel:st];
     ASPhotoAuthLevel lastLevel = [self storedAuthLevel];
-    BOOL hasCache1 = [self.scanMgr isCacheValid];
     
     BOOL authChanged = (lastLevel != ASPhotoAuthLevelUnknown && lastLevel != curLevel);
     if (authChanged) {
         [self resetCoverStateForAuthChange];
     }
 
-    NSLog(@"[BOOT] st=%ld cur=%ld last=%ld hasCache=%d snapshotState=%ld",
-             (long)st, (long)curLevel, (long)lastLevel, hasCache1, (long)self.scanMgr.snapshot.state);
-    
     // --- 没权限（Denied / Restricted） 或 未决定（NotDetermined） ---
     if (st == PHAuthorizationStatusNotDetermined) {
         // 规则：首次/未决定 -> 弹系统授权；授权为 full/limit -> 全量扫描并缓存
@@ -1233,24 +1233,32 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 #pragma mark - Data Build
 
 - (void)rebuildModulesAndReload {
+    CFTimeInterval t0 = CFAbsoluteTimeGetCurrent();
+    CFTimeInterval t = t0;
+
     [self computeDiskSpace];
+    ASLogCost(@"computeDiskSpace", t); t = CFAbsoluteTimeGetCurrent();
 
     if (self.scanMgr.snapshot.state == ASScanStateScanning) {
         [self scheduleScanUIUpdateCoalesced];
+        ASLogCost(@"scanning fast return", t);
+        ASLogCost(@"TOTAL rebuildModulesAndReload", t0);
         return;
     }
 
     NSArray<ASHomeModuleVM *> *old = self.modules ?: @[];
     NSArray<ASHomeModuleVM *> *newMods = [self buildModulesFromManagerAndComputeClutterIsFinal:YES];
+    ASLogCost(@"buildModulesFromManager", t); t = CFAbsoluteTimeGetCurrent();
+
     self.modules = newMods;
 
-    // 第一次或数量变化：只能 reloadData
     if (old.count == 0 || old.count != newMods.count) {
         [self.cv reloadData];
+        ASLogCost(@"reloadData", t);
+        ASLogCost(@"TOTAL rebuildModulesAndReload", t0);
         return;
     }
 
-    // 找封面变化的 item，只 reload 那些
     NSMutableArray<NSIndexPath *> *reloadIPs = [NSMutableArray array];
     for (NSInteger i = 0; i < newMods.count; i++) {
         NSString *ok = [self coverKeyForVM:old[i]];
@@ -1259,14 +1267,20 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             [reloadIPs addObject:[NSIndexPath indexPathForItem:i inSection:0]];
         }
     }
+    ASLogCost(@"diff coverKey", t); t = CFAbsoluteTimeGetCurrent();
 
     if (reloadIPs.count > 0) {
         [self.cv reloadItemsAtIndexPaths:reloadIPs];
     }
+    ASLogCost(@"reloadItems", t); t = CFAbsoluteTimeGetCurrent();
 
-    // ✅ 无论封面变不变，都只更新 header + 可见 cell 文案，不 reloadData
-    [self updateHeaderDuringScanning]; // 这函数其实也能用于非扫描期
-    for (NSIndexPath *ip in [self.cv indexPathsForVisibleItems]) {
+    [self updateHeaderDuringScanning];
+    ASLogCost(@"updateHeader", t); t = CFAbsoluteTimeGetCurrent();
+
+    NSArray<NSIndexPath *> *vis = [self.cv indexPathsForVisibleItems];
+    ASLogCost(@"indexPathsForVisibleItems", t); t = CFAbsoluteTimeGetCurrent();
+
+    for (NSIndexPath *ip in vis) {
         if (ip.item >= self.modules.count) continue;
         HomeModuleCell *cell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:ip];
         if (!cell) continue;
@@ -1275,10 +1289,12 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             return [HomeModuleCell humanSize:bytes];
         }];
     }
+    ASLogCost(@"applyVM visible loop", t);
+
 }
 
+
 - (NSString *)coverKeyForVM:(ASHomeModuleVM *)vm {
-    // 只由“卡片类型 + 封面 ids”决定，顺序也要稳定（你 ids 本身就是你选出来的顺序）
     NSString *k = vm.thumbKey ?: @"";
     return [NSString stringWithFormat:@"%lu|%@", (unsigned long)vm.type, k];
 }
@@ -1346,7 +1362,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.diskFreeBytes = free;
 }
 
-#pragma mark - ✅ Scan UI Throttle (关键)
+#pragma mark - Scan UI Throttle
 
 - (void)scheduleScanUIUpdateCoalesced {
     self.pendingScanUIUpdate = YES;
@@ -2102,7 +2118,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return cell;
     }
 
-    // ✅ 非视频卡：如果之前复用过视频，确保停掉
     if (!vm.isVideoCover) {
         if (cell.videoReqId != PHInvalidImageRequestID) {
             [self.imgMgr cancelImageRequest:cell.videoReqId];
@@ -2111,7 +2126,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         [cell stopVideoIfNeeded];
     }
 
-    // ✅ 核心：封面只在“需要时”请求；同 key 且 in-flight / 已最终图 → 不重来
     [self requestCoverIfNeededForCell:cell vm:vm indexPath:indexPath];
 
     return cell;
@@ -2234,30 +2248,6 @@ referenceSizeForHeaderInSection:(NSInteger)section {
         case ASHomeCardTypeVideos: {
             VideoSubPageViewController *vc = [[VideoSubPageViewController alloc] init];
             [nav pushViewController:vc animated:YES];
-//            UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Videos"
-//                                                                        message:nil
-//                                                                 preferredStyle:UIAlertControllerStyleActionSheet];
-//
-//            void (^pushMode)(ASAssetListMode) = ^(ASAssetListMode mode) {
-//                ASAssetListViewController *vc = [[ASAssetListViewController alloc] initWithMode:mode];
-//                [nav pushViewController:vc animated:YES];
-//            };
-//
-//            [ac addAction:[UIAlertAction actionWithTitle:@"Similar Videos" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
-//                pushMode(ASAssetListModeSimilarVideo);
-//            }]];
-//            [ac addAction:[UIAlertAction actionWithTitle:@"Duplicate Videos" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
-//                pushMode(ASAssetListModeDuplicateVideo);
-//            }]];
-//            [ac addAction:[UIAlertAction actionWithTitle:@"Big Videos" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
-//                pushMode(ASAssetListModeBigVideos);
-//            }]];
-//            [ac addAction:[UIAlertAction actionWithTitle:@"Screen Recordings" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
-//                pushMode(ASAssetListModeScreenRecordings);
-//            }]];
-//            [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-//
-//            [nav presentViewController:ac animated:YES completion:nil];
         } break;
     }
 }
