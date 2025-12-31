@@ -46,7 +46,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
 - (void)buildUI {
 
-    // 顶部背景
     self.bgTop = [UIImageView new];
     self.bgTop.translatesAutoresizingMaskIntoConstraints = NO;
     self.bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
@@ -54,7 +53,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     self.bgTop.clipsToBounds = YES;
     [self.view addSubview:self.bgTop];
 
-    // 标题
     self.titleLab = [UILabel new];
     self.titleLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLab.text = @"More";
@@ -63,7 +61,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     self.titleLab.textAlignment = NSTextAlignmentCenter;
     [self.view addSubview:self.titleLab];
 
-    // 三个卡片
     self.contactCard = [self buildCardWithLeftIcon:@"ic_contact_more"
                                          leftText:@"Contact"
                                         rightType:@"image"
@@ -193,16 +190,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     ]];
 
     return card;
-}
-
-#pragma mark - Version
-
-- (NSString *)appVersionString {
-    NSString *shortVer = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
-    // 如果你也想带 build：把下面这一行拼上去即可
-    // NSString *build = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"];
-    // return [NSString stringWithFormat:@"%@ (%@)", shortVer ?: @"", build ?: @""];
-    return shortVer ?: @"";
 }
 
 #pragma mark - Actions

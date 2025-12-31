@@ -57,6 +57,7 @@
     NSString *title = @"所有联系人";
     if (self.mode == AllContactsModeBackup) title = @"选择联系人备份";
     if (self.mode == AllContactsModeRestore) title = @"备份联系人";
+    if (self.mode == AllContactsModeIncomplete) title = @"不完整联系人";
 
     self.navBar = [[ASCustomNavBar alloc] initWithTitle:title];
 
@@ -103,10 +104,21 @@
 - (void)setupSingleActionButton {
     CGFloat h = 50;
     self.singleActionButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    NSString *t = (self.mode == AllContactsModeBackup) ? @"备份联系人" : @"删除联系人";
+
+    NSString *t = @"删除联系人";
+    UIColor *bg = UIColor.systemRedColor;
+
+    if (self.mode == AllContactsModeBackup) {
+        t = @"备份联系人";
+        bg = UIColor.systemBlueColor;
+    } else if (self.mode == AllContactsModeIncomplete) {
+        t = @"删除不完整联系人";
+        bg = UIColor.systemRedColor;
+    }
+
     [self.singleActionButton setTitle:t forState:UIControlStateNormal];
     self.singleActionButton.frame = CGRectMake(0, self.view.bounds.size.height - h, self.view.bounds.size.width, h);
-    self.singleActionButton.backgroundColor = (self.mode == AllContactsModeBackup) ? UIColor.systemBlueColor : UIColor.systemRedColor;
+    self.singleActionButton.backgroundColor = bg;
     [self.singleActionButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.singleActionButton addTarget:self action:@selector(onSingleAction) forControlEvents:UIControlEventTouchUpInside];
     self.singleActionButton.alpha = 0.0;
@@ -152,7 +164,6 @@
     __weak typeof(self) weakSelf = self;
 
     if (self.mode == AllContactsModeRestore) {
-        // ✅ 从备份读联系人
         [self.contactsManager fetchContactsInBackupId:self.backupId completion:^(NSArray<CNContact *> * _Nullable contacts, NSError * _Nullable error) {
             if (error) { NSLog(@"读取备份失败: %@", error.localizedDescription); return; }
             weakSelf.contacts = [NSMutableArray arrayWithArray:contacts ?: @[]];
@@ -163,10 +174,25 @@
         return;
     }
 
-    // 系统联系人（需要权限）
     [self.contactsManager requestContactsAccess:^(NSError * _Nullable error) {
         if (error) { NSLog(@"通讯录权限失败: %@", error.localizedDescription); return; }
 
+        //  不完整联系人
+        if (weakSelf.mode == AllContactsModeIncomplete) {
+            [weakSelf.contactsManager fetchIncompleteContacts:^(NSArray<CNContact *> * _Nullable allIncomplete,
+                                                               NSArray<CMIncompleteGroup *> * _Nullable groups,
+                                                               NSError * _Nullable error2) {
+                if (error2) { NSLog(@"获取不完整联系人失败: %@", error2.localizedDescription); return; }
+
+                weakSelf.contacts = [NSMutableArray arrayWithArray:allIncomplete ?: @[]];
+                [weakSelf.selectedContactIds removeAllObjects];
+                [weakSelf.cv reloadData];
+                [weakSelf updateBottomState];
+            }];
+            return;
+        }
+
+        // 系统全部联系人
         [weakSelf.contactsManager fetchAllContacts:^(NSArray<CNContact *> * _Nullable contacts, NSError * _Nullable error2) {
             if (error2) { NSLog(@"获取联系人失败: %@", error2.localizedDescription); return; }
 
@@ -288,9 +314,61 @@
 - (void)onSingleAction {
     if (self.mode == AllContactsModeBackup) {
         [self doBackupSelected];
+    } else if (self.mode == AllContactsModeIncomplete) {
+        [self confirmDeleteIncompleteThenRun];
     } else {
         [self doDeleteSelectedFromSystem];
     }
+}
+
+- (void)confirmDeleteIncompleteThenRun {
+    if (self.selectedContactIds.count == 0) return;
+
+    __weak typeof(self) weakSelf = self;
+    NSString *msg = @"删除将同步到系统通讯录与云端账号，且不可撤销。确定删除所选不完整联系人？";
+
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"危险操作"
+                                                                message:msg
+                                                         preferredStyle:UIAlertControllerStyleAlert];
+
+    [ac addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [ac addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
+        [weakSelf doDeleteIncompleteSelectedFromSystem];
+    }]];
+
+    [self presentViewController:ac animated:YES completion:nil];
+}
+
+- (void)doDeleteIncompleteSelectedFromSystem {
+    if (self.selectedContactIds.count == 0) return;
+
+    __weak typeof(self) weakSelf = self;
+    [self.contactsManager requestContactsAccess:^(NSError * _Nullable error) {
+        if (error) {
+            [weakSelf showAlertWithTitle:@"无法访问通讯录" message:error.localizedDescription];
+            return;
+        }
+
+        // 你也可以直接用 deleteContactsWithIdentifiers，语义更清晰建议用 deleteIncompleteContactsWithIdentifiers
+        [weakSelf.contactsManager deleteContactsWithIdentifiers:weakSelf.selectedContactIds.allObjects
+                                                    completion:^(NSError * _Nullable error2) {
+            if (error2) {
+                [weakSelf showAlertWithTitle:@"删除失败" message:error2.localizedDescription];
+                return;
+            }
+
+            NSIndexSet *rm = [weakSelf.contacts indexesOfObjectsPassingTest:^BOOL(CNContact *obj, NSUInteger idx, BOOL *stop) {
+                return [weakSelf.selectedContactIds containsObject:obj.identifier];
+            }];
+            [weakSelf.contacts removeObjectsAtIndexes:rm];
+
+            [weakSelf.selectedContactIds removeAllObjects];
+            [weakSelf.cv reloadData];
+            [weakSelf updateBottomState];
+
+            [weakSelf showAlertPopBackWithTitle:@"成功" message:@"不完整联系人删除完成"];
+        }];
+    }];
 }
 
 - (void)doBackupSelected {

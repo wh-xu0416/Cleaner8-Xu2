@@ -3,6 +3,22 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+typedef NS_ENUM(NSInteger, CMIncompleteType) {
+    CMIncompleteTypeMissingName = 0,       // 缺姓名
+    CMIncompleteTypeMissingPhone,          // 缺电话
+    CMIncompleteTypeMissingNameAndPhone    // 姓名+电话都缺
+};
+
+/// 不完整联系人分组
+@interface CMIncompleteGroup : NSObject
+@property (nonatomic, assign) CMIncompleteType type;
+@property (nonatomic, strong) NSArray<CNContact *> *items;
+@end
+
+typedef void(^CMIncompletesBlock)(NSArray<CNContact *> * _Nullable allIncomplete,
+                                 NSArray<CMIncompleteGroup *> * _Nullable groups,
+                                 NSError * _Nullable error);
+
 typedef NS_ENUM(NSInteger, CMDuplicateMode) {
     CMDuplicateModeName,          // 姓名重复
     CMDuplicateModePhone,         // 电话重复
@@ -34,9 +50,19 @@ typedef void(^CMDuplicatesBlock)(NSArray<CMDuplicateGroup *> * _Nullable groups,
                                  NSArray<CMDuplicateGroup *> * _Nullable phoneGroups,
                                  NSError * _Nullable error);
 
+typedef void(^CMDashboardCountsBlock)(NSUInteger allCount,
+                                      NSUInteger incompleteCount,
+                                      NSUInteger duplicateCount,
+                                      NSUInteger backupCount,
+                                      NSError * _Nullable error);
+
+FOUNDATION_EXPORT NSString * const CMBackupsDidChangeNotification;
+
 @interface ContactsManager : NSObject
 
 + (instancetype)shared;
+
+- (void)fetchDashboardCounts:(CMDashboardCountsBlock)completion;
 
 /// 权限（建议App启动时调用一次）
 - (void)requestContactsAccess:(CMVoidBlock)completion;
@@ -86,6 +112,12 @@ typedef void(^CMDuplicatesBlock)(NSArray<CMDuplicateGroup *> * _Nullable groups,
              contactIndicesInBackup:(NSArray<NSNumber *> *)indices
                          completion:(CMVoidBlock)completion;
 
+/// 8 获取不完整联系人（缺姓名/缺电话/两者都缺）
+- (void)fetchIncompleteContacts:(CMIncompletesBlock)completion;
+
+/// 9 删除不完整联系人（批量，传 identifier 列表；删除会同步手机+云端，不可撤销）
+- (void)deleteIncompleteContactsWithIdentifiers:(NSArray<NSString *> *)identifiers
+                                     completion:(CMVoidBlock)completion;
 @end
 
 NS_ASSUME_NONNULL_END

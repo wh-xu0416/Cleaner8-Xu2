@@ -124,6 +124,7 @@ typedef void(^ASScanCompletionBlock)(ASScanSnapshot *snapshot, NSError *_Nullabl
 
 + (instancetype)shared;
 - (BOOL)isCacheValid;
+- (void)applyDeletedLocalIds:(NSSet<NSString *> *)deletedIds;
 
 // 启动：读取缓存 + 检测是否需要增量更新（杀死App后也能）
 - (void)loadCacheAndCheckIncremental;

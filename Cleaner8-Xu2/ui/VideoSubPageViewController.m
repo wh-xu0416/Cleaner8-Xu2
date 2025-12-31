@@ -276,7 +276,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 - (void)applyVM:(ASVideoSubCardVM *)vm {
     self.titleLabel.text = vm.title ?: @"";
     self.countLabel.text = vm.countText ?: @"";
-    [self.badgeBtn setTitle:ASHumanSize(vm.totalBytes) forState:UIControlStateNormal];
+    [self.badgeBtn setTitle:ASHumanSizeTight(vm.totalBytes) forState:UIControlStateNormal];
 
     switch (vm.type) {
         case ASVideoSubCardTypeSimilar:    self.topDecor.image = [UIImage imageNamed:@"ic_video_tip"]; break;

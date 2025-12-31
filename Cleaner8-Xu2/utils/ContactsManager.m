@@ -1,10 +1,15 @@
 #import "ContactsManager.h"
 #import <Contacts/Contacts.h>
 
+NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotification";
+
 @implementation CMDuplicateGroup
 @end
 
 @implementation CMBackupInfo
+@end
+
+@implementation CMIncompleteGroup
 @end
 
 @interface ContactsManager ()
@@ -59,6 +64,117 @@
     }];
 }
 
+#pragma mark - Dashboard Counts (All / Incomplete / Duplicate / Backups)
+
+- (NSArray<id<CNKeyDescriptor>> *)_keysForDashboardCounts {
+    // 一次取齐：够算 incomplete + duplicate（name + phone）
+    id<CNKeyDescriptor> nameKeys =
+        [CNContactFormatter descriptorForRequiredKeysForStyle:CNContactFormatterStyleFullName];
+
+    return @[
+        CNContactIdentifierKey,
+        nameKeys,
+
+        CNContactGivenNameKey,
+        CNContactFamilyNameKey,
+        CNContactMiddleNameKey,
+        CNContactOrganizationNameKey,
+        CNContactNicknameKey,
+
+        CNContactPhoneNumbersKey
+    ];
+}
+
+- (void)fetchDashboardCounts:(CMDashboardCountsBlock)completion {
+
+    dispatch_async(self.workQueue, ^{
+        // 1) backupsCount：不依赖联系人权限，先算出来
+        NSUInteger backupCount = 0;
+        NSDictionary *idx = [self _readBackupIndex];
+        NSArray *items = [idx[@"backups"] isKindOfClass:[NSArray class]] ? idx[@"backups"] : @[];
+        if (items.count > 0) {
+            backupCount = items.count;
+        } else {
+            backupCount = [self _scanBackupsFromDisk].count;
+        }
+
+        // 2) 联系人权限检查（不弹框）
+        CNAuthorizationStatus st = [CNContactStore authorizationStatusForEntityType:CNEntityTypeContacts];
+        if (st != CNAuthorizationStatusAuthorized) {
+            NSError *e = [NSError errorWithDomain:@"ContactsManager"
+                                             code:990
+                                         userInfo:@{NSLocalizedDescriptionKey:@"Contacts not authorized"}];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) completion(0, 0, 0, backupCount, e);
+            });
+            return;
+        }
+
+        // 3) 枚举联系人一次，算 all / incomplete / duplicate
+        NSError *error = nil;
+        __block NSUInteger allCount = 0;
+        __block NSUInteger incompleteCount = 0;
+
+        NSMutableDictionary<NSString *, NSMutableSet<NSString *> *> *nameMap = [NSMutableDictionary dictionary];
+        NSMutableDictionary<NSString *, NSMutableSet<NSString *> *> *phoneMap = [NSMutableDictionary dictionary];
+
+        CNContactFetchRequest *req =
+            [[CNContactFetchRequest alloc] initWithKeysToFetch:[self _keysForDashboardCounts]];
+        req.unifyResults = YES;
+
+        BOOL ok = [self.store enumerateContactsWithFetchRequest:req
+                                                         error:&error
+                                                    usingBlock:^(CNContact * _Nonnull c, BOOL * _Nonnull stop) {
+            @autoreleasepool {
+                allCount++;
+
+                BOOL n = [self _isNameMissing:c];
+                BOOL p = [self _isPhoneMissing:c];
+                if (n || p) incompleteCount++;
+
+                NSString *cid = c.identifier ?: @"";
+                if (cid.length == 0) return;
+
+                NSString *nk = [self _normalizeName:c];
+                if (nk.length > 0) {
+                    NSMutableSet *set = nameMap[nk] ?: (nameMap[nk] = [NSMutableSet set]);
+                    [set addObject:cid];
+                }
+
+                if ([c isKeyAvailable:CNContactPhoneNumbersKey]) {
+                    for (CNLabeledValue<CNPhoneNumber *> *lv in (c.phoneNumbers ?: @[])) {
+                        NSString *pk = [self _normalizePhone:lv.value.stringValue];
+                        if (pk.length == 0) continue;
+
+                        NSMutableSet *set = phoneMap[pk] ?: (phoneMap[pk] = [NSMutableSet set]);
+                        [set addObject:cid];
+                    }
+                }
+            }
+        }];
+
+        if (!ok && !error) {
+            error = [NSError errorWithDomain:@"ContactsManager"
+                                        code:901
+                                    userInfo:@{NSLocalizedDescriptionKey:@"Enumerate contacts failed"}];
+        }
+
+        NSMutableSet<NSString *> *dupIds = [NSMutableSet set];
+        [nameMap enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSMutableSet<NSString *> *obj, BOOL *stop) {
+            if (obj.count >= 2) [dupIds unionSet:obj];
+        }];
+        [phoneMap enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSMutableSet<NSString *> *obj, BOOL *stop) {
+            if (obj.count >= 2) [dupIds unionSet:obj];
+        }];
+
+        NSUInteger duplicateCount = dupIds.count;
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) completion(allCount, incompleteCount, duplicateCount, backupCount, error);
+        });
+    });
+}
+
 #pragma mark - Keys
 
 // 列表展示：只要名字 + 电话就够
@@ -73,6 +189,22 @@
     ];
 }
 
+// 不完整检测：要用到姓名字段 + 电话字段
+- (NSArray<id<CNKeyDescriptor>> *)keysForIncompleteDetect {
+    id<CNKeyDescriptor> nameKeys =
+        [CNContactFormatter descriptorForRequiredKeysForStyle:CNContactFormatterStyleFullName];
+
+    return @[
+        CNContactIdentifierKey,
+        nameKeys,
+        CNContactGivenNameKey,
+        CNContactFamilyNameKey,
+        CNContactMiddleNameKey,
+        CNContactOrganizationNameKey,
+        CNContactNicknameKey,
+        CNContactPhoneNumbersKey
+    ];
+}
 
 // 重复检测：名字 + 电话
 - (NSArray<id<CNKeyDescriptor>> *)keysForDuplicateDetect {
@@ -356,12 +488,14 @@
         NSLog(@"[CM][backup] dir files=%@ err=%@", files, dirErr);
 
         dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:CMBackupsDidChangeNotification object:nil];
             if (!idxOk) {
                 if (completion) completion(nil, idxErr);
             } else {
                 if (completion) completion(backupId, nil);
             }
         });
+
     });
 }
 
@@ -575,6 +709,29 @@
 }
 
 #pragma mark - Normalization helpers
+
+- (BOOL)_isNameMissing:(CNContact *)c {
+    // 用系统全名格式化（对中文更稳）
+    NSString *full = [CNContactFormatter stringFromContact:c style:CNContactFormatterStyleFullName];
+    if (full.length > 0) return NO;
+
+    // 注意：必须 isKeyAvailable，避免 “property not fetched” 崩溃
+    if ([c isKeyAvailable:CNContactGivenNameKey] && c.givenName.length > 0) return NO;
+    if ([c isKeyAvailable:CNContactFamilyNameKey] && c.familyName.length > 0) return NO;
+    if ([c isKeyAvailable:CNContactMiddleNameKey] && c.middleName.length > 0) return NO;
+    if ([c isKeyAvailable:CNContactNicknameKey] && c.nickname.length > 0) return NO;
+    if ([c isKeyAvailable:CNContactOrganizationNameKey] && c.organizationName.length > 0) return NO;
+
+    return YES;
+}
+
+- (BOOL)_isPhoneMissing:(CNContact *)c {
+    if (![c isKeyAvailable:CNContactPhoneNumbersKey]) {
+        // 没取到 key 时按缺失处理（也可以改成 NO 并补日志）
+        return YES;
+    }
+    return (c.phoneNumbers.count == 0);
+}
 
 - (NSString *)_normalizeName:(CNContact *)c {
     // 先用系统格式化全名（对中文更稳）
@@ -879,7 +1036,10 @@
 
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (!ok) { if (completion) completion(error); }
-                else { if (completion) completion(nil); }
+                else {
+                    [[NSNotificationCenter defaultCenter] postNotificationName:CMBackupsDidChangeNotification object:nil];
+                    if (completion) completion(nil);
+                }
             });
             return;
         }
@@ -923,9 +1083,14 @@
 
         BOOL ok = [self _writeBackupIndex:newIdx error:&error];
         dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:CMBackupsDidChangeNotification object:nil];
+            
             if (!ok) { if (completion) completion(error); }
-            else { if (completion) completion(nil); }
+            else {
+                if (completion) completion(nil);
+            }
         });
+
     });
 }
 
@@ -1317,6 +1482,79 @@ static inline BOOL CMIsEmptyStr(NSString *s) {
             });
         });
     }];
+}
+
+- (void)fetchIncompleteContacts:(CMIncompletesBlock)completion {
+    dispatch_async(self.workQueue, ^{
+        NSError *error = nil;
+
+        NSMutableArray<CNContact *> *all = [NSMutableArray array];
+        NSMutableArray<CNContact *> *missName = [NSMutableArray array];
+        NSMutableArray<CNContact *> *missPhone = [NSMutableArray array];
+        NSMutableArray<CNContact *> *missBoth = [NSMutableArray array];
+
+        CNContactFetchRequest *req =
+            [[CNContactFetchRequest alloc] initWithKeysToFetch:[self keysForIncompleteDetect]];
+        req.unifyResults = YES;
+
+        BOOL ok = [self.store enumerateContactsWithFetchRequest:req
+                                                         error:&error
+                                                    usingBlock:^(CNContact * _Nonnull c, BOOL * _Nonnull stop) {
+            @autoreleasepool {
+                BOOL n = [self _isNameMissing:c];
+                BOOL p = [self _isPhoneMissing:c];
+                if (!n && !p) return;
+
+                [all addObject:c];
+
+                if (n && p) {
+                    [missBoth addObject:c];
+                } else if (n) {
+                    [missName addObject:c];
+                } else if (p) {
+                    [missPhone addObject:c];
+                }
+            }
+        }];
+
+        if (!ok && !error) {
+            error = [NSError errorWithDomain:@"ContactsManager"
+                                        code:800
+                                    userInfo:@{NSLocalizedDescriptionKey:@"Enumerate contacts failed"}];
+        }
+
+        // 组装 groups（你 UI 可以按组展示）
+        NSMutableArray<CMIncompleteGroup *> *groups = [NSMutableArray array];
+        if (missBoth.count > 0) {
+            CMIncompleteGroup *g = [CMIncompleteGroup new];
+            g.type = CMIncompleteTypeMissingNameAndPhone;
+            g.items = missBoth;
+            [groups addObject:g];
+        }
+        if (missName.count > 0) {
+            CMIncompleteGroup *g = [CMIncompleteGroup new];
+            g.type = CMIncompleteTypeMissingName;
+            g.items = missName;
+            [groups addObject:g];
+        }
+        if (missPhone.count > 0) {
+            CMIncompleteGroup *g = [CMIncompleteGroup new];
+            g.type = CMIncompleteTypeMissingPhone;
+            g.items = missPhone;
+            [groups addObject:g];
+        }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) completion(ok ? all : nil, ok ? groups : nil, error);
+        });
+    });
+}
+
+- (void)deleteIncompleteContactsWithIdentifiers:(NSArray<NSString *> *)identifiers
+                                     completion:(CMVoidBlock)completion {
+    // 这里就是“批量删除选中项”
+    // 删除动作会触发对应账户/容器同步（如 iCloud），但如果某些来源只读，会返回 error
+    [self deleteContactsWithIdentifiers:identifiers completion:completion];
 }
 
 @end

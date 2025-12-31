@@ -225,9 +225,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
 - (NSString *)appVersionString {
     NSString *shortVer = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
-    // 如果你也想带 build：把下面这一行拼上去即可
-    // NSString *build = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"];
-    // return [NSString stringWithFormat:@"%@ (%@)", shortVer ?: @"", build ?: @""];
     return shortVer ?: @"";
 }
 
