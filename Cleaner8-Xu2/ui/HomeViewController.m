@@ -4,6 +4,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import "ASPhotoScanManager.h"
 #import "ASAssetListViewController.h"
+#import "VideoSubPageViewController.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -2231,30 +2232,32 @@ referenceSizeForHeaderInSection:(NSInteger)section {
         } break;
 
         case ASHomeCardTypeVideos: {
-            UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Videos"
-                                                                        message:nil
-                                                                 preferredStyle:UIAlertControllerStyleActionSheet];
-
-            void (^pushMode)(ASAssetListMode) = ^(ASAssetListMode mode) {
-                ASAssetListViewController *vc = [[ASAssetListViewController alloc] initWithMode:mode];
-                [nav pushViewController:vc animated:YES];
-            };
-
-            [ac addAction:[UIAlertAction actionWithTitle:@"Similar Videos" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
-                pushMode(ASAssetListModeSimilarVideo);
-            }]];
-            [ac addAction:[UIAlertAction actionWithTitle:@"Duplicate Videos" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
-                pushMode(ASAssetListModeDuplicateVideo);
-            }]];
-            [ac addAction:[UIAlertAction actionWithTitle:@"Big Videos" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
-                pushMode(ASAssetListModeBigVideos);
-            }]];
-            [ac addAction:[UIAlertAction actionWithTitle:@"Screen Recordings" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
-                pushMode(ASAssetListModeScreenRecordings);
-            }]];
-            [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-
-            [nav presentViewController:ac animated:YES completion:nil];
+            VideoSubPageViewController *vc = [[VideoSubPageViewController alloc] init];
+            [nav pushViewController:vc animated:YES];
+//            UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Videos"
+//                                                                        message:nil
+//                                                                 preferredStyle:UIAlertControllerStyleActionSheet];
+//
+//            void (^pushMode)(ASAssetListMode) = ^(ASAssetListMode mode) {
+//                ASAssetListViewController *vc = [[ASAssetListViewController alloc] initWithMode:mode];
+//                [nav pushViewController:vc animated:YES];
+//            };
+//
+//            [ac addAction:[UIAlertAction actionWithTitle:@"Similar Videos" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
+//                pushMode(ASAssetListModeSimilarVideo);
+//            }]];
+//            [ac addAction:[UIAlertAction actionWithTitle:@"Duplicate Videos" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
+//                pushMode(ASAssetListModeDuplicateVideo);
+//            }]];
+//            [ac addAction:[UIAlertAction actionWithTitle:@"Big Videos" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
+//                pushMode(ASAssetListModeBigVideos);
+//            }]];
+//            [ac addAction:[UIAlertAction actionWithTitle:@"Screen Recordings" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
+//                pushMode(ASAssetListModeScreenRecordings);
+//            }]];
+//            [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+//
+//            [nav presentViewController:ac animated:YES completion:nil];
         } break;
     }
 }

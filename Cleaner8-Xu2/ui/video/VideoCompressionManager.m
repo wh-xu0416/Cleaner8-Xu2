@@ -1,8 +1,6 @@
 #import "VideoCompressionManager.h"
 #import <AVFoundation/AVFoundation.h>
 #import <AudioToolbox/AudioToolbox.h>
-#import <Photos/Photos.h>
-
 #import "ASStudioAlbumManager.h"
 #import "ASStudioStore.h"
 #import "ASStudioUtils.h"
@@ -15,6 +13,97 @@
 
 #pragma mark - Helpers
 
+#ifndef AVVideoProfileLevelHEVCMain10AutoLevel
+#define AVVideoProfileLevelHEVCMain10AutoLevel @"HEVC_Main10_AutoLevel"
+#endif
+
+#ifndef AVVideoProfileLevelHEVCMainAutoLevel
+#define AVVideoProfileLevelHEVCMainAutoLevel @"HEVC_Main_AutoLevel"
+#endif
+
+static BOOL ASVideoTrackIsFullRange(AVAssetTrack *track) {
+    if (!track || track.formatDescriptions.count == 0) return NO;
+    CMFormatDescriptionRef fd = (__bridge CMFormatDescriptionRef)track.formatDescriptions.firstObject;
+    CFDictionaryRef ext = CMFormatDescriptionGetExtensions(fd);
+    if (!ext) return NO;
+
+    CFTypeRef v = CFDictionaryGetValue(ext, kCMFormatDescriptionExtension_FullRangeVideo);
+    if (!v) return NO;
+    return (v == kCFBooleanTrue);
+}
+
+static NSString *ASMapPrimaries(CFStringRef v) {
+    if (!v) return nil;
+    if (CFEqual(v, kCMFormatDescriptionColorPrimaries_ITU_R_709_2)) return AVVideoColorPrimaries_ITU_R_709_2;
+#ifdef kCMFormatDescriptionColorPrimaries_P3_D65
+    if (CFEqual(v, kCMFormatDescriptionColorPrimaries_P3_D65))      return AVVideoColorPrimaries_P3_D65;
+#endif
+    if (CFEqual(v, kCMFormatDescriptionColorPrimaries_ITU_R_2020))  return AVVideoColorPrimaries_ITU_R_2020;
+    return (__bridge NSString *)v;
+}
+
+static NSString *ASMapTransfer(CFStringRef v) {
+    if (!v) return nil;
+    if (CFEqual(v, kCMFormatDescriptionTransferFunction_ITU_R_709_2))      return AVVideoTransferFunction_ITU_R_709_2;
+#ifdef kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG
+    if (CFEqual(v, kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG))   return AVVideoTransferFunction_ITU_R_2100_HLG;
+#endif
+#ifdef kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ
+    if (CFEqual(v, kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ)) return AVVideoTransferFunction_SMPTE_ST_2084_PQ;
+#endif
+    return (__bridge NSString *)v;
+}
+
+static NSString *ASMapMatrix(CFStringRef v) {
+    if (!v) return nil;
+    if (CFEqual(v, kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2))  return AVVideoYCbCrMatrix_ITU_R_709_2;
+    if (CFEqual(v, kCMFormatDescriptionYCbCrMatrix_ITU_R_601_4))  return AVVideoYCbCrMatrix_ITU_R_601_4;
+    if (CFEqual(v, kCMFormatDescriptionYCbCrMatrix_ITU_R_2020))   return AVVideoYCbCrMatrix_ITU_R_2020;
+    return (__bridge NSString *)v;
+}
+
+static NSDictionary *ASVideoColorPropertiesFromTrack(AVAssetTrack *track, BOOL *outIsHDR) {
+    if (outIsHDR) *outIsHDR = NO;
+    if (!track || track.formatDescriptions.count == 0) return nil;
+
+    CMFormatDescriptionRef fd = (__bridge CMFormatDescriptionRef)track.formatDescriptions.firstObject;
+    CFDictionaryRef ext = CMFormatDescriptionGetExtensions(fd);
+    if (!ext) return nil;
+
+    CFStringRef prim = CFDictionaryGetValue(ext, kCMFormatDescriptionExtension_ColorPrimaries);
+    CFStringRef tran = CFDictionaryGetValue(ext, kCMFormatDescriptionExtension_TransferFunction);
+    CFStringRef matr = CFDictionaryGetValue(ext, kCMFormatDescriptionExtension_YCbCrMatrix);
+
+    NSString *p = ASMapPrimaries(prim);
+    NSString *t = ASMapTransfer(tran);
+    NSString *m = ASMapMatrix(matr);
+
+    // HDR 判断（HLG/PQ/2020 基本就是 HDR）
+    BOOL hdr = NO;
+    if (@available(iOS 11.0, *)) {
+        if ([t isEqualToString:AVVideoTransferFunction_ITU_R_2100_HLG] ||
+            [t isEqualToString:AVVideoTransferFunction_SMPTE_ST_2084_PQ] ||
+            [p isEqualToString:AVVideoColorPrimaries_ITU_R_2020]) {
+            hdr = YES;
+        }
+    }
+    if (outIsHDR) *outIsHDR = hdr;
+
+    NSMutableDictionary *d = [NSMutableDictionary dictionary];
+    if (p) d[AVVideoColorPrimariesKey] = p;
+    if (t) d[AVVideoTransferFunctionKey] = t;
+    if (m) d[AVVideoYCbCrMatrixKey] = m;
+
+    // 如果源没带（少数情况），SDR 默认给 709（比完全不写更稳）
+    if (d.count == 0) {
+        d[AVVideoColorPrimariesKey] = AVVideoColorPrimaries_ITU_R_709_2;
+        d[AVVideoTransferFunctionKey] = AVVideoTransferFunction_ITU_R_709_2;
+        d[AVVideoYCbCrMatrixKey] = AVVideoYCbCrMatrix_ITU_R_709_2;
+    }
+
+    return d.copy;
+}
+
 static NSString *ASVideoQualitySuffix(ASCompressionQuality q) {
     switch (q) {
         case ASCompressionQualitySmall:  return @"S";
@@ -23,137 +112,84 @@ static NSString *ASVideoQualitySuffix(ASCompressionQuality q) {
     }
 }
 
-/// ========= 颜色/范围（曝光变亮）修复 =========
-
-// 读取源 track 是否 FullRange（否则默认为 VideoRange）
-static BOOL ASIsFullRangeVideoFromTrack(AVAssetTrack *track) {
-    if (!track || track.formatDescriptions.count == 0) return NO;
-
-    CMFormatDescriptionRef fd = (__bridge CMFormatDescriptionRef)track.formatDescriptions.firstObject;
-    CFDictionaryRef ext = CMFormatDescriptionGetExtensions(fd);
-    if (!ext) return NO;
-
-    CFBooleanRef full = CFDictionaryGetValue(ext, kCMFormatDescriptionExtension_FullRangeVideo);
-    return (full == kCFBooleanTrue);
-}
-
-// 按源范围选择像素格式：绝大多数素材是 VideoRange（16~235）
-static OSType ASPixelFormatForTrack(AVAssetTrack *track) {
-    return ASIsFullRangeVideoFromTrack(track)
-    ? kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-    : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
-}
-
-// 读取源视频色彩信息（primaries/transfer/matrix），原样写入输出，避免 Rec601/709 误判导致变亮/偏色
-static NSDictionary *ASVideoColorPropsFromTrack(AVAssetTrack *track, BOOL *outHDR) {
-    if (outHDR) *outHDR = NO;
-    if (!track || track.formatDescriptions.count == 0) return nil;
-
-    CMFormatDescriptionRef fd = (__bridge CMFormatDescriptionRef)track.formatDescriptions.firstObject;
-    CFDictionaryRef ext = CMFormatDescriptionGetExtensions(fd);
-    if (!ext) return nil;
-
-    CFStringRef prim = CFDictionaryGetValue(ext, kCMFormatDescriptionExtension_ColorPrimaries);
-    CFStringRef tf   = CFDictionaryGetValue(ext, kCMFormatDescriptionExtension_TransferFunction);
-    CFStringRef mat  = CFDictionaryGetValue(ext, kCMFormatDescriptionExtension_YCbCrMatrix);
-
-    if (outHDR && tf) {
-        if (CFEqual(tf, kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG) ||
-            CFEqual(tf, kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ)) {
-            *outHDR = YES;
-        }
-    }
-
-    NSMutableDictionary *d = [NSMutableDictionary dictionary];
-    if (prim) d[AVVideoColorPrimariesKey]    = (__bridge NSString *)prim;
-    if (tf)   d[AVVideoTransferFunctionKey] = (__bridge NSString *)tf;
-    if (mat)  d[AVVideoYCbCrMatrixKey]      = (__bridge NSString *)mat;
-
-    return d.count ? d : nil;
-}
-
-// reader 输出 settings（关键：不要强制 FullRange）
-static NSDictionary *ASPixelOutSettingsForVideoTrack(AVAssetTrack *track) {
-    OSType pix = ASPixelFormatForTrack(track);
-    return @{
-        (id)kCVPixelBufferPixelFormatTypeKey: @(pix),
-        (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
-    };
-}
-
-// writer 输入 settings（关键：把源 color props 写进去）
-static NSDictionary *ASVideoInSettingsWithColorProps(NSInteger w,
-                                                     NSInteger h,
-                                                     NSDictionary *videoCompProps,
-                                                     AVAssetTrack *srcVideoTrack,
-                                                     BOOL *outHDR)
-{
-    NSMutableDictionary *settings = [@{
-        AVVideoCodecKey: AVVideoCodecTypeH264,
-        AVVideoWidthKey: @(w),
-        AVVideoHeightKey: @(h),
-        AVVideoCompressionPropertiesKey: videoCompProps ?: @{}
-    } mutableCopy];
-
-    NSDictionary *colorProps = ASVideoColorPropsFromTrack(srcVideoTrack, outHDR);
-    if (colorProps) {
-        settings[AVVideoColorPropertiesKey] = colorProps;
-    }
-    return settings;
-}
-
-// composition 也写入颜色信息（建议）
-static void ASApplyColorPropsToVideoCompositionIfPossible(AVMutableVideoComposition *comp, AVAssetTrack *srcVideoTrack) {
-    if (!comp) return;
-    BOOL isHDR = NO;
-    NSDictionary *colorProps = ASVideoColorPropsFromTrack(srcVideoTrack, &isHDR);
-    if (!colorProps) return;
-
-    if (@available(iOS 15.0, *)) {
-        comp.colorPrimaries        = colorProps[AVVideoColorPrimariesKey];
-        comp.colorTransferFunction = colorProps[AVVideoTransferFunctionKey];
-        comp.colorYCbCrMatrix      = colorProps[AVVideoYCbCrMatrixKey];
-    }
-}
-
-/// ========= 其它工具 =========
-
 static BOOL ASIsBlackFrame(CMSampleBufferRef sb) {
     CVPixelBufferRef pb = CMSampleBufferGetImageBuffer(sb);
     if (!pb) return NO;
+
+    OSType fmt = CVPixelBufferGetPixelFormatType(pb);
 
     CVPixelBufferLockBaseAddress(pb, kCVPixelBufferLock_ReadOnly);
     size_t w = CVPixelBufferGetWidthOfPlane(pb, 0);
     size_t h = CVPixelBufferGetHeightOfPlane(pb, 0);
     size_t stride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0);
-    uint8_t *yBase = (uint8_t *)CVPixelBufferGetBaseAddressOfPlane(pb, 0);
 
-    if (!yBase || w == 0 || h == 0) {
+    if (w == 0 || h == 0 || stride == 0) {
         CVPixelBufferUnlockBaseAddress(pb, kCVPixelBufferLock_ReadOnly);
         return NO;
     }
 
-    // 抽样 25 个点，计算平均亮度（Y）
     int samples = 0;
     int sum = 0;
-    for (int gy = 1; gy <= 5; gy++) {
-        size_t yy = (size_t)((double)h * gy / 6.0);
-        if (yy >= h) yy = h - 1;
-        uint8_t *row = yBase + yy * stride;
 
-        for (int gx = 1; gx <= 5; gx++) {
-            size_t xx = (size_t)((double)w * gx / 6.0);
-            if (xx >= w) xx = w - 1;
-            sum += row[xx];
-            samples++;
+    // 10-bit：420YpCbCr10BiPlanar* 的 Y plane 是 16-bit 存储（通常高 10 bit 有效）
+    BOOL is10bit =
+        (fmt == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
+#if defined(kCVPixelFormatType_420YpCbCr10BiPlanarFullRange)
+        || (fmt == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange)
+#endif
+        ;
+
+    if (is10bit) {
+        uint16_t *yBase16 = (uint16_t *)CVPixelBufferGetBaseAddressOfPlane(pb, 0);
+        if (!yBase16) {
+            CVPixelBufferUnlockBaseAddress(pb, kCVPixelBufferLock_ReadOnly);
+            return NO;
+        }
+
+        for (int gy = 1; gy <= 5; gy++) {
+            size_t yy = (size_t)((double)h * gy / 6.0);
+            if (yy >= h) yy = h - 1;
+            uint8_t *rowBytes = (uint8_t *)yBase16 + yy * stride;
+            uint16_t *row16 = (uint16_t *)rowBytes;
+
+            for (int gx = 1; gx <= 5; gx++) {
+                size_t xx = (size_t)((double)w * gx / 6.0);
+                if (xx >= w) xx = w - 1;
+
+                // raw 通常是 value10 << 6
+                uint16_t raw = row16[xx];
+                uint16_t v10 = (uint16_t)(raw >> 6); // 0..1023
+                // 映射到 8-bit 方便用同一阈值
+                uint8_t v8 = (uint8_t)((v10 * 255 + 511) / 1023);
+                sum += v8;
+                samples++;
+            }
+        }
+    } else {
+        uint8_t *yBase = (uint8_t *)CVPixelBufferGetBaseAddressOfPlane(pb, 0);
+        if (!yBase) {
+            CVPixelBufferUnlockBaseAddress(pb, kCVPixelBufferLock_ReadOnly);
+            return NO;
+        }
+
+        for (int gy = 1; gy <= 5; gy++) {
+            size_t yy = (size_t)((double)h * gy / 6.0);
+            if (yy >= h) yy = h - 1;
+            uint8_t *row = yBase + yy * stride;
+
+            for (int gx = 1; gx <= 5; gx++) {
+                size_t xx = (size_t)((double)w * gx / 6.0);
+                if (xx >= w) xx = w - 1;
+                sum += row[xx];
+                samples++;
+            }
         }
     }
 
     CVPixelBufferUnlockBaseAddress(pb, kCVPixelBufferLock_ReadOnly);
 
     double avg = (samples > 0) ? ((double)sum / (double)samples) : 255.0;
-
-    // video range 黑大概在 16 左右，full range 黑在 0
+    // 8-bit：video range 黑约 16；full range 黑约 0
     return avg < 20.0;
 }
 
@@ -162,9 +198,11 @@ static CGAffineTransform ASNormalizedTransform(AVAssetTrack *track, CGSize *outR
     CGAffineTransform t = track.preferredTransform;
     CGRect r = CGRectApplyAffineTransform((CGRect){CGPointZero, n}, t);
 
+    // renderSize 用变换后的 bbox 尺寸
     CGSize rs = CGSizeMake(fabs(r.size.width), fabs(r.size.height));
     if (outRenderSize) *outRenderSize = rs;
 
+    // 把内容平移到 (0,0) 可见区域
     CGAffineTransform nt = CGAffineTransformTranslate(t, -r.origin.x, -r.origin.y);
     return nt;
 }
@@ -185,12 +223,13 @@ static uint64_t ASAssetFileSize(PHAsset *asset) {
 
 static double ASRemainRatio(ASCompressionQuality q) {
     switch (q) {
-        case ASCompressionQualitySmall:  return 0.20;
-        case ASCompressionQualityMedium: return 0.50;
-        case ASCompressionQualityLarge:  return 0.80;
+        case ASCompressionQualitySmall:  return 0.20; // save 80%
+        case ASCompressionQualityMedium: return 0.50; // save 50%
+        case ASCompressionQualityLarge:  return 0.80; // save 20%
     }
 }
 
+// 目标最大边长（会改变尺寸：Small/Medium/Large）
 static NSInteger ASMaxDimForQuality(ASCompressionQuality q) {
     switch (q) {
         case ASCompressionQualitySmall:  return 540;
@@ -199,21 +238,29 @@ static NSInteger ASMaxDimForQuality(ASCompressionQuality q) {
     }
 }
 
+// 防糊：不同分辨率的最低视频码率（bit/s）
+static int64_t ASMinVideoBitrateForMaxDim(NSInteger maxDim) {
+    if (maxDim <= 540)  return 900000;   // 0.9 Mbps
+    if (maxDim <= 720)  return 1600000;  // 1.6 Mbps
+    return 2500000;                     // 2.5 Mbps (1080p)
+}
+
+// 上限（避免过大）
+static int64_t ASMaxVideoBitrateForMaxDim(NSInteger maxDim) {
+    if (maxDim <= 540)  return 3000000;  // 3 Mbps
+    if (maxDim <= 720)  return 5000000;  // 5 Mbps
+    return 8000000;                     // 8 Mbps
+}
+
 static int64_t ASAudioBitrateForQuality(ASCompressionQuality q) {
     switch (q) {
-        case ASCompressionQualitySmall:  return  96000;
-        case ASCompressionQualityMedium: return 128000;
-        case ASCompressionQualityLarge:  return 160000;
+        case ASCompressionQualitySmall:  return  96000; // 96 kbps
+        case ASCompressionQualityMedium: return 128000; // 128 kbps
+        case ASCompressionQualityLarge:  return 160000; // 160 kbps
     }
 }
 
 static NSInteger ASEven(NSInteger x) { return (x % 2 == 0) ? x : (x - 1); }
-
-static NSInteger ASEvenFloor(CGFloat v) {
-    NSInteger i = (NSInteger)floor(v);
-    if (i < 2) i = 2;
-    return (i % 2 == 0) ? i : (i - 1);
-}
 
 static CGSize ASNaturalDisplaySize(AVAssetTrack *videoTrack) {
     CGSize n = videoTrack.naturalSize;
@@ -273,47 +320,6 @@ static CMSampleBufferRef ASCopySampleBufferWithTimeOffset(CMSampleBufferRef sb, 
     return out;
 }
 
-static int64_t ASMinVideoBitrateForResolution(CGSize displaySize) {
-    CGFloat w = MAX(displaySize.width, displaySize.height);
-    if (w < 800)  return 600000;     // ~480p
-    if (w < 1300) return 1500000;    // ~720p
-    if (w < 2000) return 3000000;    // ~1080p
-    if (w < 2600) return 6000000;    // ~1440p
-    return 12000000;                // 4K+
-}
-
-static void ASGetAudioParams(AVAssetTrack *audioTrack, double *outSampleRate, int *outChannels) {
-    double sr = 44100.0;
-    int ch = 2;
-    if (audioTrack.formatDescriptions.count > 0) {
-        CMAudioFormatDescriptionRef fmt =
-        (__bridge CMAudioFormatDescriptionRef)audioTrack.formatDescriptions.firstObject;
-        const AudioStreamBasicDescription *asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fmt);
-        if (asbd) {
-            if (asbd->mSampleRate > 0) sr = asbd->mSampleRate;
-            if (asbd->mChannelsPerFrame > 0) ch = (int)asbd->mChannelsPerFrame;
-        }
-    }
-    if (outSampleRate) *outSampleRate = sr;
-    if (outChannels) *outChannels = ch;
-}
-
-/// 判断是否需要用 VideoComposition 规范化（行车记录仪这类常见：coded != natural）
-static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
-    if (videoTrack.formatDescriptions.count == 0) return NO;
-    CMVideoFormatDescriptionRef fd =
-    (__bridge CMVideoFormatDescriptionRef)videoTrack.formatDescriptions.firstObject;
-
-    CMVideoDimensions coded = CMVideoFormatDescriptionGetDimensions(fd);
-    CGSize natural = videoTrack.naturalSize;
-
-    int nW = (int)llround(natural.width);
-    int nH = (int)llround(natural.height);
-
-    if (abs(coded.width  - nW) > 2 || abs(coded.height - nH) > 2) return YES;
-    return NO;
-}
-
 #pragma mark - Manager
 
 @interface VideoCompressionManager ()
@@ -330,12 +336,12 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
 
 @property (nonatomic, strong) AVAssetReader *currentReader;
 @property (nonatomic, strong) AVAssetWriter *currentWriter;
-@property (nonatomic, strong) AVAssetExportSession *currentExport; // ✅ HDR 分流用
 @property (nonatomic, assign) PHImageRequestID currentRequestId;
 
 @property (nonatomic) BOOL shouldCancel;
 @property (nonatomic, readwrite) BOOL isRunning;
 @property (nonatomic, strong) PHAssetCollection *studioAlbum;
+
 @end
 
 @implementation VideoCompressionManager
@@ -370,7 +376,7 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
 
     __weak typeof(self) weakSelf = self;
     [[ASStudioAlbumManager shared] fetchOrCreateAlbum:^(PHAssetCollection * _Nullable album, NSError * _Nullable error) {
-        weakSelf.studioAlbum = album;
+        weakSelf.studioAlbum = album; // 可能为 nil（失败也不阻塞压缩，只是不归档到 album）
         if (!album) {
             NSLog(@"[MyStudio] Warning: studio album unavailable, will save video but not add to album.");
         }
@@ -391,10 +397,8 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
 
     [self.currentReader cancelReading];
     [self.currentWriter cancelWriting];
-    [self.currentExport cancelExport]; // ✅ HDR 导出也 cancel
     self.currentReader = nil;
     self.currentWriter = nil;
-    self.currentExport = nil;
 
     self.isRunning = NO;
     if (self.completionBlock) self.completionBlock(nil, ASError(@"Cancelled", -999));
@@ -428,8 +432,14 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
             return;
         }
 
-        NSString *name = [NSString stringWithFormat:@"compress_%@.mp4", NSUUID.UUID.UUIDString];
+        AVAssetTrack *vt = [[avAsset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+        BOOL hdr = NO;
+        ASVideoColorPropertiesFromTrack(vt, &hdr); // 只为拿 hdr 判断
+
+        NSString *ext = (hdr ? @"mov" : @"mp4");
+        NSString *name = [NSString stringWithFormat:@"compress_%@.%@", NSUUID.UUID.UUIDString, ext];
         NSURL *outURL = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:name]];
+
         [[NSFileManager defaultManager] removeItemAtURL:outURL error:nil];
 
         [weakSelf transcodeAsset:avAsset
@@ -445,12 +455,13 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
                 return;
             }
 
+            // 保存到相册 + 加入 My Studio album + 写入索引（历史）
             __block NSString *createdAssetId = nil;
-            PHAssetCollection *album = weakSelf.studioAlbum;
+            PHAssetCollection *album = weakSelf.studioAlbum; // 取缓存（可能 nil）
 
             [PHPhotoLibrary.sharedPhotoLibrary performChanges:^{
                 PHAssetChangeRequest *req =
-                [PHAssetChangeRequest creationRequestForAssetFromVideoAtFileURL:outURL];
+                    [PHAssetChangeRequest creationRequestForAssetFromVideoAtFileURL:outURL];
                 req.creationDate = [NSDate date];
 
                 PHObjectPlaceholder *phd = req.placeholderForCreatedAsset;
@@ -464,21 +475,24 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
 
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (!success) {
+                        // 失败也清理临时文件，避免堆积
                         [[NSFileManager defaultManager] removeItemAtURL:outURL error:nil];
                         [weakSelf fail:ASError(saveError.localizedDescription ?: @"Save to album failed", -6)];
                         return;
                     }
 
+                    // ✅ 写索引：My Studio 列表展示用
                     if (createdAssetId.length > 0) {
                         ASStudioItem *sitem = [ASStudioItem new];
                         sitem.assetId = createdAssetId;
                         sitem.type = ASStudioMediaTypeVideo;
                         sitem.beforeBytes = (int64_t)before;
                         sitem.afterBytes  = (int64_t)afterBytes;
-                        sitem.duration = ph.duration;
+                        sitem.duration = ph.duration; // 用原 PHAsset 时长即可
                         sitem.compressedAt = [NSDate date];
                         sitem.displayName =
-                        [ASStudioUtils makeDisplayNameForVideoWithQualitySuffix:ASVideoQualitySuffix(weakSelf.quality)];
+                            [ASStudioUtils makeDisplayNameForVideoWithQualitySuffix:ASVideoQualitySuffix(weakSelf.quality)];
+
                         [[ASStudioStore shared] upsertItem:sitem];
                     }
 
@@ -488,177 +502,63 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
                     item.originalAsset = ph;
                     item.beforeBytes = before;
                     item.afterBytes = afterBytes;
+
                     item.outputURL = outURL;
+
                     [weakSelf.results addObject:item];
+
+                    // [[NSFileManager defaultManager] removeItemAtURL:outURL error:nil];
+                    // item.outputURL = nil;
 
                     weakSelf.index += 1;
                     [weakSelf startNext];
                 });
             }];
+
         }];
     }];
 }
 
-#pragma mark - HDR 分流（可避免 HDR 曝光/炸高光）
+/// 判断是否需要用 VideoComposition 规范化（行车记录仪这类常见：coded != natural）
+static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
+    if (videoTrack.formatDescriptions.count == 0) return NO;
+    CMVideoFormatDescriptionRef fd =
+        (__bridge CMVideoFormatDescriptionRef)videoTrack.formatDescriptions.firstObject;
 
-- (NSString *)_exportPresetForQuality:(ASCompressionQuality)q {
-    // 尽量用 HEVC Highest（HDR 最稳）；不行再 fallback 常规 preset
-    // 让 videoComposition 控制尺寸，preset 控制编码策略/兼容性
-    if (@available(iOS 11.0, *)) {
-        return AVAssetExportPresetHEVCHighestQuality;
-    }
-    // 老系统 fallback
-    return AVAssetExportPresetHighestQuality;
+    CMVideoDimensions coded = CMVideoFormatDescriptionGetDimensions(fd);
+    CGSize natural = videoTrack.naturalSize;
+
+    int nW = (int)llround(natural.width);
+    int nH = (int)llround(natural.height);
+
+    // coded 和 natural 差异明显：大概率存在 padding/cropping（1906 这种非常常见）
+    if (abs(coded.width  - nW) > 2 || abs(coded.height - nH) > 2) return YES;
+
+    return NO;
 }
 
-- (void)transcodeHDRAsset:(AVAsset *)asset
-                  phAsset:(PHAsset *)ph
-              beforeBytes:(uint64_t)beforeBytes
-                outputURL:(NSURL *)outURL
-               completion:(void(^)(uint64_t afterBytes, NSError * _Nullable error))completion
-{
-    AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
-    if (!videoTrack) { dispatch_async(dispatch_get_main_queue(), ^{ completion(0, ASError(@"No video track", -3)); }); return; }
-
-    // HDR 也按你的 quality 做缩放（可调：如果你不想缩放，改成 target = display）
-    CGSize display = ASNaturalDisplaySize(videoTrack);
-    CGSize target = ASTargetSizeKeepAR(display, ASMaxDimForQuality(self.quality));
-    NSInteger renderW = ASEvenFloor(target.width);
-    NSInteger renderH = ASEvenFloor(target.height);
-
-    float srcFPS = videoTrack.nominalFrameRate;
-    NSInteger fps = MAX((NSInteger)llroundf(srcFPS), 30);
-
-    CGAffineTransform nt = ASNormalizedTransform(videoTrack, NULL);
-
-    CGFloat sx = (display.width  > 0) ? ((CGFloat)renderW / display.width)  : 1.0;
-    CGFloat sy = (display.height > 0) ? ((CGFloat)renderH / display.height) : 1.0;
-
-    // final = Scale ∘ NormalizedTransform （先 nt 后 scale）
-    CGAffineTransform finalT = CGAffineTransformConcat(CGAffineTransformMakeScale(sx, sy), nt);
-
-    AVMutableVideoComposition *comp = [AVMutableVideoComposition videoComposition];
-    comp.renderSize = CGSizeMake(renderW, renderH);
-    comp.frameDuration = CMTimeMake(1, (int32_t)fps);
-
-    AVMutableVideoCompositionInstruction *ins = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
-    ins.timeRange = CMTimeRangeMake(kCMTimeZero, asset.duration);
-
-    AVMutableVideoCompositionLayerInstruction *layer =
-    [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoTrack];
-    [layer setTransform:finalT atTime:kCMTimeZero];
-
-    ins.layerInstructions = @[layer];
-    comp.instructions = @[ins];
-
-    // ✅ 把源颜色信息写回 composition
-    ASApplyColorPropsToVideoCompositionIfPossible(comp, videoTrack);
-
-    NSString *preset = [self _exportPresetForQuality:self.quality];
-    AVAssetExportSession *export = [[AVAssetExportSession alloc] initWithAsset:asset presetName:preset];
-    if (!export) {
-        export = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHighestQuality];
-    }
-    if (!export) {
-        dispatch_async(dispatch_get_main_queue(), ^{ completion(0, ASError(@"ExportSession init failed", -20)); });
-        return;
-    }
-
-    self.currentExport = export;
-
-    export.videoComposition = comp;
-    export.shouldOptimizeForNetworkUse = YES;
-
-    [[NSFileManager defaultManager] removeItemAtURL:outURL error:nil];
-    export.outputURL = outURL;
-    export.outputFileType = AVFileTypeMPEG4;
-
-    __weak typeof(self) weakSelf = self;
-
-    // progress 轮询
-    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
-                                                     dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
-    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 0),
-                              (uint64_t)(0.12 * NSEC_PER_SEC),
-                              (uint64_t)(0.02 * NSEC_PER_SEC));
-    dispatch_source_set_event_handler(timer, ^{
-        if (!weakSelf || weakSelf.shouldCancel) return;
-        float p = export.progress;
-        float overall = (float)((weakSelf.index + p) / (double)weakSelf.assets.count);
-        if (weakSelf.progressBlock) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                weakSelf.progressBlock(weakSelf.index, weakSelf.assets.count, overall, ph);
-            });
-        }
-    });
-    dispatch_resume(timer);
-
-    [export exportAsynchronouslyWithCompletionHandler:^{
-        dispatch_source_cancel(timer);
-
-        if (!weakSelf || weakSelf.shouldCancel) return;
-
-        weakSelf.currentExport = nil;
-
-        if (export.status == AVAssetExportSessionStatusCompleted) {
-            uint64_t after = ASFileSizeAtURL(outURL);
-            dispatch_async(dispatch_get_main_queue(), ^{ completion(after, nil); });
-            return;
-        }
-
-        NSError *e = export.error ?: ASError(@"HDR export failed", -21);
-
-        // mp4 不支持时兜底 mov
-        NSURL *movURL = [[outURL URLByDeletingPathExtension] URLByAppendingPathExtension:@"mov"];
-        [[NSFileManager defaultManager] removeItemAtURL:movURL error:nil];
-
-        AVAssetExportSession *export2 = [[AVAssetExportSession alloc] initWithAsset:asset presetName:preset];
-        if (!export2) export2 = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHighestQuality];
-        if (!export2) {
-            dispatch_async(dispatch_get_main_queue(), ^{ completion(0, e); });
-            return;
-        }
-
-        weakSelf.currentExport = export2;
-        export2.videoComposition = comp;
-        export2.shouldOptimizeForNetworkUse = YES;
-        export2.outputURL = movURL;
-        export2.outputFileType = AVFileTypeQuickTimeMovie;
-
-        [export2 exportAsynchronouslyWithCompletionHandler:^{
-            weakSelf.currentExport = nil;
-
-            if (export2.status == AVAssetExportSessionStatusCompleted) {
-                uint64_t after = ASFileSizeAtURL(movURL);
-                dispatch_async(dispatch_get_main_queue(), ^{ completion(after, nil); });
-            } else {
-                NSError *e2 = export2.error ?: e;
-                dispatch_async(dispatch_get_main_queue(), ^{ completion(0, e2); });
-            }
-        }];
-    }];
+static NSInteger ASEvenFloor(CGFloat v) {
+    NSInteger i = (NSInteger)floor(v);
+    if (i < 2) i = 2;
+    return (i % 2 == 0) ? i : (i - 1);
 }
-
-#pragma mark - SDR 主路径（Reader/Writer）
 
 - (void)transcodeAsset:(AVAsset *)asset
                phAsset:(PHAsset *)ph
-            beforeBytes:(uint64_t)beforeBytes
-              outputURL:(NSURL *)outURL
-             completion:(void(^)(uint64_t afterBytes, NSError * _Nullable error))completion
+           beforeBytes:(uint64_t)beforeBytes
+             outputURL:(NSURL *)outURL
+            completion:(void(^)(uint64_t afterBytes, NSError * _Nullable error))completion
 {
     AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
     if (!videoTrack) { dispatch_async(dispatch_get_main_queue(), ^{ completion(0, ASError(@"No video track", -3)); }); return; }
     AVAssetTrack *audioTrack = [[asset tracksWithMediaType:AVMediaTypeAudio] firstObject];
 
-    // ✅ HDR 分流（HLG/PQ）：走 ExportSession 更稳，避免曝光/炸高光
+    // ===== 颜色范围/色彩属性（修复“曝光/发白”关键）=====
     BOOL isHDR = NO;
-    (void)ASVideoColorPropsFromTrack(videoTrack, &isHDR);
-    if (isHDR) {
-        [self transcodeHDRAsset:asset phAsset:ph beforeBytes:beforeBytes outputURL:outURL completion:completion];
-        return;
-    }
+    NSDictionary *colorProps = ASVideoColorPropertiesFromTrack(videoTrack, &isHDR);
+    BOOL isFullRange = ASVideoTrackIsFullRange(videoTrack);
 
+    // ===== duration / bitrate =====
     double duration = CMTimeGetSeconds(asset.duration);
     if (duration <= 0) duration = ph.duration > 0 ? ph.duration : 1;
 
@@ -696,19 +596,38 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
     AVAssetReader *reader = [[AVAssetReader alloc] initWithAsset:asset error:&err];
     if (!reader) { dispatch_async(dispatch_get_main_queue(), ^{ completion(0, err ?: ASError(@"Reader init failed", -4)); }); return; }
 
-    AVAssetWriter *writer = [[AVAssetWriter alloc] initWithURL:outURL fileType:AVFileTypeMPEG4 error:&err];
+    // HDR 输出 .mov 更稳；SDR mp4
+    NSString *fileType = AVFileTypeMPEG4;
+    if (isHDR && [[outURL.pathExtension lowercaseString] isEqualToString:@"mov"]) {
+        fileType = AVFileTypeQuickTimeMovie;
+    }
+
+    AVAssetWriter *writer = [[AVAssetWriter alloc] initWithURL:outURL fileType:fileType error:&err];
     if (!writer) { dispatch_async(dispatch_get_main_queue(), ^{ completion(0, err ?: ASError(@"Writer init failed", -5)); }); return; }
 
     writer.shouldOptimizeForNetworkUse = YES;
-
     self.currentReader = reader;
     self.currentWriter = writer;
 
-    NSDictionary *pixelOutSettings = ASPixelOutSettingsForVideoTrack(videoTrack);
+    // ===== 读取端 pixel format：跟随源 Range（修复曝光关键）=====
+    OSType px = isFullRange
+        ? kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
 
+    if (@available(iOS 11.0, *)) {
+        if (isHDR) {
+            px = kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange;
+        }
+    }
+
+    NSDictionary *pixelOutSettings = @{
+        (id)kCVPixelBufferPixelFormatTypeKey: @(px)
+    };
+
+    // ===== VideoComposition 规范化尺寸（你原逻辑保留）=====
     BOOL useComposition = ASShouldUseVideoComposition(videoTrack);
-    AVAssetReaderOutput *videoOut = nil;
 
+    AVAssetReaderOutput *videoOut = nil;
     NSInteger encodeW = 0;
     NSInteger encodeH = 0;
 
@@ -723,22 +642,28 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
         comp.renderSize = CGSizeMake(encodeW, encodeH);
         comp.frameDuration = CMTimeMake(1, (int32_t)fps);
 
+        if (@available(iOS 11.0, *)) {
+            NSString *p = colorProps[AVVideoColorPrimariesKey];
+            NSString *t = colorProps[AVVideoTransferFunctionKey];
+            NSString *m = colorProps[AVVideoYCbCrMatrixKey];
+            if (p) comp.colorPrimaries = p;
+            if (t) comp.colorTransferFunction = t;
+            if (m) comp.colorYCbCrMatrix = m;
+        }
+
         AVMutableVideoCompositionInstruction *ins = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
         ins.timeRange = CMTimeRangeMake(kCMTimeZero, asset.duration);
 
         AVMutableVideoCompositionLayerInstruction *layer =
-        [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoTrack];
+            [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoTrack];
         [layer setTransform:nt atTime:kCMTimeZero];
 
         ins.layerInstructions = @[layer];
         comp.instructions = @[ins];
 
-        // ✅ 补：composition 写颜色信息（否则部分视频会变亮/偏色）
-        ASApplyColorPropsToVideoCompositionIfPossible(comp, videoTrack);
-
         AVAssetReaderVideoCompositionOutput *vco =
-        [[AVAssetReaderVideoCompositionOutput alloc] initWithVideoTracks:@[videoTrack]
-                                                           videoSettings:pixelOutSettings];
+            [[AVAssetReaderVideoCompositionOutput alloc] initWithVideoTracks:@[videoTrack]
+                                                               videoSettings:pixelOutSettings];
         vco.videoComposition = comp;
         vco.alwaysCopiesSampleData = NO;
 
@@ -753,7 +678,7 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
         encodeH = ASEvenFloor(naturalSize.height);
 
         AVAssetReaderTrackOutput *vto =
-        [[AVAssetReaderTrackOutput alloc] initWithTrack:videoTrack outputSettings:pixelOutSettings];
+            [[AVAssetReaderTrackOutput alloc] initWithTrack:videoTrack outputSettings:pixelOutSettings];
         vto.alwaysCopiesSampleData = NO;
 
         if (![reader canAddOutput:vto]) {
@@ -764,12 +689,11 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
         videoOut = vto;
     }
 
-    NSDictionary *videoCompProps = @{
+    // ===== writer video input =====
+    NSMutableDictionary *videoCompProps = [@{
         AVVideoAverageBitRateKey: @(targetVideoBitrate),
         AVVideoAllowFrameReorderingKey: @NO,
         AVVideoMaxKeyFrameIntervalKey: @(fps * 2),
-        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-        AVVideoH264EntropyModeKey: AVVideoH264EntropyModeCABAC,
         AVVideoCleanApertureKey: @{
             AVVideoCleanApertureWidthKey: @(encodeW),
             AVVideoCleanApertureHeightKey: @(encodeH),
@@ -780,16 +704,39 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
             AVVideoPixelAspectRatioHorizontalSpacingKey: @1,
             AVVideoPixelAspectRatioVerticalSpacingKey: @1
         }
-    };
+    } mutableCopy];
 
-    BOOL dummyHDR = NO;
-    NSDictionary *videoInSettings =
-    ASVideoInSettingsWithColorProps(encodeW, encodeH, videoCompProps, videoTrack, &dummyHDR);
+    NSString *codec = AVVideoCodecTypeH264;
+    if (@available(iOS 11.0, *)) {
+        if (isHDR) {
+            codec = AVVideoCodecTypeHEVC;
+            videoCompProps[AVVideoProfileLevelKey] = AVVideoProfileLevelHEVCMain10AutoLevel;
+        } else {
+            videoCompProps[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel;
+            videoCompProps[AVVideoH264EntropyModeKey] = AVVideoH264EntropyModeCABAC;
+        }
+    } else {
+        videoCompProps[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel;
+        videoCompProps[AVVideoH264EntropyModeKey] = AVVideoH264EntropyModeCABAC;
+    }
+
+    NSMutableDictionary *videoInSettings = [@{
+        AVVideoCodecKey: codec,
+        AVVideoWidthKey: @(encodeW),
+        AVVideoHeightKey: @(encodeH),
+        AVVideoCompressionPropertiesKey: videoCompProps
+    } mutableCopy];
+
+    // ✅ 把源视频的色彩信息写入输出（修复曝光/偏色关键）
+    if (colorProps) {
+        videoInSettings[AVVideoColorPropertiesKey] = colorProps;
+    }
 
     AVAssetWriterInput *videoIn =
-    [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoInSettings];
+        [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoInSettings];
     videoIn.expectsMediaDataInRealTime = NO;
 
+    // composition 已烤方向 => identity；否则保留 track transform
     videoIn.transform = useComposition ? CGAffineTransformIdentity : txf;
 
     if (![writer canAddInput:videoIn]) {
@@ -798,6 +745,7 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
     }
     [writer addInput:videoIn];
 
+    // ===== audio =====
     AVAssetReaderTrackOutput *audioOut = nil;
     AVAssetWriterInput *audioIn = nil;
     if (audioTrack) {
@@ -835,6 +783,7 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
         return;
     }
 
+    // ===== 你的“首帧对齐到 0”逻辑保留 =====
     __block BOOL sessionStarted = NO;
     __block CMTime sessionStartPTS = kCMTimeInvalid;
     __block CMTime timeOffset = kCMTimeInvalid;
@@ -898,7 +847,7 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
     dispatch_group_enter(group);
 
     __block int blackSkipCount = 0;
-    const int blackSkipMax = fps * 2;
+    const int blackSkipMax = fps * 2; // 最多跳 2 秒
 
     [videoIn requestMediaDataWhenReadyOnQueue:videoQ usingBlock:^{
         while (videoIn.isReadyForMoreMediaData && !videoDone && !weakSelf.shouldCancel) {
@@ -1006,6 +955,31 @@ static BOOL ASShouldUseVideoComposition(AVAssetTrack *videoTrack) {
 - (void)fail:(NSError *)error {
     self.isRunning = NO;
     if (self.completionBlock) self.completionBlock(nil, error ?: ASError(@"Error", -9));
+}
+
+static int64_t ASMinVideoBitrateForResolution(CGSize displaySize) {
+    CGFloat w = MAX(displaySize.width, displaySize.height);
+    if (w < 800)  return 600000;     // ~480p
+    if (w < 1300) return 1500000;    // ~720p
+    if (w < 2000) return 3000000;    // ~1080p
+    if (w < 2600) return 6000000;    // ~1440p
+    return 12000000;                // 4K+
+}
+
+static void ASGetAudioParams(AVAssetTrack *audioTrack, double *outSampleRate, int *outChannels) {
+    double sr = 44100.0;
+    int ch = 2;
+    if (audioTrack.formatDescriptions.count > 0) {
+        CMAudioFormatDescriptionRef fmt =
+            (__bridge CMAudioFormatDescriptionRef)audioTrack.formatDescriptions.firstObject;
+        const AudioStreamBasicDescription *asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fmt);
+        if (asbd) {
+            if (asbd->mSampleRate > 0) sr = asbd->mSampleRate;
+            if (asbd->mChannelsPerFrame > 0) ch = (int)asbd->mChannelsPerFrame;
+        }
+    }
+    if (outSampleRate) *outSampleRate = sr;
+    if (outChannels) *outChannels = ch;
 }
 
 @end
