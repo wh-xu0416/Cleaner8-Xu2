@@ -24,6 +24,8 @@ NS_ASSUME_NONNULL_BEGIN
                   initialIndex:(NSInteger)initialIndex
                selectedIndexes:(NSIndexSet *)selectedIndexes;
 
+@property (nonatomic, copy, nullable) void(^onSelectionChanged)(NSIndexSet *selectedIndexes);
+
 @end
 
 NS_ASSUME_NONNULL_END

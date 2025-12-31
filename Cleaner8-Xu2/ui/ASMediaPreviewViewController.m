@@ -57,74 +57,96 @@ static UIImage *ASSelectOffImg(void) {
     return nil;
 }
 
-#pragma mark - Best Badge（同之前，用于左下角和缩略图底部）
+static UIImage *ASSelectGrayOffImg(void) {
+    UIImage *img = [UIImage imageNamed:@"ic_select_gray_n"];
+    if (img) return [img imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    if (@available(iOS 13.0,*)) return [UIImage systemImageNamed:@"circle"];
+    return nil;
+}
+
+#pragma mark - Best Badge（改成图片 ic_best）
 
 @interface ASBestBadgeView : UIView
-@property (nonatomic, strong) UILabel *label;
-@property (nonatomic, strong) UIButton *closeBtn;
 @property (nonatomic, copy) void(^onClose)(void);
 @property (nonatomic, assign) BOOL showsClose;
+- (instancetype)initWithBadgeSize:(CGSize)badgeSize;
+@end
+
+@interface ASBestBadgeView ()
+@property (nonatomic, assign) CGSize badgeSize;
+@property (nonatomic, strong) UIImageView *iv;
+@property (nonatomic, strong) UIButton *closeBtn;
+@property (nonatomic, strong) NSLayoutConstraint *closeW;
+@property (nonatomic, strong) NSLayoutConstraint *gapW;
 @end
 
 @implementation ASBestBadgeView
-- (instancetype)init {
+
+- (instancetype)initWithBadgeSize:(CGSize)badgeSize {
     if (self = [super initWithFrame:CGRectZero]) {
-        UIView *pill = [UIView new];
-        pill.backgroundColor = ASBlue();
-        pill.layer.cornerRadius = 14;
-        pill.layer.masksToBounds = YES;
-        pill.translatesAutoresizingMaskIntoConstraints = NO;
-        [self addSubview:pill];
+        _badgeSize = badgeSize;
 
-        UIImageView *star = [UIImageView new];
-        if (@available(iOS 13.0,*)) star.image = [UIImage systemImageNamed:@"star.fill"];
-        star.tintColor = UIColor.whiteColor;
-        star.translatesAutoresizingMaskIntoConstraints = NO;
-        [pill addSubview:star];
+        self.translatesAutoresizingMaskIntoConstraints = NO;
+        self.backgroundColor = UIColor.clearColor;
 
-        self.label = [UILabel new];
-        self.label.text = @"Best";
-        self.label.textColor = UIColor.whiteColor;
-        self.label.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-        self.label.translatesAutoresizingMaskIntoConstraints = NO;
-        [pill addSubview:self.label];
+        self.iv = [UIImageView new];
+        self.iv.translatesAutoresizingMaskIntoConstraints = NO;
+        UIImage *img = [UIImage imageNamed:@"ic_best"];
+        if (img) img = [img imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        self.iv.image = img;
+        self.iv.contentMode = UIViewContentModeScaleAspectFit;
+        [self addSubview:self.iv];
 
         self.closeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         self.closeBtn.translatesAutoresizingMaskIntoConstraints = NO;
-        if (@available(iOS 13.0,*)) [self.closeBtn setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
-        self.closeBtn.tintColor = UIColor.whiteColor;
-        self.closeBtn.contentEdgeInsets = UIEdgeInsetsMake(6, 6, 6, 6);
+        if (@available(iOS 13.0,*)) {
+            [self.closeBtn setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal];
+        }
+        self.closeBtn.tintColor = [UIColor blackColor];
+        self.closeBtn.contentEdgeInsets = UIEdgeInsetsMake(4, 4, 4, 4);
         [self.closeBtn addTarget:self action:@selector(onCloseTap) forControlEvents:UIControlEventTouchUpInside];
-        [pill addSubview:self.closeBtn];
+        [self addSubview:self.closeBtn];
+
+        self.gapW   = [self.closeBtn.leadingAnchor constraintEqualToAnchor:self.iv.trailingAnchor constant:0];
+        self.closeW = [self.closeBtn.widthAnchor constraintEqualToConstant:0];
 
         [NSLayoutConstraint activateConstraints:@[
-            [pill.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-            [pill.topAnchor constraintEqualToAnchor:self.topAnchor],
-            [pill.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+            [self.iv.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [self.iv.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [self.iv.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+            [self.iv.widthAnchor constraintEqualToConstant:badgeSize.width],
+            [self.iv.heightAnchor constraintEqualToConstant:badgeSize.height],
 
-            [star.leadingAnchor constraintEqualToAnchor:pill.leadingAnchor constant:10],
-            [star.centerYAnchor constraintEqualToAnchor:pill.centerYAnchor],
-            [star.widthAnchor constraintEqualToConstant:16],
-            [star.heightAnchor constraintEqualToConstant:16],
-
-            [self.label.leadingAnchor constraintEqualToAnchor:star.trailingAnchor constant:6],
-            [self.label.centerYAnchor constraintEqualToAnchor:pill.centerYAnchor],
-
-            [self.closeBtn.leadingAnchor constraintEqualToAnchor:self.label.trailingAnchor constant:4],
-            [self.closeBtn.trailingAnchor constraintEqualToAnchor:pill.trailingAnchor constant:-6],
-            [self.closeBtn.centerYAnchor constraintEqualToAnchor:pill.centerYAnchor],
-            [self.closeBtn.widthAnchor constraintEqualToConstant:28],
-            [self.closeBtn.heightAnchor constraintEqualToConstant:28],
-
-            [pill.heightAnchor constraintEqualToConstant:28],
+            self.gapW,
+            [self.closeBtn.centerYAnchor constraintEqualToAnchor:self.iv.centerYAnchor],
+            self.closeW,
+            [self.closeBtn.heightAnchor constraintEqualToConstant:24],
+            [self.closeBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         ]];
 
-        self.showsClose = YES;
+        self.showsClose = NO;
     }
     return self;
 }
-- (void)setShowsClose:(BOOL)showsClose { _showsClose = showsClose; self.closeBtn.hidden = !showsClose; }
-- (void)onCloseTap { if (self.onClose) self.onClose(); }
+
+- (CGSize)intrinsicContentSize {
+    CGFloat w = self.badgeSize.width + (self.showsClose ? (4 + 24) : 0);
+    CGFloat h = MAX(self.badgeSize.height, (self.showsClose ? 24 : self.badgeSize.height));
+    return CGSizeMake(w, h);
+}
+
+- (void)setShowsClose:(BOOL)showsClose {
+    _showsClose = showsClose;
+    self.closeBtn.hidden = !showsClose;
+    self.closeW.constant = showsClose ? 24 : 0;
+    self.gapW.constant   = showsClose ? 4 : 0;
+    [self invalidateIntrinsicContentSize];
+}
+
+- (void)onCloseTap {
+    if (self.onClose) self.onClose();
+}
+
 @end
 
 #pragma mark - Preview Cells（Photo/Video/Live：沿用你之前版本，省略逻辑不变，只保留核心）
@@ -645,7 +667,8 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.checkTapBtn.backgroundColor = UIColor.clearColor;
         [self.contentView addSubview:self.checkTapBtn];
 
-        self.best = [ASBestBadgeView new];
+        self.best = [[ASBestBadgeView alloc] initWithBadgeSize:CGSizeMake(42, 16)];
+        self.best.userInteractionEnabled = NO;
         self.best.showsClose = NO;
         self.best.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:self.best];
@@ -672,8 +695,8 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
             [self.checkTapBtn.widthAnchor constraintEqualToConstant:44],
             [self.checkTapBtn.heightAnchor constraintEqualToConstant:44],
 
-            [self.best.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:-2],
-            [self.best.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:2],
+            [self.best.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            [self.best.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:0],
         ]];
 
         [self applyCurrent:NO];
@@ -729,6 +752,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 @property (nonatomic, strong) id timeObserver;
 @property (nonatomic, assign) BOOL isExiting;
 @property (nonatomic, assign) BOOL didSendBackCallback;
+
 @end
 
 @implementation ASMediaPreviewViewController
@@ -746,6 +770,45 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     return self;
 }
 
+- (void)as_updateThumbCurrentFrom:(NSInteger)oldIdx to:(NSInteger)newIdx {
+    if (self.thumbs.hidden) return;
+
+    [UIView performWithoutAnimation:^{
+        if (oldIdx >= 0 && oldIdx < self.assets.count) {
+            NSIndexPath *oldIP = [NSIndexPath indexPathForItem:oldIdx inSection:0];
+            ASPreviewThumbCell *oldCell = (ASPreviewThumbCell *)[self.thumbs cellForItemAtIndexPath:oldIP];
+            if (oldCell) {
+                [oldCell applyCurrent:NO];
+                // best 你说不管就不处理
+            }
+        }
+
+        if (newIdx >= 0 && newIdx < self.assets.count) {
+            NSIndexPath *newIP = [NSIndexPath indexPathForItem:newIdx inSection:0];
+            ASPreviewThumbCell *newCell = (ASPreviewThumbCell *)[self.thumbs cellForItemAtIndexPath:newIP];
+            if (newCell) {
+                [newCell applyCurrent:YES];
+                [newCell applyChecked:[self.selected containsIndex:newIdx]];
+            }
+        }
+    }];
+}
+
+- (void)as_updateThumbCheckedAtIndex:(NSInteger)idx {
+    if (self.thumbs.hidden) return;
+    NSIndexPath *ip = [NSIndexPath indexPathForItem:idx inSection:0];
+    ASPreviewThumbCell *cell = (ASPreviewThumbCell *)[self.thumbs cellForItemAtIndexPath:ip];
+
+    [UIView performWithoutAnimation:^{
+        if (cell) {
+            [cell applyChecked:[self.selected containsIndex:idx]];
+        } else {
+            // 不在屏幕上才 reload（不会导致“可见闪烁”）
+            [self.thumbs reloadItemsAtIndexPaths:@[ip]];
+        }
+    }];
+}
+
 - (instancetype)initWithAssets:(NSArray<PHAsset *> *)assets
                   initialIndex:(NSInteger)initialIndex
                selectedIndexes:(NSIndexSet *)selectedIndexes {
@@ -755,6 +818,12 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         }
     }
     return self;
+}
+
+- (void)notifySelectionChanged {
+    if (self.onSelectionChanged) {
+        self.onSelectionChanged([self.selected copy]); // NSMutableIndexSet -> NSIndexSet
+    }
 }
 
 - (void)dealloc {
@@ -789,7 +858,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     UIImage *back = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.backBtn setImage:back forState:UIControlStateNormal];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
+    [self.backBtn addTarget:self action:@selector(onTapBack) forControlEvents:UIControlEventTouchUpInside];
     [self.topBar addSubview:self.backBtn];
 
     self.sizeLabel = [UILabel new];
@@ -834,14 +903,12 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     [self.topSelectBtn addTarget:self action:@selector(onToggleSelectCurrent) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.topSelectBtn];
 
-    self.bestBadge = [ASBestBadgeView new];
+    self.bestBadge = [[ASBestBadgeView alloc] initWithBadgeSize:CGSizeMake(60, 24)];
     self.bestBadge.translatesAutoresizingMaskIntoConstraints = NO;
-    __weak typeof(self) weakSelf = self;
-    self.bestBadge.onClose = ^{
-        weakSelf.showsBestBadge = NO;
-        [weakSelf updateOverlays];
-        [weakSelf.thumbs reloadData];
-    };
+
+    self.bestBadge.showsClose = NO;
+    self.bestBadge.onClose = nil;
+
     [self.view addSubview:self.bestBadge];
 
     // thumbs（多资源才显示）
@@ -920,7 +987,19 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     return arr;
 }
 
-- (void)onBack {
+- (void)onTapBack {
+    if (self.didSendBackCallback) {
+        [self.navigationController popViewControllerAnimated:YES];
+        return;
+    }
+    self.didSendBackCallback = YES;
+
+    NSIndexSet *idxs = [self.selected copy];
+    NSArray<PHAsset *> *assets = [self selectedAssetsArray];
+
+    if (self.onBack) self.onBack(assets, idxs);
+    if (self.onSelectionChanged) self.onSelectionChanged(idxs);
+
     [self.navigationController popViewControllerAnimated:YES];
 }
 
@@ -944,40 +1023,49 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     }
 
     BOOL checked = [self.selected containsIndex:self.currentIndex];
-    [self.topSelectBtn setImage:(checked ? ASSelectOnImg() : ASSelectOffImg()) forState:UIControlStateNormal];
+    [self.topSelectBtn setImage:(checked ? ASSelectOnImg() : ASSelectGrayOffImg()) forState:UIControlStateNormal];
 
     BOOL isBest = (self.currentIndex == self.bestIndex);
-    self.bestBadge.hidden = !(self.showsBestBadge && isBest);
-    self.bestBadge.showsClose = YES;
+    self.bestBadge.hidden = !(multi && isBest);
+    self.bestBadge.showsClose = NO;
 }
 
 #pragma mark - Selection
 
 - (void)onToggleSelectCurrent {
-    if (self.assets.count <= 1) return;
     if ([self.selected containsIndex:self.currentIndex]) [self.selected removeIndex:self.currentIndex];
     else [self.selected addIndex:self.currentIndex];
 
     [self updateOverlays];
+    [self as_updateThumbCheckedAtIndex:self.currentIndex]; // ✅ 不 reload 可见 cell
 
-    NSIndexPath *ip = [NSIndexPath indexPathForItem:self.currentIndex inSection:0];
-    if (!self.thumbs.hidden) [self.thumbs reloadItemsAtIndexPaths:@[ip]];
+    [self notifySelectionChanged];
 }
 
 #pragma mark - Paging
 
 - (void)scrollToIndex:(NSInteger)idx animated:(BOOL)animated {
+    if (idx == self.currentIndex && !animated) return;
     if (self.assets.count == 0) return;
     idx = MAX(0, MIN(idx, (NSInteger)self.assets.count - 1));
+
+    NSInteger old = self.currentIndex;
+    self.currentIndex = idx;
 
     [self.view layoutIfNeeded];
     CGFloat w = self.pager.bounds.size.width;
     [self.pager setContentOffset:CGPointMake(w * idx, 0) animated:animated];
 
+    [self reloadTopText];
+    [self updateOverlays];
+
     if (self.assets.count > 1) {
         NSIndexPath *ip = [NSIndexPath indexPathForItem:idx inSection:0];
-        [self.thumbs scrollToItemAtIndexPath:ip atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally animated:animated];
-        [self.thumbs reloadData];
+        [self.thumbs scrollToItemAtIndexPath:ip
+                            atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally
+                                    animated:animated];
+
+        [self as_updateThumbCurrentFrom:old to:idx];   // ✅ 只更新旧/新
     }
 }
 
@@ -1024,7 +1112,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     BOOL multi = (self.assets.count > 1);
     BOOL isBest = (indexPath.item == self.bestIndex);
-    cell.best.hidden = !(multi && self.showsBestBadge && isBest);
+    cell.best.hidden = !(multi && isBest);
 
     [cell.checkTapBtn removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
     cell.checkTapBtn.tag = indexPath.item;
@@ -1060,15 +1148,15 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
 - (void)onThumbCheckTap:(UIButton *)btn {
     NSInteger idx = btn.tag;
-    if (self.assets.count <= 1) return;
+    if (idx < 0 || idx >= self.assets.count) return;
 
     if ([self.selected containsIndex:idx]) [self.selected removeIndex:idx];
     else [self.selected addIndex:idx];
 
     if (idx == self.currentIndex) [self updateOverlays];
 
-    NSIndexPath *ip = [NSIndexPath indexPathForItem:idx inSection:0];
-    [self.thumbs reloadItemsAtIndexPaths:@[ip]];
+    [self as_updateThumbCheckedAtIndex:idx];
+    [self notifySelectionChanged];
 }
 
 - (CGSize)collectionView:(UICollectionView *)collectionView
@@ -1107,16 +1195,14 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     if (collectionView != self.thumbs) return;
-    self.currentIndex = indexPath.item;
-    [self scrollToIndex:self.currentIndex animated:YES];
-    [self reloadTopText];
-    [self updateOverlays];
+    [self scrollToIndex:indexPath.item animated:YES];
 }
 
 #pragma mark - pager scroll end
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
     if (scrollView != self.pager) return;
+
     CGFloat w = self.pager.bounds.size.width;
     if (w <= 0) return;
 
@@ -1124,14 +1210,19 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     idx = MAX(0, MIN(idx, (NSInteger)self.assets.count - 1));
     if (idx == self.currentIndex) return;
 
+    NSInteger old = self.currentIndex;
     self.currentIndex = idx;
+
     [self reloadTopText];
     [self updateOverlays];
 
     if (self.assets.count > 1) {
         NSIndexPath *ip = [NSIndexPath indexPathForItem:idx inSection:0];
-        [self.thumbs scrollToItemAtIndexPath:ip atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally animated:YES];
-        [self.thumbs reloadData];
+        [self.thumbs scrollToItemAtIndexPath:ip
+                            atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally
+                                    animated:YES];
+
+        [self as_updateThumbCurrentFrom:old to:idx];   // ✅ 不 reloadData
     }
 }
 

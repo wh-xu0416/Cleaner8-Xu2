@@ -9,7 +9,6 @@ static inline UIColor *ASBlue(void) {
 @property (nonatomic, strong, readwrite) UILabel  *titleLabel;
 @property (nonatomic, strong, readwrite) UIButton *rightButton;
 
-@property (nonatomic, strong) UIImageView *backIconView;
 @property (nonatomic, strong) UIImageView *rightIconView;
 @end
 
@@ -17,33 +16,23 @@ static inline UIColor *ASBlue(void) {
 
 - (instancetype)initWithTitle:(NSString *)title {
     if (self = [super initWithFrame:CGRectZero]) {
-        self.backgroundColor = UIColor.whiteColor;
-
+        self.backgroundColor = UIColor.clearColor;
         UILayoutGuide *safe = self.safeAreaLayoutGuide;
 
         // back button
-        self.backButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        self.backButton = [UIButton buttonWithType:UIButtonTypeCustom];
         self.backButton.translatesAutoresizingMaskIntoConstraints = NO;
-        self.backButton.tintColor = ASBlue();
-        self.backButton.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+        self.backButton.backgroundColor = UIColor.clearColor;
+        self.backButton.adjustsImageWhenHighlighted = NO;
+        self.backButton.showsTouchWhenHighlighted = NO;
+
+        UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        [self.backButton setImage:backImg forState:UIControlStateNormal];
+        self.backButton.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10); // 44里放24
+        self.backButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
+
         [self.backButton addTarget:self action:@selector(backTap) forControlEvents:UIControlEventTouchUpInside];
-
-        self.backIconView = [[UIImageView alloc] init];
-        self.backIconView.translatesAutoresizingMaskIntoConstraints = NO;
-        self.backIconView.contentMode = UIViewContentModeScaleAspectFit;
-        self.backIconView.tintColor = ASBlue();
-
-        UIImage *img = nil;
-        if (@available(iOS 13.0, *)) {
-            UIImageSymbolConfiguration *cfg =
-            [UIImageSymbolConfiguration configurationWithPointSize:22
-                                                           weight:UIImageSymbolWeightRegular
-                                                            scale:UIImageSymbolScaleMedium];
-            img = [[UIImage systemImageNamed:@"chevron.left"] imageWithConfiguration:cfg];
-        } else {
-            img = [UIImage imageNamed:@"chevron.left"];
-        }
-        self.backIconView.image = img;
+        [self addSubview:self.backButton];
 
         // title
         self.titleLabel = [UILabel new];
@@ -52,52 +41,41 @@ static inline UIColor *ASBlue(void) {
         self.titleLabel.textAlignment = NSTextAlignmentCenter;
         self.titleLabel.font = [UIFont systemFontOfSize:28 weight:UIFontWeightSemibold];
         self.titleLabel.textColor = [UIColor colorWithWhite:0 alpha:1.0];
+        [self addSubview:self.titleLabel];
 
-        // right button (Home)
+        // right button
         self.rightButton = [UIButton buttonWithType:UIButtonTypeCustom];
         self.rightButton.translatesAutoresizingMaskIntoConstraints = NO;
+        self.rightButton.backgroundColor = UIColor.clearColor;
+        self.rightButton.adjustsImageWhenHighlighted = NO;
+        self.rightButton.showsTouchWhenHighlighted = NO;
         self.rightButton.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
         [self.rightButton addTarget:self action:@selector(rightTap) forControlEvents:UIControlEventTouchUpInside];
 
         self.rightIconView = [UIImageView new];
         self.rightIconView.translatesAutoresizingMaskIntoConstraints = NO;
         self.rightIconView.contentMode = UIViewContentModeScaleAspectFit;
-
-        UIImage *home = [UIImage imageNamed:@"ic_home"];
-        self.rightIconView.image = [home imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-
-        [self addSubview:self.backButton];
-        [self.backButton addSubview:self.backIconView];
-        [self addSubview:self.titleLabel];
+        self.rightIconView.image = [[UIImage imageNamed:@"ic_home"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
 
         [self addSubview:self.rightButton];
         [self.rightButton addSubview:self.rightIconView];
 
         [NSLayoutConstraint activateConstraints:@[
-            // back 44x44
-            [self.backButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
+            [self.backButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:10],
             [self.backButton.topAnchor constraintEqualToAnchor:safe.topAnchor constant:0],
             [self.backButton.widthAnchor constraintEqualToConstant:44],
             [self.backButton.heightAnchor constraintEqualToConstant:44],
 
-            [self.backIconView.centerXAnchor constraintEqualToAnchor:self.backButton.centerXAnchor],
-            [self.backIconView.centerYAnchor constraintEqualToAnchor:self.backButton.centerYAnchor],
-            [self.backIconView.widthAnchor constraintEqualToConstant:13],
-            [self.backIconView.heightAnchor constraintEqualToConstant:22],
-
-            // right 44x44
             [self.rightButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-12],
             [self.rightButton.topAnchor constraintEqualToAnchor:safe.topAnchor constant:0],
             [self.rightButton.widthAnchor constraintEqualToConstant:44],
             [self.rightButton.heightAnchor constraintEqualToConstant:44],
 
-            // home icon 24x24
             [self.rightIconView.centerXAnchor constraintEqualToAnchor:self.rightButton.centerXAnchor],
             [self.rightIconView.centerYAnchor constraintEqualToAnchor:self.rightButton.centerYAnchor],
             [self.rightIconView.widthAnchor constraintEqualToConstant:24],
             [self.rightIconView.heightAnchor constraintEqualToConstant:24],
 
-            // title 44 high
             [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
             [self.titleLabel.topAnchor constraintEqualToAnchor:safe.topAnchor constant:0],
             [self.titleLabel.heightAnchor constraintEqualToConstant:44],

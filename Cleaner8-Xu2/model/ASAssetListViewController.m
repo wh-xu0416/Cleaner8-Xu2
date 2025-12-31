@@ -263,8 +263,8 @@ static inline NSString *ASDurationText(NSTimeInterval seconds) {
 }
 
 - (BOOL)isAllCleanablesSelected {
-    if (self.models.count <= 1) return NO;
-    for (NSInteger i=1; i<(NSInteger)self.models.count; i++) {
+    if (self.models.count == 0) return NO;
+    for (NSInteger i=0; i<(NSInteger)self.models.count; i++) {
         NSString *lid = self.models[i].localId ?: @"";
         if (lid.length && ![self.selectedIds containsObject:lid]) return NO;
     }
@@ -886,11 +886,10 @@ static inline void ASNoAnim(dispatch_block_t block) {
 }
 
 - (BOOL)isAllCleanablesSelected {
-    if (self.models.count <= 1) return NO;
-    for (NSInteger i = 1; i < (NSInteger)self.models.count; i++) {
+    if (self.models.count == 0) return NO;
+    for (NSInteger i=0; i<(NSInteger)self.models.count; i++) {
         NSString *lid = self.models[i].localId ?: @"";
-        if (lid.length == 0) continue;
-        if (![self.selectedIds containsObject:lid]) return NO;
+        if (lid.length && ![self.selectedIds containsObject:lid]) return NO;
     }
     return YES;
 }
@@ -1543,7 +1542,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
     UIView *bar = [UIView new];
     bar.backgroundColor = UIColor.clearColor;
-    bar.userInteractionEnabled = NO;
+    bar.userInteractionEnabled = YES;
 
     ASNoHighlightButton *btn = [ASNoHighlightButton buttonWithType:UIButtonTypeCustom];
     btn.userInteractionEnabled = YES;
@@ -1839,7 +1838,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
 - (uint64_t)cleanableBytesForSection:(ASAssetSection *)sec {
     uint64_t s = 0;
-    for (NSInteger i = 1; i < (NSInteger)sec.assets.count; i++) {
+    for (NSInteger i = 0; i < (NSInteger)sec.assets.count; i++) { 
         s += sec.assets[i].fileSizeBytes;
     }
     return s;
@@ -2199,16 +2198,25 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 }
 
 - (void)applySelectedFromPreviewIndexes:(NSIndexSet *)idxSet forSection:(ASAssetSection *)sec {
-    for (NSInteger i = 0; i < (NSInteger)sec.assets.count; i++) {
+
+    BOOL grouped = ([self isGroupMode] && sec.isGrouped);
+    NSInteger start = grouped ? 1 : 0;
+
+    // 先清掉该 section 所有可选项
+    for (NSInteger i = start; i < (NSInteger)sec.assets.count; i++) {
         ASAssetModel *m = sec.assets[i];
         if (m.localId.length) [self.selectedIds removeObject:m.localId];
     }
+
+    // 再把 idxSet 里勾选的加回来（分组会自动忽略 0）
     [idxSet enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL * _Nonnull stop) {
         if (idx >= (NSUInteger)sec.assets.count) return;
+
         ASAssetModel *m = sec.assets[idx];
         if (m.localId.length) [self.selectedIds addObject:m.localId];
     }];
 }
+
 
 - (void)goPreviewSection:(NSInteger)sectionIndex initialIndex:(NSInteger)initialIndex {
     if (sectionIndex < 0 || sectionIndex >= (NSInteger)self.sections.count) return;
@@ -2227,13 +2235,13 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     p.bestIndex = 0;
     p.showsBestBadge = YES;
 
-//    __weak typeof(self) weakSelf = self;
-//    p.onBack = ^(NSArray<PHAsset *> *selectedAssets, NSIndexSet *selectedIndexes) {
-//        // 用 indexSet 回写 selectedIds（保持 best 不选）
-//        [weakSelf applySelectedFromPreviewIndexes:selectedIndexes forSection:sec];
-//        [weakSelf recomputeBytesAndRefreshUI];
-//        [weakSelf syncNavSelectAllState];
-//    };
+    __weak typeof(self) weakSelf = self;
+    p.onBack = ^(NSArray<PHAsset *> *selectedAssets, NSIndexSet *selectedIndexes) {
+        // 用 indexSet 回写 selectedIds（保持 best 不选）
+        [weakSelf applySelectedFromPreviewIndexes:selectedIndexes forSection:sec];
+        [weakSelf recomputeBytesAndRefreshUI];
+        [weakSelf syncNavSelectAllState];
+    };
 
     [self.navigationController pushViewController:p animated:YES];
 }
