@@ -447,13 +447,6 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
             if (success) {
                 [[ASStudioStore shared] removeByAssetId:it.assetId];
                 [self loadData];
-            } else {
-                UIAlertController *ac =
-                [UIAlertController alertControllerWithTitle:@"Delete failed"
-                                                    message:error.localizedDescription ?: @""
-                                             preferredStyle:UIAlertControllerStyleAlert];
-                [ac addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                [self presentViewController:ac animated:YES completion:nil];
             }
         });
     }];
