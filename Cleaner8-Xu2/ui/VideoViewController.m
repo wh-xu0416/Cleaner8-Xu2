@@ -14,7 +14,7 @@ static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
 }
 static inline UIColor *ASBlue(void) {
-    return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0];
+    return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; // #024DFFFF
 }
 static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     return [UIFont systemFontOfSize:size weight:weight];
@@ -40,10 +40,15 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 @property(nonatomic,strong) UIButton *liveTodoBtn;
 @property(nonatomic,strong) UIButton *studioTodoBtn;
 
-@property(nonatomic,strong) UIView *settingBar;
+@property(nonatomic,strong) UIControl *settingBar;
+@property(nonatomic,strong) UILabel *settingTipLab;
 @property(nonatomic,strong) UIButton *settingBtn;
 
-@property(nonatomic,assign) BOOL hasPresentedLimitedPickerThisAppear;
+@property(nonatomic,strong) NSLayoutConstraint *imageCardTopToTitle;
+@property(nonatomic,strong) NSLayoutConstraint *imageCardTopToSettingBar;
+@property(nonatomic,strong) NSLayoutConstraint *settingBarHeightZero;
+
+@property(nonatomic,strong) UIView *noAuthView;
 
 @property(nonatomic,strong) NSArray<UIView *> *shadowViews;
 
@@ -91,7 +96,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     if (@available(iOS 12.0, *)) {
         if (self.pathMonitor) return;
 
-        self.hasNetwork = YES; // 默认先认为有网，避免刚进来就误弹
+        self.hasNetwork = YES;
 
         nw_path_monitor_t m = nw_path_monitor_create();
         self.pathMonitor = m;
@@ -104,7 +109,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
             BOOL ok = (nw_path_get_status(path) == nw_path_status_satisfied);
             weakSelf.hasNetwork = ok;
 
-            // 网络变差时，如果页面可见，弹一次
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (!weakSelf) return;
                 if (!ok) {
@@ -118,15 +122,12 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 }
 
 - (void)checkNetworkAndMaybeAlert {
-    // 页面不可见就不弹
     if (!self.isViewLoaded || self.view.window == nil) return;
-
-    // 每次 appear 只弹一次
     if (self.hasShownNoNetworkAlertThisAppear) return;
 
     if (!self.hasNetwork) {
         self.hasShownNoNetworkAlertThisAppear = YES;
-//        [self showNoNetworkAlert];
+        // [self showNoNetworkAlert];
     }
 }
 
@@ -185,31 +186,25 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     BOOL deniedOrRestricted = (status == PHAuthorizationStatusDenied || status == PHAuthorizationStatusRestricted);
     BOOL limited = (status == PHAuthorizationStatusLimited);
 
-    // Denied/Restricted：禁用入口 + 显示 settingBar
-    [self setFeatureButtonsEnabled:!deniedOrRestricted];
-    self.settingBar.hidden = !deniedOrRestricted;
-
     NSUserDefaults *ud = NSUserDefaults.standardUserDefaults;
-    NSInteger lastStatus = [ud integerForKey:kASLastPhotoAuthStatusKey];
     [ud setInteger:status forKey:kASLastPhotoAuthStatusKey];
     [ud synchronize];
 
-    if (!limited) {
-        self.hasPresentedLimitedPickerThisAppear = NO;
-        return;
-    }
+    self.noAuthView.hidden = !deniedOrRestricted;
+    self.scroll.hidden = deniedOrRestricted;
 
-    // Limited：仅在“刚切到 limited 的那一次”自动弹一次
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
-    if (@available(iOS 14, *)) {
-        BOOL justBecameLimited = (lastStatus != PHAuthorizationStatusLimited);
+    [self setFeatureButtonsEnabled:!deniedOrRestricted];
 
-        if (justBecameLimited && !self.hasPresentedLimitedPickerThisAppear) {
-            self.hasPresentedLimitedPickerThisAppear = YES;
-            [PHPhotoLibrary.sharedPhotoLibrary presentLimitedLibraryPickerFromViewController:self];
-        }
-    }
-#endif
+    BOOL showBubble = (!deniedOrRestricted && limited);
+    self.settingBar.hidden = !showBubble;
+    self.settingBarHeightZero.active = !showBubble;
+
+    self.imageCardTopToTitle.active = !showBubble;
+    self.imageCardTopToSettingBar.active = showBubble;
+
+    [UIView animateWithDuration:0.20 animations:^{
+        [self.view layoutIfNeeded];
+    }];
 }
 
 #pragma mark - UI enable/disable
@@ -264,19 +259,74 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     self.titleLab.textAlignment = NSTextAlignmentCenter;
     [self.content addSubview:self.titleLab];
 
+    self.settingBar = [UIControl new];
+    self.settingBar.translatesAutoresizingMaskIntoConstraints = NO;
+    self.settingBar.backgroundColor = ASBlue(); // #024DFFFF
+    self.settingBar.layer.cornerRadius = 20;
+    self.settingBar.layer.masksToBounds = YES;
+
+    [self.settingBar addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
+
+    [self.content addSubview:self.settingBar];
+
+
+    self.settingTipLab = [UILabel new];
+    self.settingTipLab.translatesAutoresizingMaskIntoConstraints = NO;
+    self.settingTipLab.text = @"Photo Access Is Required.";
+    self.settingTipLab.textColor = UIColor.whiteColor;
+    self.settingTipLab.font = ASFont(15, UIFontWeightMedium);
+    [self.settingBar addSubview:self.settingTipLab];
+
+    UIColor *accent = ASRGB(9, 255, 243); // #09FFF3FF
+
+    UILabel *settingTextLab = [UILabel new];
+    settingTextLab.translatesAutoresizingMaskIntoConstraints = NO;
+    settingTextLab.text = @"Setting";
+    settingTextLab.textColor = accent;
+    settingTextLab.font = ASFont(15, UIFontWeightMedium);
+
+    UIImageView *moreIcon = [UIImageView new];
+    moreIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    moreIcon.image = [[UIImage imageNamed:@"ic_todo"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    moreIcon.tintColor = accent;
+    moreIcon.contentMode = UIViewContentModeScaleAspectFit;
+
+    UIStackView *rightStack = [[UIStackView alloc] initWithArrangedSubviews:@[settingTextLab, moreIcon]];
+    rightStack.translatesAutoresizingMaskIntoConstraints = NO;
+    rightStack.axis = UILayoutConstraintAxisHorizontal;
+    rightStack.alignment = UIStackViewAlignmentCenter;
+    rightStack.spacing = 10;
+    [self.settingBar addSubview:rightStack];
+
+    [self.settingTipLab setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                                       forAxis:UILayoutConstraintAxisHorizontal];
+    [self.settingTipLab setContentHuggingPriority:UILayoutPriorityDefaultLow
+                                          forAxis:UILayoutConstraintAxisHorizontal];
+
+    [rightStack setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                                forAxis:UILayoutConstraintAxisHorizontal];
+    [rightStack setContentHuggingPriority:UILayoutPriorityRequired
+                                  forAxis:UILayoutConstraintAxisHorizontal];
+
+
+    self.settingBar.hidden = YES;
+    self.settingBarHeightZero = [self.settingBar.heightAnchor constraintEqualToConstant:0];
+    self.settingBarHeightZero.active = YES;
+
+    // small cards
     self.imageCard = [self buildHomeSmallCardWithIcon:@"ic_img"
                                                title:@"Image"
                                             subtitle:@"Compressor"
-                                           todoIcon:@"ic_todo_small"
+                                            todoIcon:@"ic_todo_small"
                                               action:@selector(tapImage)
-                                         todoBtnRef:&_imgTodoBtn];
+                                          todoBtnRef:&_imgTodoBtn];
 
     self.videoCard = [self buildHomeSmallCardWithIcon:@"ic_video"
                                                title:@"Video"
                                             subtitle:@"Compressor"
-                                           todoIcon:@"ic_todo_small"
+                                            todoIcon:@"ic_todo_small"
                                               action:@selector(tapVideo)
-                                         todoBtnRef:&_videoTodoBtn];
+                                          todoBtnRef:&_videoTodoBtn];
 
     [self.content addSubview:self.imageCard];
     [self.content addSubview:self.videoCard];
@@ -286,43 +336,22 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
                                     subtitle:@"Compressor"
                                     todoIcon:@"ic_todo_big"
                                       action:@selector(tapLive)
-                                 todoBtnRef:&_liveTodoBtn];
+                                   todoBtnRef:&_liveTodoBtn];
 
     self.studioRow = [self buildHomeRowWithIcon:@"ic_studio"
                                          title:@"My studio"
                                       subtitle:nil
                                       todoIcon:@"ic_todo_big"
                                         action:@selector(tapStudio)
-                                   todoBtnRef:&_studioTodoBtn];
+                                     todoBtnRef:&_studioTodoBtn];
 
     [self.content addSubview:self.liveRow];
     [self.content addSubview:self.studioRow];
 
-    self.settingBar = [UIView new];
-    self.settingBar.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1.0];
-    self.settingBar.translatesAutoresizingMaskIntoConstraints = NO;
+    // 无权限占位
+    [self buildNoAuthPlaceholder];
 
-    UILabel *lab = [UILabel new];
-    lab.text = @"Photo access is required.";
-    lab.textColor = [UIColor colorWithWhite:0.2 alpha:1.0];
-    lab.font = ASFont(14, UIFontWeightMedium);
-    lab.translatesAutoresizingMaskIntoConstraints = NO;
-
-    self.settingBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.settingBtn setTitle:@"Setting" forState:UIControlStateNormal];
-    self.settingBtn.titleLabel.font = ASFont(14, UIFontWeightSemibold);
-    [self.settingBtn addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
-    self.settingBtn.translatesAutoresizingMaskIntoConstraints = NO;
-
-    [self.settingBar addSubview:lab];
-    [self.settingBar addSubview:self.settingBtn];
-    [self.view addSubview:self.settingBar];
-    self.settingBar.hidden = YES;
-
-    CGFloat sideSmall = 20;
-    CGFloat gapSmall  = 12;
-    CGFloat sideRow   = 20;
-
+    // 约束
     [NSLayoutConstraint activateConstraints:@[
         [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -343,8 +372,23 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         [self.titleLab.topAnchor constraintEqualToAnchor:self.content.safeAreaLayoutGuide.topAnchor constant:13],
         [self.titleLab.centerXAnchor constraintEqualToAnchor:self.content.centerXAnchor],
 
-        // small cards：左右 20，间距 12，等宽，按 175:196 保持比例
-        [self.imageCard.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:64],
+        [self.settingBar.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:20],
+        [self.settingBar.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:20],
+        [self.settingBar.trailingAnchor constraintEqualToAnchor:self.content.trailingAnchor constant:-20],
+        
+        [self.settingTipLab.leadingAnchor constraintEqualToAnchor:self.settingBar.leadingAnchor constant:20],
+        [self.settingTipLab.topAnchor constraintEqualToAnchor:self.settingBar.topAnchor constant:16],
+        [self.settingTipLab.bottomAnchor constraintEqualToAnchor:self.settingBar.bottomAnchor constant:-16],
+
+        [self.settingTipLab.trailingAnchor constraintLessThanOrEqualToAnchor:rightStack.leadingAnchor constant:-12],
+
+        [rightStack.trailingAnchor constraintEqualToAnchor:self.settingBar.trailingAnchor constant:-20],
+        [rightStack.centerYAnchor constraintEqualToAnchor:self.settingBar.centerYAnchor],
+
+        [moreIcon.widthAnchor constraintEqualToConstant:16],
+        [moreIcon.heightAnchor constraintEqualToConstant:16],
+
+
         [self.imageCard.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:20],
 
         [self.videoCard.topAnchor constraintEqualToAnchor:self.imageCard.topAnchor],
@@ -353,35 +397,100 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
         [self.imageCard.widthAnchor constraintEqualToAnchor:self.videoCard.widthAnchor],
 
-        // aspect ratio: height = width * (196/175)
         [self.imageCard.heightAnchor constraintEqualToAnchor:self.imageCard.widthAnchor multiplier:(196.0/175.0)],
         [self.videoCard.heightAnchor constraintEqualToAnchor:self.videoCard.widthAnchor multiplier:(196.0/175.0)],
 
         [self.liveRow.topAnchor constraintEqualToAnchor:self.imageCard.bottomAnchor constant:20],
-        [self.liveRow.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:sideRow],
-        [self.liveRow.trailingAnchor constraintEqualToAnchor:self.content.trailingAnchor constant:-sideRow],
+        [self.liveRow.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:20],
+        [self.liveRow.trailingAnchor constraintEqualToAnchor:self.content.trailingAnchor constant:-20],
         [self.liveRow.heightAnchor constraintEqualToConstant:110],
 
         [self.studioRow.topAnchor constraintEqualToAnchor:self.liveRow.bottomAnchor constant:20],
-        [self.studioRow.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:sideRow],
-        [self.studioRow.trailingAnchor constraintEqualToAnchor:self.content.trailingAnchor constant:-sideRow],
+        [self.studioRow.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:20],
+        [self.studioRow.trailingAnchor constraintEqualToAnchor:self.content.trailingAnchor constant:-20],
         [self.studioRow.heightAnchor constraintEqualToConstant:110],
 
         [self.studioRow.bottomAnchor constraintEqualToAnchor:self.content.bottomAnchor constant:-34],
-
-        [self.settingBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.settingBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.settingBar.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
-        [self.settingBar.heightAnchor constraintEqualToConstant:56],
-
-        [lab.centerYAnchor constraintEqualToAnchor:self.settingBar.centerYAnchor],
-        [lab.leadingAnchor constraintEqualToAnchor:self.settingBar.leadingAnchor constant:16],
-
-        [self.settingBtn.centerYAnchor constraintEqualToAnchor:self.settingBar.centerYAnchor],
-        [self.settingBtn.trailingAnchor constraintEqualToAnchor:self.settingBar.trailingAnchor constant:-16],
     ]];
 
+    self.imageCardTopToTitle =
+        [self.imageCard.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:64];
+    self.imageCardTopToSettingBar =
+        [self.imageCard.topAnchor constraintEqualToAnchor:self.settingBar.bottomAnchor constant:20];
+
+    self.imageCardTopToTitle.active = YES;
+    self.imageCardTopToSettingBar.active = NO;
+
     self.shadowViews = @[self.imageCard, self.videoCard, self.liveRow, self.studioRow];
+}
+
+- (void)buildNoAuthPlaceholder {
+    self.noAuthView = [UIView new];
+    self.noAuthView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.noAuthView.backgroundColor = UIColor.clearColor;
+    self.noAuthView.hidden = YES;
+    [self.view addSubview:self.noAuthView];
+
+    UIImageView *img = [UIImageView new];
+    img.translatesAutoresizingMaskIntoConstraints = NO;
+    img.image = [UIImage imageNamed:@"ic_photo_permission_not"];
+    img.contentMode = UIViewContentModeScaleAspectFit;
+    [self.noAuthView addSubview:img];
+
+    UILabel *t1 = [UILabel new];
+    t1.translatesAutoresizingMaskIntoConstraints = NO;
+    t1.text = @"Allow Photo Access";
+    t1.textColor = UIColor.blackColor;
+    t1.font = ASFont(20, UIFontWeightMedium);
+    t1.textAlignment = NSTextAlignmentCenter;
+    [self.noAuthView addSubview:t1];
+
+    UILabel *t2 = [UILabel new];
+    t2.translatesAutoresizingMaskIntoConstraints = NO;
+    t2.text = @"To compress photos, videos, and LivePhotos.\nplease allow access to your photo library.";
+    t2.textColor = ASRGB(102, 102, 102); // #666666FF
+    t2.font = ASFont(13, UIFontWeightRegular);
+    t2.numberOfLines = 0;
+    t2.textAlignment = NSTextAlignmentCenter;
+    [self.noAuthView addSubview:t2];
+
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+    btn.translatesAutoresizingMaskIntoConstraints = NO;
+    btn.backgroundColor = ASBlue(); // #024DFFFF
+    btn.layer.cornerRadius = 20;
+    btn.layer.masksToBounds = YES;
+    [btn setTitle:@"Go to Settings" forState:UIControlStateNormal];
+    [btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    btn.titleLabel.font = ASFont(20, UIFontWeightRegular);
+    btn.contentEdgeInsets = UIEdgeInsetsMake(23, 0, 23, 0);
+    [btn addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
+    [self.noAuthView addSubview:btn];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.noAuthView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.noAuthView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+        [self.noAuthView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.noAuthView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+
+        [img.topAnchor constraintEqualToAnchor:self.noAuthView.topAnchor],
+        [img.centerXAnchor constraintEqualToAnchor:self.noAuthView.centerXAnchor],
+        [img.widthAnchor constraintEqualToConstant:96],
+        [img.heightAnchor constraintEqualToConstant:96],
+
+        [t1.topAnchor constraintEqualToAnchor:img.bottomAnchor constant:20],
+        [t1.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:30],
+        [t1.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-30],
+
+        [t2.topAnchor constraintEqualToAnchor:t1.bottomAnchor constant:10],
+        [t2.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:45],
+        [t2.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-45],
+
+        [btn.topAnchor constraintEqualToAnchor:t2.bottomAnchor constant:86],
+        [btn.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:45],
+        [btn.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-45],
+
+        [btn.bottomAnchor constraintEqualToAnchor:self.noAuthView.bottomAnchor],
+    ]];
 }
 
 #pragma mark - Small Card
@@ -389,9 +498,9 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 - (UIControl *)buildHomeSmallCardWithIcon:(NSString *)iconName
                                    title:(NSString *)title
                                 subtitle:(NSString *)subtitle
-                               todoIcon:(NSString *)todoIcon
+                                todoIcon:(NSString *)todoIcon
                                   action:(SEL)sel
-                             todoBtnRef:(UIButton * __strong *)todoBtnRef {
+                              todoBtnRef:(UIButton * __strong *)todoBtnRef {
 
     UIControl *card = [UIControl new];
     card.translatesAutoresizingMaskIntoConstraints = NO;
@@ -479,7 +588,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
                           subtitle:(NSString * _Nullable)subtitle
                           todoIcon:(NSString *)todoIcon
                             action:(SEL)sel
-                       todoBtnRef:(UIButton * __strong *)todoBtnRef {
+                        todoBtnRef:(UIButton * __strong *)todoBtnRef {
 
     UIControl *row = [UIControl new];
     row.translatesAutoresizingMaskIntoConstraints = NO;
@@ -505,7 +614,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     t1.text = title;
     t1.textColor = UIColor.blackColor;
     t1.font = ASFont(24, UIFontWeightMedium);
-
     [row addSubview:t1];
 
     UILabel *t2 = nil;

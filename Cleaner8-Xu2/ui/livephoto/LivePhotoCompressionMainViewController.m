@@ -6,6 +6,13 @@
 #import "LivePhotoCoverFrameManager.h"
 
 #pragma mark - Helpers (static)
+static NSString *ASImageSavePillText(uint64_t bytes) {
+    if (bytes == 0) return @"Save --MB";
+    uint64_t saveBytes = bytes / 2; // 固定 50%
+    double mb = (double)saveBytes / (1024.0 * 1024.0);
+    return [NSString stringWithFormat:@"Save %.0fMB", mb];
+}
+
 static NSString * const kASLiveSizeCachePlist = @"as_live_size_cache_v1.plist";
 
 static inline NSString *ASLiveSizeCachePath(void) {
@@ -1211,7 +1218,7 @@ UICollectionViewDataSourcePrefetching
         if (![cell.representedAssetIdentifier isEqualToString:a.localIdentifier]) continue;
 
         uint64_t bytes = [self cachedFileSizeForAsset:a];
-        NSString *txt = ASMBPill(bytes);
+        NSString *txt = ASImageSavePillText(bytes);
         if (![cell.pill.text isEqualToString:txt]) cell.pill.text = txt;
     }
 }
@@ -1436,7 +1443,7 @@ UICollectionViewDataSourcePrefetching
 
     BOOL sel = [self.selectedAssets containsObject:asset];
     [cell applySelectedUI:sel];
-    cell.pill.text = ASMBPill([self cachedFileSizeForAsset:asset]);
+    cell.pill.text = ASImageSavePillText([self cachedFileSizeForAsset:asset]);
 
     if (!cell.thumbView.image && cell.requestId == PHInvalidImageRequestID) {
         PHImageRequestOptions *opt = [PHImageRequestOptions new];
