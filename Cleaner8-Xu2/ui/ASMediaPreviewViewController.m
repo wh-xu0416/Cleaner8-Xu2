@@ -209,6 +209,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 }
 - (void)prepareForDisplay {
     if (!self.asset) return;
+
     NSString *aid = self.asset.localIdentifier ?: @"";
     self.representedId = aid;
     self.iv.image = nil;
@@ -216,27 +217,34 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.networkAccessAllowed = YES;
-    opt.resizeMode = PHImageRequestOptionsResizeModeExact;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
+    opt.resizeMode   = PHImageRequestOptionsResizeModeFast;
 
     CGFloat scale = UIScreen.mainScreen.scale;
-    CGSize target = CGSizeMake(self.bounds.size.width * scale * 2.0,
-                               self.bounds.size.height * scale * 2.0);
+    CGSize target = CGSizeMake(self.bounds.size.width * scale,
+                               self.bounds.size.height * scale);
 
     __weak typeof(self) weakSelf = self;
+    if (self.rid != PHInvalidImageRequestID) [self.mgr cancelImageRequest:self.rid];
+
     self.rid = [self.mgr requestImageForAsset:self.asset
-                                  targetSize:target
-                                 contentMode:PHImageContentModeAspectFit
-                                     options:opt
-                               resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+                                   targetSize:target
+                                  contentMode:PHImageContentModeAspectFit
+                                      options:opt
+                                resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
         if (!result) return;
         if (![weakSelf.representedId isEqualToString:aid]) return;
+
+        // degraded=YES 是快速图；degraded=NO 是最终高清图
         BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
         if (degraded && weakSelf.iv.image) return;
+
         weakSelf.iv.image = result;
         if (!degraded) weakSelf.rid = PHInvalidImageRequestID;
     }];
 }
+
 - (void)endDisplay {
     if (self.rid != PHInvalidImageRequestID) [self.mgr cancelImageRequest:self.rid];
     self.rid = PHInvalidImageRequestID;
@@ -289,7 +297,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     PHVideoRequestOptions *opt = [PHVideoRequestOptions new];
     opt.networkAccessAllowed = YES;
-    opt.deliveryMode = PHVideoRequestOptionsDeliveryModeHighQualityFormat;
+    opt.deliveryMode = PHVideoRequestOptionsDeliveryModeFastFormat;
 
     __weak typeof(self) weakSelf = self;
     self.rid = [self.mgr requestPlayerItemForVideo:self.asset
@@ -355,27 +363,100 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
 
 @interface ASPreviewLiveCell : ASPreviewBaseCell
+@property (nonatomic, strong) UIButton *liveBadgeTapBtn;
+@property (nonatomic, assign) BOOL livePlaying;
+@property (nonatomic, strong) UIView *liveBadge;
+@property (nonatomic, strong) UIImageView *liveIcon;
+@property (nonatomic, strong) UILabel *liveText;
+
 @property (nonatomic, strong) PHCachingImageManager *mgr;
 @property (nonatomic, assign) PHImageRequestID rid;
 @property (nonatomic, strong) PHLivePhotoView *lpv;
 @property (nonatomic, strong) UIImpactFeedbackGenerator *impact;
+
+// ✅ 用这两个可调约束来定位 badge 到“图片区域”的底部
+@property (nonatomic, strong) NSLayoutConstraint *liveBadgeCenterXToLPVLeading;
+@property (nonatomic, strong) NSLayoutConstraint *liveBadgeBottomToLPVTop;
 @end
 
 @implementation ASPreviewLiveCell
+
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
         self.mgr = [PHCachingImageManager new];
-//        self.contentView.backgroundColor = UIColor.blackColor;
 
         self.lpv = [PHLivePhotoView new];
         self.lpv.contentMode = UIViewContentModeScaleAspectFit;
         self.lpv.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:self.lpv];
+
         [NSLayoutConstraint activateConstraints:@[
             [self.lpv.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
             [self.lpv.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
             [self.lpv.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.lpv.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
+        ]];
+
+        // badge
+        self.liveBadge = [UIView new];
+        self.liveBadge.translatesAutoresizingMaskIntoConstraints = NO;
+        self.liveBadge.userInteractionEnabled = YES;
+        self.liveBadge.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+        self.liveBadge.layer.cornerRadius = 14;
+        self.liveBadge.layer.masksToBounds = YES;
+        if (@available(iOS 13.0, *)) self.liveBadge.layer.cornerCurve = kCACornerCurveContinuous;
+        [self.contentView addSubview:self.liveBadge];
+
+        self.liveIcon = [UIImageView new];
+        self.liveIcon.translatesAutoresizingMaskIntoConstraints = NO;
+        self.liveIcon.userInteractionEnabled = NO;
+        self.liveIcon.contentMode = UIViewContentModeScaleAspectFit;
+        if (@available(iOS 13.0, *)) {
+            UIImage *sf = [UIImage systemImageNamed:@"livephoto"];
+            self.liveIcon.image = [sf imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+            self.liveIcon.tintColor = UIColor.whiteColor;
+        } else {
+            UIImage *img = [UIImage imageNamed:@"ic_livephoto"];
+            self.liveIcon.image = [img imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        }
+        [self.liveBadge addSubview:self.liveIcon];
+
+        self.liveText = [UILabel new];
+        self.liveText.translatesAutoresizingMaskIntoConstraints = NO;
+        self.liveText.userInteractionEnabled = NO;
+        self.liveText.text = @"Live";
+        self.liveText.textColor = UIColor.whiteColor;
+        self.liveText.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+        [self.liveBadge addSubview:self.liveText];
+
+        self.liveBadgeTapBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        self.liveBadgeTapBtn.translatesAutoresizingMaskIntoConstraints = NO;
+        self.liveBadgeTapBtn.backgroundColor = UIColor.clearColor;
+        [self.liveBadgeTapBtn addTarget:self action:@selector(onLiveBadgeTap)
+                       forControlEvents:UIControlEventTouchUpInside];
+        [self.liveBadge addSubview:self.liveBadgeTapBtn];
+
+        self.liveBadgeCenterXToLPVLeading = [self.liveBadge.centerXAnchor constraintEqualToAnchor:self.lpv.leadingAnchor constant:0];
+        self.liveBadgeBottomToLPVTop = [self.liveBadge.bottomAnchor constraintEqualToAnchor:self.lpv.topAnchor constant:0];
+
+        [NSLayoutConstraint activateConstraints:@[
+            self.liveBadgeCenterXToLPVLeading,
+            self.liveBadgeBottomToLPVTop,
+            [self.liveBadge.heightAnchor constraintEqualToConstant:28],
+
+            [self.liveIcon.leadingAnchor constraintEqualToAnchor:self.liveBadge.leadingAnchor constant:10],
+            [self.liveIcon.centerYAnchor constraintEqualToAnchor:self.liveBadge.centerYAnchor],
+            [self.liveIcon.widthAnchor constraintEqualToConstant:20],
+            [self.liveIcon.heightAnchor constraintEqualToConstant:20],
+
+            [self.liveText.leadingAnchor constraintEqualToAnchor:self.liveIcon.trailingAnchor constant:6],
+            [self.liveText.trailingAnchor constraintEqualToAnchor:self.liveBadge.trailingAnchor constant:-12],
+            [self.liveText.centerYAnchor constraintEqualToAnchor:self.liveBadge.centerYAnchor],
+
+            [self.liveBadgeTapBtn.leadingAnchor constraintEqualToAnchor:self.liveBadge.leadingAnchor],
+            [self.liveBadgeTapBtn.trailingAnchor constraintEqualToAnchor:self.liveBadge.trailingAnchor],
+            [self.liveBadgeTapBtn.topAnchor constraintEqualToAnchor:self.liveBadge.topAnchor],
+            [self.liveBadgeTapBtn.bottomAnchor constraintEqualToAnchor:self.liveBadge.bottomAnchor],
         ]];
 
         UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(onLongPress:)];
@@ -387,25 +468,44 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     }
     return self;
 }
-- (void)prepareForReuse {
-    [super prepareForReuse];
-    [self endDisplay];
-    self.asset = nil;
-    self.representedId = nil;
-    self.lpv.livePhoto = nil;
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+
+    // 计算 LivePhoto 在 lpv 中 AspectFit 后的真实显示区域
+    CGRect bounds = self.lpv.bounds;
+    CGSize mediaSize = CGSizeZero;
+    if (self.asset) {
+        mediaSize = CGSizeMake(self.asset.pixelWidth, self.asset.pixelHeight);
+    }
+
+    CGRect imgRect = bounds;
+    if (mediaSize.width > 0 && mediaSize.height > 0) {
+        imgRect = AVMakeRectWithAspectRatioInsideRect(mediaSize, bounds);
+    }
+
+    // badge 居中到图片区域中点，底部=图片区域底-20
+    self.liveBadgeCenterXToLPVLeading.constant = CGRectGetMidX(imgRect);
+    self.liveBadgeBottomToLPVTop.constant = CGRectGetMaxY(imgRect) - 20.0;
 }
+
 - (void)prepareForDisplay {
     if (!self.asset) return;
+
+    [self setNeedsLayout];
+    [self layoutIfNeeded];
+
     NSString *aid = self.asset.localIdentifier ?: @"";
     self.representedId = aid;
     self.lpv.livePhoto = nil;
 
     PHLivePhotoRequestOptions *opt = [PHLivePhotoRequestOptions new];
     opt.networkAccessAllowed = YES;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
 
     CGFloat scale = UIScreen.mainScreen.scale;
-    CGSize target = CGSizeMake(self.bounds.size.width * scale * 2.0, self.bounds.size.height * scale * 2.0);
+    CGSize target = CGSizeMake(self.bounds.size.width * scale,
+                               self.bounds.size.height * scale);
 
     __weak typeof(self) weakSelf = self;
     self.rid = [self.mgr requestLivePhotoForAsset:self.asset
@@ -415,35 +515,86 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
                                    resultHandler:^(PHLivePhoto * _Nullable livePhoto, NSDictionary * _Nullable info) {
         if (![weakSelf.representedId isEqualToString:aid]) return;
         if (!livePhoto) return;
+
         BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
         if (degraded && weakSelf.lpv.livePhoto) return;
+
         dispatch_async(dispatch_get_main_queue(), ^{
             if (![weakSelf.representedId isEqualToString:aid]) return;
+
             weakSelf.lpv.livePhoto = livePhoto;
+
+            // ✅ livePhoto 回来后再触发一次，确保最终位置稳定
+            [weakSelf setNeedsLayout];
+            [weakSelf layoutIfNeeded];
+
             if (!degraded) weakSelf.rid = PHInvalidImageRequestID;
         });
     }];
 }
-- (void)onLongPress:(UILongPressGestureRecognizer *)g {
-    if (!self.lpv.livePhoto) return;
-    if (g.state == UIGestureRecognizerStateBegan) {
-        [self.impact prepare];
-        [self.impact impactOccurred];
-        [self.lpv startPlaybackWithStyle:PHLivePhotoViewPlaybackStyleFull];
-    } else if (g.state == UIGestureRecognizerStateEnded ||
-               g.state == UIGestureRecognizerStateCancelled ||
-               g.state == UIGestureRecognizerStateFailed) {
-        [self.impact prepare];
-        [self.impact impactOccurred];
-        [self.lpv stopPlayback];
-    }
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    [self endDisplay];
+    self.livePlaying = NO;
+    self.asset = nil;
+    self.representedId = nil;
+    self.lpv.livePhoto = nil;
 }
+
 - (void)endDisplay {
+    self.livePlaying = NO;
     if (self.rid != PHInvalidImageRequestID) [self.mgr cancelImageRequest:self.rid];
     self.rid = PHInvalidImageRequestID;
     [self.lpv stopPlayback];
     self.lpv.livePhoto = nil;
 }
+
+#pragma mark - play control
+
+- (void)as_startLivePlayback {
+    if (!self.lpv.livePhoto) return;
+    self.livePlaying = YES;
+    [self.impact prepare];
+    [self.impact impactOccurred];
+    [self.lpv startPlaybackWithStyle:PHLivePhotoViewPlaybackStyleFull];
+}
+
+- (void)as_stopLivePlayback {
+    self.livePlaying = NO;
+    [self.impact prepare];
+    [self.impact impactOccurred];
+    [self.lpv stopPlayback];
+}
+
+- (void)onLiveBadgeTap {
+    if (!self.lpv.livePhoto) return;
+
+    if (self.livePlaying) {
+        [self as_stopLivePlayback];
+        return;
+    }
+
+    [self as_startLivePlayback];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.8 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        self.livePlaying = NO;
+    });
+}
+
+- (void)onLongPress:(UILongPressGestureRecognizer *)g {
+    if (!self.lpv.livePhoto) return;
+
+    if (g.state == UIGestureRecognizerStateBegan) {
+        [self as_startLivePlayback];
+    } else if (g.state == UIGestureRecognizerStateEnded ||
+               g.state == UIGestureRecognizerStateCancelled ||
+               g.state == UIGestureRecognizerStateFailed) {
+        [self as_stopLivePlayback];
+    }
+}
+
 @end
 
 #pragma mark - Thumb cell
@@ -539,6 +690,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     self.best.hidden = YES;
     [self applyCurrent:NO];
     [self applyChecked:NO];
+    self.rid = PHInvalidImageRequestID;
 }
 
 - (void)applyChecked:(BOOL)checked {
@@ -699,7 +851,9 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     tlay.sectionInset = UIEdgeInsetsMake(0, 16, 0, 16);
 
     self.thumbs = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:tlay];
-    self.thumbs.backgroundColor = UIColor.whiteColor;
+    self.thumbs.backgroundColor = UIColor.clearColor;
+    self.thumbs.opaque = NO;
+    self.thumbs.backgroundView = nil;
     self.thumbs.dataSource = self;
     self.thumbs.delegate = self;
     self.thumbs.showsHorizontalScrollIndicator = NO;
@@ -733,11 +887,12 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     self.pagerHeight.active = YES;
 
     [NSLayoutConstraint activateConstraints:@[
+//        [self.pager.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
+
         [self.thumbs.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.thumbs.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.thumbs.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
         [self.thumbs.heightAnchor constraintEqualToConstant:(multi ? 120 : 0)],
-
         [self.pager.bottomAnchor constraintEqualToAnchor:(multi ? self.thumbs.topAnchor : safe.bottomAnchor)],
     ]];
 
@@ -931,7 +1086,19 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     }
 }
 
-- (void)collectionView:(UICollectionView *)collectionView didEndDisplayingCell:(UICollectionViewCell *)cell forItemAtIndexPath:(NSIndexPath *)indexPath {
+- (void)collectionView:(UICollectionView *)collectionView
+ didEndDisplayingCell:(UICollectionViewCell *)cell
+   forItemAtIndexPath:(NSIndexPath *)indexPath {
+
+    if (collectionView == self.thumbs && [cell isKindOfClass:ASPreviewThumbCell.class]) {
+        ASPreviewThumbCell *c = (ASPreviewThumbCell *)cell;
+        if (c.rid != PHInvalidImageRequestID) {
+            [self.mgr cancelImageRequest:c.rid];
+            c.rid = PHInvalidImageRequestID;
+        }
+        return;
+    }
+
     if (collectionView != self.pager) return;
     if ([cell isKindOfClass:ASPreviewBaseCell.class]) {
         [(ASPreviewBaseCell *)cell endDisplay];

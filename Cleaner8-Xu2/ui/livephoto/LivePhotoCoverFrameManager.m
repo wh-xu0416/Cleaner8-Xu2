@@ -257,7 +257,7 @@ static NSString *ASExtForUTI(NSString *uti) {
                     item.beforeBytes = (int64_t)(p+v);
                     item.compressedAt = [NSDate date];
                     item.duration = 0;
-                    item.displayName = @"Live Cover Frame"; 
+                    item.displayName = @"Live Cover Frame";
                     [[ASStudioStore shared] upsertItem:item];
                 }
 

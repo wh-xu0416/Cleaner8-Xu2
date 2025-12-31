@@ -2,6 +2,7 @@
 #import <AVKit/AVKit.h>
 #import <Photos/Photos.h>
 #import "VideoCompressionProgressViewController.h"
+#import "ASMediaPreviewViewController.h"
 
 #pragma mark - Helpers
 
@@ -397,6 +398,9 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.thumbView.contentMode = UIViewContentModeScaleAspectFill;
     self.thumbView.layer.cornerRadius = 16;
     self.thumbView.layer.masksToBounds = YES;
+    self.thumbView.userInteractionEnabled = YES;
+    UITapGestureRecognizer *tapThumb = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onTapPreview)];
+    [self.thumbView addGestureRecognizer:tapThumb];
 
     self.playBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     UIImage *img = [UIImage imageNamed:@"ic_play"];
@@ -404,7 +408,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
                   forState:UIControlStateNormal];
     self.playBtn.layer.cornerRadius = 11;
     self.playBtn.layer.masksToBounds = YES;
-    [self.playBtn addTarget:self action:@selector(onPlay) forControlEvents:UIControlEventTouchUpInside];
+    [self.playBtn addTarget:self action:@selector(onTapPreview) forControlEvents:UIControlEventTouchUpInside];
 
     UIView *preview = [UIView new];
     [self.view addSubview:preview];
@@ -547,7 +551,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     baStack.axis = UILayoutConstraintAxisHorizontal;
     baStack.alignment = UIStackViewAlignmentCenter;
     baStack.distribution = UIStackViewDistributionFill;
-    baStack.spacing = 17;                 
+    baStack.spacing = 17;
     baStack.translatesAutoresizingMaskIntoConstraints = NO;
     [ba addSubview:baStack];
 
@@ -806,29 +810,29 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     [self refreshAll];
 }
 
-- (void)onPlay {
-    PHAsset *first = self.assets.firstObject;
-    if (!first) return;
+- (void)onTapPreview {
+    if (self.assets.count == 0) return;
 
-    PHVideoRequestOptions *opt = [PHVideoRequestOptions new];
-    opt.networkAccessAllowed = YES;
+    PHAsset *a = self.assets.firstObject;
+    if (!a) return;
 
-    __weak typeof(self) weakSelf = self;
-    [[PHImageManager defaultManager] requestAVAssetForVideo:first
-                                                   options:opt
-                                             resultHandler:^(AVAsset * _Nullable avAsset, AVAudioMix * _Nullable audioMix, NSDictionary * _Nullable info) {
-        if (!avAsset) return;
+    NSArray<PHAsset *> *previewAssets = @[a];
+    NSIndexSet *preSel = [NSIndexSet indexSet];
 
-        dispatch_async(dispatch_get_main_queue(), ^{
-            AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:avAsset];
-            AVPlayerViewController *pvc = [AVPlayerViewController new];
-            pvc.player = [AVPlayer playerWithPlayerItem:item];
-            [weakSelf presentViewController:pvc animated:YES completion:^{
-                [pvc.player play];
-            }];
-        });
-    }];
+    ASMediaPreviewViewController *p =
+    [[ASMediaPreviewViewController alloc] initWithAssets:previewAssets
+                                           initialIndex:0
+                                        selectedIndexes:preSel];
+
+    p.bestIndex = 0;
+    p.showsBestBadge = YES;
+
+    // __weak typeof(self) weakSelf = self;
+    // p.onBack = ^(NSArray<PHAsset *> *selectedAssets, NSIndexSet *selectedIndexes) { ... };
+
+    [self.navigationController pushViewController:p animated:YES];
 }
+
 
 - (void)onCompress {
     uint64_t before = self.totalBeforeBytes;

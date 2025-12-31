@@ -25,7 +25,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
 
 @property (nonatomic, strong) UIView *emptyView;
 @property (nonatomic, strong) UILabel *emptyLabel;
-@property (nonatomic, strong) UIButton *limitedBtn;
+//@property (nonatomic, strong) UIButton *limitedBtn;
 
 @property (nonatomic, strong) PHCachingImageManager *imgMgr;
 @property (nonatomic, strong) NSArray<ASStudioItem *> *data;
@@ -129,12 +129,12 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     self.emptyLabel.numberOfLines = 0;
     [self.emptyView addSubview:self.emptyLabel];
 
-    self.limitedBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.limitedBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.limitedBtn setTitle:@"Manage Limited Photos Access" forState:UIControlStateNormal];
-    [self.limitedBtn addTarget:self action:@selector(onLimited:) forControlEvents:UIControlEventTouchUpInside];
-    self.limitedBtn.hidden = YES;
-    [self.emptyView addSubview:self.limitedBtn];
+//    self.limitedBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+//    self.limitedBtn.translatesAutoresizingMaskIntoConstraints = NO;
+//    [self.limitedBtn setTitle:@"Manage Limited Photos Access" forState:UIControlStateNormal];
+//    [self.limitedBtn addTarget:self action:@selector(onLimited:) forControlEvents:UIControlEventTouchUpInside];
+//    self.limitedBtn.hidden = YES;
+//    [self.emptyView addSubview:self.limitedBtn];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.blueHeader.topAnchor constraintEqualToAnchor:self.view.topAnchor],
@@ -175,8 +175,8 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
         [self.emptyLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.emptyView.leadingAnchor constant:20],
         [self.emptyLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.emptyView.trailingAnchor constant:-20],
 
-        [self.limitedBtn.topAnchor constraintEqualToAnchor:self.emptyLabel.bottomAnchor constant:14],
-        [self.limitedBtn.centerXAnchor constraintEqualToAnchor:self.emptyView.centerXAnchor],
+//        [self.limitedBtn.topAnchor constraintEqualToAnchor:self.emptyLabel.bottomAnchor constant:14],
+//        [self.limitedBtn.centerXAnchor constraintEqualToAnchor:self.emptyView.centerXAnchor],
     ]];
 
     self.emptyView.hidden = YES;
@@ -220,7 +220,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
 
 - (void)refreshUIForAuth:(PHAuthorizationStatus)st {
     BOOL canRead = (st == PHAuthorizationStatusAuthorized) || (st == PHAuthorizationStatusLimited);
-    self.limitedBtn.hidden = !(st == PHAuthorizationStatusLimited);
+//    self.limitedBtn.hidden = !(st == PHAuthorizationStatusLimited);
 
     if (!canRead) {
         self.table.hidden = YES;
@@ -426,17 +426,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     if (idx < 0 || idx >= self.data.count) return;
 
     ASStudioItem *it = self.data[idx];
-
-    NSString *title = (it.type == ASStudioMediaTypePhoto)
-    ? @"Are you sure you want to delete this image?"
-    : @"Are you sure you want to delete this video?";
-
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleAlert];
-    [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [ac addAction:[UIAlertAction actionWithTitle:@"Confirm Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        [self deleteItem:it];
-    }]];
-    [self presentViewController:ac animated:YES completion:nil];
+    [self deleteItem:it];
 }
 
 - (void)deleteItem:(ASStudioItem *)it {

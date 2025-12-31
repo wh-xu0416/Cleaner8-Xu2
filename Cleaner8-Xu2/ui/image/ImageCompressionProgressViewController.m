@@ -204,6 +204,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     ASProgressModeImageCompress = 0,
     ASProgressModeLiveCover     = 1,
 };
+@property (nonatomic, strong, nullable) UIAlertController *cancelAlert;
 
 @property (nonatomic) ASProgressMode mode;
 @property (nonatomic) BOOL deleteOriginalLive;
@@ -237,6 +238,57 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 @end
 
 @implementation ImageCompressionProgressViewController
+
+- (void)as_dismissPresentedIfNeededThen:(dispatch_block_t)block {
+    // 如果当前正在展示取消确认弹窗（或其他弹窗），先关掉再执行 block
+    UIViewController *presented = self.presentedViewController;
+    if (presented) {
+        [self dismissViewControllerAnimated:NO completion:block];
+    } else {
+        if (block) block();
+    }
+}
+
+- (void)as_finishWithSummary:(ASImageCompressionSummary * _Nullable)summary
+                       error:(NSError * _Nullable)error
+              failedTitle:(NSString *)failedTitle {
+
+    __weak typeof(self) weakSelf = self;
+
+    [self as_dismissPresentedIfNeededThen:^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || self.didExit) return;
+
+        // ✅ 如果之前在显示取消确认弹窗，这里完成了就当作“取消弹窗作废”
+        self.showingCancelAlert = NO;
+        self.cancelAlert = nil;
+
+        if (error) {
+            if (error.code == -999) {
+                [self.navigationController popViewControllerAnimated:YES];
+                return;
+            }
+
+            UIAlertController *ac =
+            [UIAlertController alertControllerWithTitle:failedTitle
+                                                message:error.localizedDescription ?: @"Unknown error"
+                                         preferredStyle:UIAlertControllerStyleAlert];
+
+            [ac addAction:[UIAlertAction actionWithTitle:@"OK"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction * _Nonnull action) {
+                [self.navigationController popViewControllerAnimated:YES];
+            }]];
+            [self presentViewController:ac animated:YES completion:nil];
+            return;
+        }
+
+        ImageCompressionResultViewController *vc =
+        [[ImageCompressionResultViewController alloc] initWithSummary:summary];
+
+        [self.navigationController pushViewController:vc animated:YES];
+    }];
+}
 
 - (instancetype)initWithLiveAssets:(NSArray<PHAsset *> *)assets
                    totalBeforeBytes:(uint64_t)beforeBytes
@@ -496,30 +548,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
             });
 
         } completion:^(ASImageCompressionSummary * _Nullable summary, NSError * _Nullable error) {
-
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (weakSelf.didExit) return;
-
-                if (error) {
-                    if (error.code == -999) {
-                        [weakSelf.navigationController popViewControllerAnimated:YES];
-                        return;
-                    }
-                    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Convert Failed"
-                                                                                message:error.localizedDescription ?: @"Unknown error"
-                                                                         preferredStyle:UIAlertControllerStyleAlert];
-                    [ac addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
-                        [weakSelf.navigationController popViewControllerAnimated:YES];
-                    }]];
-                    [weakSelf presentViewController:ac animated:YES completion:nil];
-                    return;
-                }
-
-                ImageCompressionResultViewController *vc =
-                [[ImageCompressionResultViewController alloc] initWithSummary:summary];
-                [weakSelf.navigationController pushViewController:vc animated:YES];
-            });
-
+            [self as_finishWithSummary:summary error:error failedTitle:@"Convert Failed"];
         }];
         return;
     }
@@ -538,33 +567,27 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
         });
 
     } completion:^(ASImageCompressionSummary * _Nullable summary, NSError * _Nullable error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (weakSelf.didExit) return;
-            if (error) {
-                if (error.code == -999) { [weakSelf.navigationController popViewControllerAnimated:YES]; return; }
-                UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Compress Failed"
-                                                                            message:error.localizedDescription ?: @"Unknown error"
-                                                                     preferredStyle:UIAlertControllerStyleAlert];
-                [ac addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
-                    [weakSelf.navigationController popViewControllerAnimated:YES];
-                }]];
-                [weakSelf presentViewController:ac animated:YES completion:nil];
-                return;
-            }
-            ImageCompressionResultViewController *vc =
-            [[ImageCompressionResultViewController alloc] initWithSummary:summary];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        });
+        [self as_finishWithSummary:summary error:error failedTitle:@"Compress Failed"];
     }];
 }
 
 #pragma mark - Cancel confirm (back / cancel / swipe all use this)
 
 - (void)onCancelTapped {
-    if (!self.manager.isRunning) {
+
+    BOOL isRunning = NO;
+    if (self.mode == ASProgressModeLiveCover) {
+        // liveManager 创建后就视为正在跑（你如果 liveManager 有 isRunning 更好就用它）
+        isRunning = (self.liveManager != nil);
+    } else {
+        isRunning = self.manager.isRunning;
+    }
+
+    if (!isRunning) {
         [self.navigationController popViewControllerAnimated:YES];
         return;
     }
+
     if (self.showingCancelAlert) return;
     self.showingCancelAlert = YES;
 
@@ -573,25 +596,36 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
                                         message:@"Are you sure you want to cancel the conversion of this Photo?"
                                  preferredStyle:UIAlertControllerStyleAlert];
 
+    self.cancelAlert = ac;
+
     __weak typeof(self) weakSelf = self;
-    [ac addAction:[UIAlertAction actionWithTitle:@"NO" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
-        weakSelf.showingCancelAlert = NO;
-        [weakSelf resetPopGesture];
+    [ac addAction:[UIAlertAction actionWithTitle:@"NO" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction * _Nonnull action) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        self.showingCancelAlert = NO;
+        self.cancelAlert = nil;
+        [self resetPopGesture];
     }]];
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"YES" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        weakSelf.showingCancelAlert = NO;
-        weakSelf.didExit = YES;
-        if (weakSelf.mode == ASProgressModeLiveCover) {
-            [weakSelf.liveManager cancel];
+    [ac addAction:[UIAlertAction actionWithTitle:@"YES" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        self.showingCancelAlert = NO;
+        self.cancelAlert = nil;
+
+        self.didExit = YES;
+
+        if (self.mode == ASProgressModeLiveCover) {
+            [self.liveManager cancel];
         } else {
-            [weakSelf.manager cancel];
+            [self.manager cancel];
         }
-        [weakSelf.navigationController popViewControllerAnimated:YES];
+        [self.navigationController popViewControllerAnimated:YES];
     }]];
 
     [self presentViewController:ac animated:YES completion:nil];
 }
+
 
 #pragma mark - Grid
 

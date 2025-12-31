@@ -601,6 +601,12 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     ]];
 }
 
+- (void)notifySelectionChanged {
+    if (self.onSelectionChanged) {
+        self.onSelectionChanged([self.assets copy]);
+    }
+}
+
 #pragma mark - Refresh
 
 - (void)refreshAll {
@@ -657,6 +663,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 #pragma mark - Actions
 
 - (void)onBack {
+    [self notifySelectionChanged];
     [self.navigationController popViewControllerAnimated:YES];
 }
 
@@ -716,7 +723,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 }
 
 - (void)onRemoveBtn:(UIButton *)btn {
-    // 用按钮位置反查 indexPath，避免 tag 错位
     CGPoint p = [btn convertPoint:CGPointMake(btn.bounds.size.width/2.0, btn.bounds.size.height/2.0)
                            toView:self.grid];
     NSIndexPath *ip = [self.grid indexPathForItemAtPoint:p];
@@ -726,6 +732,10 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     if (i < 0 || i >= self.assets.count) return;
 
     [self.assets removeObjectAtIndex:i];
+
+    // ✅ 关键：每次删除都回传最新选择
+    [self notifySelectionChanged];
+
     if (self.assets.count == 0) {
         [self.navigationController popViewControllerAnimated:YES];
         return;

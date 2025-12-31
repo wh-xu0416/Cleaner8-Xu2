@@ -89,12 +89,10 @@ static NSString *ASDurationText(NSTimeInterval duration) {
 - (void)layoutSubviews {
     [super layoutSubviews];
 
-    // ✅ 真·胶囊：圆角永远 = 高度/2
     CGFloat r = self.savePill.bounds.size.height * 0.5;
     self.savePill.layer.cornerRadius = r;
     self.savePill.clipsToBounds = YES;
 
-    // ✅ 更顺滑的圆角（iOS 13+）
     if (@available(iOS 13.0, *)) {
         self.savePill.layer.cornerCurve = kCACornerCurveContinuous;
     }

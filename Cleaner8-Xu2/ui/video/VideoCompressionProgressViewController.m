@@ -214,9 +214,58 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
 @property (nonatomic, strong) VideoCompressionManager *manager;
 @property (nonatomic) BOOL didExit;
 @property (nonatomic) BOOL showingCancelAlert;
+@property (nonatomic, strong, nullable) UIAlertController *cancelAlert;
+
 @end
 
 @implementation VideoCompressionProgressViewController
+
+- (void)as_dismissPresentedIfNeededThen:(dispatch_block_t)block {
+    UIViewController *presented = self.presentedViewController;
+    if (presented) {
+        [self dismissViewControllerAnimated:NO completion:block];
+    } else {
+        if (block) block();
+    }
+}
+
+- (void)as_finishWithSummary:(ASCompressionSummary * _Nullable)summary
+                       error:(NSError * _Nullable)error {
+
+    __weak typeof(self) weakSelf = self;
+    [self as_dismissPresentedIfNeededThen:^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || self.didExit) return;
+
+        // ✅ 如果此时还在显示取消确认弹窗，完成后就把它作废并隐藏
+        self.showingCancelAlert = NO;
+        self.cancelAlert = nil;
+
+        if (error) {
+            if (error.code == -999) {
+                [self.navigationController popViewControllerAnimated:YES];
+                return;
+            }
+
+            UIAlertController *ac =
+            [UIAlertController alertControllerWithTitle:@"Compress Failed"
+                                                message:error.localizedDescription ?: @"Unknown error"
+                                         preferredStyle:UIAlertControllerStyleAlert];
+
+            [ac addAction:[UIAlertAction actionWithTitle:@"OK"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction * _Nonnull action) {
+                [self.navigationController popViewControllerAnimated:YES];
+            }]];
+            [self presentViewController:ac animated:YES completion:nil];
+            return;
+        }
+
+        VideoCompressionResultViewController *vc =
+        [[VideoCompressionResultViewController alloc] initWithSummary:summary];
+        [self.navigationController pushViewController:vc animated:YES];
+    }];
+}
 
 - (instancetype)initWithAssets:(NSArray<PHAsset *> *)assets
                        quality:(ASCompressionQuality)quality
@@ -501,28 +550,7 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
 
         dispatch_async(dispatch_get_main_queue(), ^{
             if (weakSelf.didExit) return;
-
-            if (error) {
-                // cancel
-                if (error.code == -999) {
-                    [weakSelf.navigationController popViewControllerAnimated:YES];
-                    return;
-                }
-
-                UIAlertController *ac =
-                [UIAlertController alertControllerWithTitle:@"Compress Failed"
-                                                    message:error.localizedDescription ?: @"Unknown error"
-                                             preferredStyle:UIAlertControllerStyleAlert];
-                [ac addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                    [weakSelf.navigationController popViewControllerAnimated:YES];
-                }]];
-                [weakSelf presentViewController:ac animated:YES completion:nil];
-                return;
-            }
-
-            VideoCompressionResultViewController *vc =
-            [[VideoCompressionResultViewController alloc] initWithSummary:summary];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
+            [weakSelf as_finishWithSummary:summary error:error];
         });
     }];
 }
@@ -530,13 +558,10 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
 #pragma mark - Cancel (no confirm per request)
 
 - (void)onCancelPressed {
-    // 不在压缩：直接返回
     if (!self.manager || !self.manager.isRunning) {
         [self.navigationController popViewControllerAnimated:YES];
         return;
     }
-
-    // 防止重复弹窗
     if (self.showingCancelAlert) return;
     self.showingCancelAlert = YES;
 
@@ -545,23 +570,27 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
                                         message:@"Are you sure you want to cancel the conversion of this Video?"
                                  preferredStyle:UIAlertControllerStyleAlert];
 
+    self.cancelAlert = ac;
+
     __weak typeof(self) weakSelf = self;
 
     [ac addAction:[UIAlertAction actionWithTitle:@"NO"
                                           style:UIAlertActionStyleCancel
-                                        handler:^(UIAlertAction * _Nonnull action) {
+                                        handler:^(__unused UIAlertAction * _Nonnull action) {
         weakSelf.showingCancelAlert = NO;
+        weakSelf.cancelAlert = nil;
         [weakSelf resetPopGesture];
     }]];
 
     [ac addAction:[UIAlertAction actionWithTitle:@"YES"
                                           style:UIAlertActionStyleDestructive
-                                        handler:^(UIAlertAction * _Nonnull action) {
+                                        handler:^(__unused UIAlertAction * _Nonnull action) {
         weakSelf.showingCancelAlert = NO;
+        weakSelf.cancelAlert = nil;
 
+        weakSelf.didExit = YES;
         [weakSelf.manager cancel];
 
-        // 返回上一页
         [weakSelf.navigationController popViewControllerAnimated:YES];
     }]];
 

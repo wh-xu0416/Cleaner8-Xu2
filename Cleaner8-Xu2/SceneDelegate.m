@@ -1,7 +1,8 @@
 #import "SceneDelegate.h"
-#import "MainTabBarController.h"
 #import "OnboardingViewController.h"
 #import "VideoViewController.h"
+#import "MainTabBarController.h"
+#import "LaunchViewController.h"
 
 @implementation SceneDelegate
 
@@ -12,20 +13,9 @@ options:(UISceneConnectionOptions *)connectionOptions {
     UIWindowScene *windowScene = (UIWindowScene *)scene;
     self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
 
-    BOOL hasCompletedOnboarding =
-        [[NSUserDefaults standardUserDefaults]
-            boolForKey:@"hasCompletedOnboarding"];
-
     UIViewController *rootVC;
-
-    if (!hasCompletedOnboarding) {
-        NSLog(@"➡️ 显示引导页");
-        rootVC = [[OnboardingViewController alloc] init];
-    } else {
-        NSLog(@"➡️ 显示主界面");
-        rootVC = [[MainTabBarController alloc] init];
-//        rootVC = [[VideoViewController alloc] init];
-    }
+    
+    rootVC = [[LaunchViewController alloc] init];
 
     UINavigationController *rootNav =
         [[UINavigationController alloc] initWithRootViewController:rootVC];

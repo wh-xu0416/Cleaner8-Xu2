@@ -1,5 +1,5 @@
 #import "VideoCompressionResultViewController.h"
-#import "VideoCompressionManager.h" 
+#import "VideoCompressionManager.h"
 
 @interface ASCompressionSummary (ASResult) <ASCompressionResultSummary>
 @end
