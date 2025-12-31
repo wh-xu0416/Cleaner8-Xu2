@@ -891,6 +891,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 @property (nonatomic, strong) dispatch_queue_t homeBuildQueue;
 @property (nonatomic) CGFloat lastHeaderHeight;
+
+@property (nonatomic, strong) NSUUID *scanProgressToken;
+
 @end
 
 @implementation HomeViewController
@@ -939,6 +942,10 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 }
 
 - (void)dealloc {
+    if (self.scanProgressToken) {
+         [[ASPhotoScanManager shared] removeProgressObserver:self.scanProgressToken];
+         self.scanProgressToken = nil;
+     }
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [self.scanUITimer invalidate];
 }
@@ -981,17 +988,15 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     self.imgMgr = [[PHCachingImageManager alloc] init];
     self.scanMgr = [ASPhotoScanManager shared];
 
-    __weak typeof(self) weakSelf = self;
-    [self.scanMgr subscribeProgress:^(ASScanSnapshot *snapshot) {
+    self.scanProgressToken = [[ASPhotoScanManager shared] addProgressObserver:^(ASScanSnapshot *snapshot) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (!weakSelf) return;
             if (snapshot.state == ASScanStateScanning) {
-                [weakSelf scheduleScanUIUpdateCoalesced];
+                [self scheduleScanUIUpdateCoalesced];
             } else {
-                [weakSelf.scanUITimer invalidate];
-                weakSelf.scanUITimer = nil;
-                weakSelf.pendingScanUIUpdate = NO;
-                [weakSelf rebuildModulesAndReload];
+                [self.scanUITimer invalidate];
+                self.scanUITimer = nil;
+                self.pendingScanUIUpdate = NO;
+                [self rebuildModulesAndReload];
             }
         });
     }];

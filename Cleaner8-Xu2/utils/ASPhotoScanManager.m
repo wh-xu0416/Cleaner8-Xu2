@@ -476,6 +476,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     ASHomeModuleTypeBlurryPhotos,
     ASHomeModuleTypeOtherPhotos,
 };
+static NSString * const kASAllAssetIDsBaselineKey = @"as_all_asset_ids_baseline_v1";
+static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
 #pragma mark - Manager
 
@@ -502,7 +504,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
 @property (nonatomic, strong) ASScanCache *cache;
 
-@property (nonatomic, copy) ASScanProgressBlock progressBlock;
+@property (nonatomic, strong) NSMutableDictionary<NSUUID *, ASScanProgressBlock> *progressObservers;
+@property (nonatomic, strong) dispatch_queue_t observersQ;
 @property (nonatomic, copy) ASScanCompletionBlock completionBlock;
 
 @property (nonatomic, strong) ASScanSnapshot *snapshot;
@@ -540,6 +543,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 @property (nonatomic, assign) BOOL didLoadCacheFromDisk;
 
 @property (atomic) BOOL cancelled;
+
 @end
 
 @implementation ASPhotoScanManager
@@ -577,6 +581,9 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         _workQ = dispatch_queue_create("as.photo.scan.q", DISPATCH_QUEUE_SERIAL);
         _imageManager = [PHCachingImageManager new];
 
+        _progressObservers = [NSMutableDictionary dictionary];
+        _observersQ = dispatch_queue_create("as.photo.scan.observers", DISPATCH_QUEUE_SERIAL);
+
         _pendingInsertedMap = [NSMutableDictionary dictionary];
         _pendingRemovedIDs = [NSMutableSet set];
 
@@ -605,6 +612,101 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 - (void)dealloc {
     [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
 }
+
+#pragma mark - Baseline IDs (Swift-style)
+
+- (NSArray<NSString *> *)as_loadBaselineAllAssetIDs {
+    NSArray *arr = [[NSUserDefaults standardUserDefaults] arrayForKey:kASAllAssetIDsBaselineKey];
+    if ([arr isKindOfClass:NSArray.class]) return arr;
+    return @[];
+}
+
+- (void)as_saveBaselineAllAssetIDs:(NSArray<NSString *> *)ids {
+    if (!ids) ids = @[];
+    [[NSUserDefaults standardUserDefaults] setObject:ids forKey:kASAllAssetIDsBaselineKey];
+    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kASHasScannedOnceKey];
+    // 不必 synchronize，系统会自动落盘；你这里同步反而卡
+}
+
+- (NSArray<NSString *> *)as_currentAllAssetIDsFromFetchResult:(PHFetchResult<PHAsset *> *)fr {
+    if (!fr) return @[];
+    NSMutableArray<NSString *> *ids = [NSMutableArray arrayWithCapacity:fr.count];
+    for (PHAsset *a in fr) {
+        NSString *lid = a.localIdentifier ?: @"";
+        if (lid.length) [ids addObject:lid];
+    }
+    return ids;
+}
+
+#pragma mark - Force fallback diff (Swift parity)
+
+- (void)checkIncrementalFromDiskAnchorForceFallback {
+    // ✅ 约定：在 workQ 调用
+    if ([self as_currentAuthState] == ASPhotoAuthStateNone) return;
+    if (self.fullScanRunning || self.incrementalRunning) return;
+    if (self.cache.snapshot.state != ASScanStateFinished) return;
+
+    // 0) 刷新全库 fetchResult（用你 allImageVideoFetchOptions：image+video+hidden+sources）
+    [self refreshAllAssetsFetchResult];
+    PHFetchResult<PHAsset *> *allFR = self.allAssetsFetchResult;
+    if (!allFR) return;
+
+    // 1) baseline（像 Swift：CachedAllAssetIDs）
+    NSArray<NSString *> *baselineArr = [self as_loadBaselineAllAssetIDs];
+
+    // 如果 baseline 没写过（兼容老版本/第一次），就退化用 cache 里收集的 ids，当作 baseline
+    NSSet<NSString *> *baselineSet = nil;
+    if (baselineArr.count > 0) {
+        baselineSet = [NSSet setWithArray:baselineArr];
+    } else {
+        baselineSet = [self as_collectCachedIdsFromCache]; // 你已经写好的收集函数
+    }
+
+    // 2) 当前 IDs
+    NSMutableSet<NSString *> *currentSet = [NSMutableSet setWithCapacity:allFR.count];
+    NSMutableArray<NSString *> *insertedIds = [NSMutableArray array];
+
+    for (PHAsset *a in allFR) {
+        NSString *lid = a.localIdentifier ?: @"";
+        if (!lid.length) continue;
+
+        [currentSet addObject:lid];
+        if (![baselineSet containsObject:lid]) {
+            [insertedIds addObject:lid];
+        }
+    }
+
+    // 3) removed = baseline - current
+    NSMutableSet<NSString *> *removedSet = [NSMutableSet setWithSet:baselineSet ?: [NSSet set]];
+    [removedSet minusSet:currentSet];
+
+    ASIncLog(@"FORCE-FALLBACK diff | inserted=%lu removed=%lu baseline=%lu current=%lu",
+             (unsigned long)insertedIds.count,
+             (unsigned long)removedSet.count,
+             (unsigned long)baselineSet.count,
+             (unsigned long)currentSet.count);
+
+    // 4) 无变化：也把 baseline 补齐（避免 baseline 永远为空导致每次都全量 diff）
+    if (insertedIds.count == 0 && removedSet.count == 0) {
+        // baseline 为空或不完整时，写一次当前全量
+        if (baselineArr.count == 0 || baselineSet.count != currentSet.count) {
+            [self as_saveBaselineAllAssetIDs:currentSet.allObjects ?: @[]];
+        }
+        return;
+    }
+
+    // 5) 拉取 inserted 的 PHAsset（chunked）
+    NSArray<PHAsset *> *insertedAssets = [self as_fetchAssetsByLocalIdsChunked:insertedIds];
+
+    // 6) ✅ 走你现成的增量 rebuild（这一步会重建 affectedDays + 刷新 other/blurry/groups 等）
+    [self incrementalRebuildWithInserted:insertedAssets
+                              removedIDs:removedSet.allObjects ?: @[]];
+
+    // 7) ✅ rebuild 结束后，把 baseline 更新为“当前全库”（Swift 的 cacheGroups() 就是这么做的）
+    // 注意：incrementalRebuild 里最后你又 refreshAllAssetsFetchResult 了也行，这里直接写 currentSet 更稳
+    [self as_saveBaselineAllAssetIDs:currentSet.allObjects ?: @[]];
+}
+
 
 - (void)updateBlurryTopKIncremental:(ASAssetModel *)m desiredK:(NSUInteger)desiredK {
     if (!m || m.blurScore < 0.f) return;
@@ -635,6 +737,43 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
     self.snapshot.blurryCount = self.blurryPhotosM.count;
     self.snapshot.blurryBytes = self.blurryBytesRunning;
+}
+
+- (NSUUID *)addProgressObserver:(ASScanProgressBlock)block {
+    if (!block) return nil;
+
+    NSUUID *token = [NSUUID UUID];
+
+    dispatch_async(self.observersQ, ^{
+        self.progressObservers[token] = [block copy];
+    });
+
+    // ✅ 立即推一帧当前 snapshot（让页面刚进来就有数据）
+    ASScanSnapshot *snap = self.snapshot;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        block(snap);
+    });
+
+    return token;
+}
+
+- (void)removeProgressObserver:(NSUUID *)token {
+    if (!token) return;
+    dispatch_async(self.observersQ, ^{
+        [self.progressObservers removeObjectForKey:token];
+    });
+}
+
+- (void)notifyProgressObserversOnMain:(ASScanSnapshot *)snap {
+    // 只在主线程调用（emitProgress 里本来就在 main dispatch）
+    __block NSArray<ASScanProgressBlock> *blocks = nil;
+    dispatch_sync(self.observersQ, ^{
+        blocks = self.progressObservers.allValues ?: @[];
+    });
+
+    for (ASScanProgressBlock b in blocks) {
+        b(snap);
+    }
 }
 
 - (NSUInteger)blurryDesiredKForLibraryQuick {
@@ -709,12 +848,25 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 /// - 有权限+无缓存：全量
 /// - 无权限：请求权限（首次）/ 或提示按钮占位（后续）
 /// - 权限发生变化（0<->limit/full，limit<->full）：全量（无视缓存）
-- (void)startupForHomeWithProgress:(ASScanProgressBlock)progress
-                        completion:(ASScanCompletionBlock)completion
-         showPermissionPlaceholder:(dispatch_block_t)showPermissionPlaceholder
+// ✅ 建议把返回值改成 token（Home 持有并在离开时 remove）
+- (nullable NSUUID *)startupForHomeWithProgress:(ASScanProgressBlock)progress
+                                     completion:(ASScanCompletionBlock)completion
+                      showPermissionPlaceholder:(dispatch_block_t)showPermissionPlaceholder
 {
-    if (progress) self.progressBlock = progress;
-    if (completion) self.completionBlock = completion;
+    // 0) 注册进度观察者：立刻推一帧 snapshot（你 addProgressObserver 里已做）
+    NSUUID *token = nil;
+    if (progress) {
+        token = [self addProgressObserver:progress];
+    }
+    if (completion) self.completionBlock = [completion copy];
+
+    // 统一：展示权限占位（保证主线程）
+    void (^showPlaceholderOnMain)(void) = ^{
+        self.needShowPermissionPlaceholder = YES;
+        if (showPermissionPlaceholder) {
+            dispatch_async(dispatch_get_main_queue(), showPermissionPlaceholder);
+        }
+    };
 
     PHAuthorizationStatus raw = [self as_rawPhotoAuthStatus];
     ASPhotoAuthState current = [self as_currentAuthState];
@@ -724,19 +876,20 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 
     BOOL busy = self.fullScanRunning || self.incrementalRunning;
 
-    // 0) 忙时：只处理“权限被撤销/未决定”
+    // 1) 忙时：只处理“权限被撤销/未决定”
     if (busy) {
         if (current == ASPhotoAuthStateNone || raw == PHAuthorizationStatusNotDetermined) {
             [self cancel];
             [self as_storeAuthState:ASPhotoAuthStateNone];
-            self.needShowPermissionPlaceholder = YES;
-            if (showPermissionPlaceholder) showPermissionPlaceholder();
+            showPlaceholderOnMain();
             [self resetPublicStateForNoPermission];
+            // 可选：确保 UI 立刻刷新（如果 reset 里没 emit）
+            [self emitProgress];
         }
-        return;
+        return token;
     }
 
-    // 1) 未决定：请求权限
+    // 2) 未决定：请求权限
     if (raw == PHAuthorizationStatusNotDetermined) {
         __weak typeof(self) weakSelf = self;
         [self as_requestPhotoPermission:^(ASPhotoAuthState st) {
@@ -746,44 +899,44 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
             [self as_storeAuthState:st];
 
             if (st == ASPhotoAuthStateNone) {
-                self.needShowPermissionPlaceholder = YES;
-                if (showPermissionPlaceholder) showPermissionPlaceholder();
+                showPlaceholderOnMain();
                 [self resetPublicStateForNoPermission];
+                [self emitProgress];
                 return;
             }
 
             [self dropCacheFile];
-            [self startFullScanWithProgress:self.progressBlock completion:self.completionBlock];
+            [self startFullScanWithProgress:nil completion:self.completionBlock]; // ✅ progress 走 observers
         }];
-        return;
+        return token;
     }
 
-    // 2) 已经无权限
+    // 3) 已经无权限
     if (current == ASPhotoAuthStateNone) {
         [self as_storeAuthState:ASPhotoAuthStateNone];
-        self.needShowPermissionPlaceholder = YES;
-        if (showPermissionPlaceholder) showPermissionPlaceholder();
+        showPlaceholderOnMain();
         [self resetPublicStateForNoPermission];
-        return;
+        [self emitProgress];
+        return token;
     }
 
-    // 3) 历史权限没记录：当作变化，全量
+    // 4) 历史权限没记录：当作变化，全量
     if (!hasStored) {
         [self as_storeAuthState:current];
         [self dropCacheFile];
-        [self startFullScanWithProgress:self.progressBlock completion:self.completionBlock];
-        return;
+        [self startFullScanWithProgress:nil completion:self.completionBlock];
+        return token;
     }
 
-    // 4) 权限变化：无视缓存，全量
+    // 5) 权限变化：无视缓存，全量
     if (last != current) {
         [self as_storeAuthState:current];
         [self dropCacheFile];
-        [self startFullScanWithProgress:self.progressBlock completion:self.completionBlock];
-        return;
+        [self startFullScanWithProgress:nil completion:self.completionBlock];
+        return token;
     }
 
-    // 5) ✅ 权限没变：先用缓存（必须 finished），然后 schedule 增量（不要直接 check）
+    // 6) ✅ 权限没变：先用缓存（必须 finished），然后 schedule 增量
     [self as_storeAuthState:current];
 
     if ([self loadCacheIfExists]) {
@@ -792,22 +945,22 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
             __strong typeof(weakSelf) self = weakSelf;
             if (!self) return;
 
-            // ✅ 缓存已应用后再发一次 UI（避免 snapshotState=0）
-            [self emitProgress];
+            [self emitProgress]; // ✅ 避免 snapshotState=0
 
-            // ✅ 刷新 fetchResult + purge（可选）+ 增量检查统一走 schedule
             dispatch_async(self.workQ, ^{
                 [self refreshAllAssetsFetchResult];
                 [self purgeDeletedAssetsAndRecalculate];
                 [self scheduleIncrementalCheck];
             });
         }];
-        return;
+        return token;
     }
 
-    // 6) 没缓存：全量
-    [self startFullScanWithProgress:self.progressBlock completion:self.completionBlock];
+    // 7) 没缓存：全量
+    [self startFullScanWithProgress:nil completion:self.completionBlock];
+    return token;
 }
+
 
 /// 无权限时，让首页有一个“空态”
 - (void)resetPublicStateForNoPermission {
@@ -866,21 +1019,24 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     }
 }
 
-- (void)subscribeProgress:(ASScanProgressBlock)progress {
-    self.progressBlock = progress;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (self.progressBlock) self.progressBlock(self.snapshot);
-    });
+- (NSUUID *)subscribeProgress:(ASScanProgressBlock)progress {
+    return [self addProgressObserver:progress];
 }
 
 - (void)startFullScanWithProgress:(ASScanProgressBlock)progress
                        completion:(ASScanCompletionBlock)completion
 {
     self.fullScanRunning = YES;
-
-    if (progress) self.progressBlock = progress;
-    self.completionBlock = completion;
     self.cancelled = NO;
+
+    // ✅ progress：当成“临时 observer”，避免覆盖别的页面的 observer
+    __block NSUUID *tempToken = nil;
+    if (progress) {
+        tempToken = [self addProgressObserver:progress];
+    }
+
+    // ✅ completion：局部 copy，避免被覆盖/改写
+    ASScanCompletionBlock completionCopy = [completion copy];
 
     self.blurryPhotosM = [NSMutableArray array];
     self.otherPhotosM  = [NSMutableArray array];
@@ -893,7 +1049,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
     dispatch_async(self.workQ, ^{
         @autoreleasepool {
             NSError *error = nil;
-            
+
             self.blurryImagesSeen = 0;
             self.blurryBytesRunning = 0;
             [self.blurryPhotosM removeAllObjects];
@@ -957,7 +1113,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                         [self emitProgressMaybe];
                         continue;
                     }
-                    
+
                     // ✅ Other：先把普通照片当作候选，扫描中就能实时看到列表/数量/大小
                     if (asset.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(asset)) {
                         [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateScanning];
@@ -970,7 +1126,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                         float score = [self blurScoreForAsset:asset];
                         if (score >= 0.f) {
                             model.blurScore = score;
-                            [self updateBlurryTopKRealtime:model asset:asset]; // 实时 TopK
+                            [self updateBlurryTopKRealtime:model asset:asset];
                             [self emitProgressMaybe];
                         }
                     }
@@ -1055,6 +1211,8 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                 }];
 
                 [self refreshAllAssetsFetchResult];
+                NSArray *ids = [self as_currentAllAssetIDsFromFetchResult:self.allAssetsFetchResult];
+                [self as_saveBaselineAllAssetIDs:ids];
 
                 if (self.pendingIncremental) {
                     self.pendingIncremental = NO;
@@ -1062,11 +1220,13 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
                 }
             }
 
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (self.completionBlock) self.completionBlock(self.snapshot, error);
-            });
-            
+            // ✅ 先把 running 置回 NO，再回主线程回调（避免 completion 里立刻触发新 scan 还被 busy 拦住）
             self.fullScanRunning = NO;
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completionCopy) completionCopy(self.snapshot, error);
+                if (tempToken) [self removeProgressObserver:tempToken];
+            });
 
             if (self.pendingIncremental) {
                 self.pendingIncremental = NO;
@@ -1075,6 +1235,7 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
         }
     });
 }
+
 
 - (void)otherCandidateAddIfNeeded:(ASAssetModel *)model asset:(PHAsset *)asset {
     if (asset.mediaType != PHAssetMediaTypeImage) return;
@@ -1895,7 +2056,7 @@ static const NSUInteger kASLocalIdChunk = 3500;
 - (void)publishSnapshotStateOnMain:(ASScanState)state {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.snapshot.state = state;
-        if (self.progressBlock) self.progressBlock(self.snapshot);
+        [self notifyProgressObserversOnMain:self.snapshot];
     });
 }
 
@@ -2014,6 +2175,10 @@ static const NSUInteger kASLocalIdChunk = 3500;
     self.cache.anchorDate = [self as_safeAnchorDate:newAnchor];
 
     [self saveCache];
+    [self refreshAllAssetsFetchResult];
+    NSArray *ids = [self as_currentAllAssetIDsFromFetchResult:self.allAssetsFetchResult];
+    [self as_saveBaselineAllAssetIDs:ids];
+
     [self setAllModulesState:ASModuleScanStateFinished];
     ASIncLog(@"rebuild done | dup=%lu sim=%lu shot=%lu rec=%lu big=%lu blurry=%lu other=%lu newAnchor=%@",
              (unsigned long)self.dupGroupsM.count,
@@ -2295,67 +2460,7 @@ static const NSUInteger kASLocalIdChunk = 3500;
 
     // 4) delta=0 & deleted=0：决定是否跑 fallback diff
     if (deltaFR.count == 0 && deleted.count == 0) {
-
-        // ✅ 快速跳过：数量一致时大概率无变化（避免启动就全库 diff 卡顿）
-        NSUInteger cachedCount = cachedIds.count;
-        NSUInteger currentCount = allFR.count;
-
-        // 为了正确性：每 24 小时允许跑一次 fallback diff
-        static NSString * const kASLastFallbackDiffKey = @"as_inc_last_fallback_diff_v1";
-        NSDate *lastFallback = [[NSUserDefaults standardUserDefaults] objectForKey:kASLastFallbackDiffKey];
-        NSTimeInterval since = lastFallback ? [[NSDate date] timeIntervalSinceDate:lastFallback] : DBL_MAX;
-        BOOL allowFallbackToday = (since > 24.0 * 3600.0);
-
-        if (cachedCount == currentCount && !allowFallbackToday) {
-            ASIncLog(@"fast-skip fallback diff | cached=%lu current=%lu (lastFallback<24h)",
-                     (unsigned long)cachedCount, (unsigned long)currentCount);
-
-            dispatch_async(dispatch_get_main_queue(), ^{
-                self.snapshot.state = ASScanStateFinished;
-                if (self.progressBlock) self.progressBlock(self.snapshot);
-            });
-            return;
-        }
-
-        // 5) fallback diff（兜底）
-        if (allowFallbackToday) {
-            [[NSUserDefaults standardUserDefaults] setObject:[NSDate date] forKey:kASLastFallbackDiffKey];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-        }
-
-        NSMutableSet<NSString *> *remainingCached = [cachedIds mutableCopy];
-        NSMutableArray<NSString *> *insertedIds = [NSMutableArray array];
-
-        for (PHAsset *a in allFR) {
-            @autoreleasepool {
-                NSString *lid = a.localIdentifier ?: @"";
-                if (!lid.length) continue;
-
-                if ([remainingCached containsObject:lid]) {
-                    [remainingCached removeObject:lid];
-                } else {
-                    [insertedIds addObject:lid];
-                }
-            }
-        }
-
-        NSArray<NSString *> *removedIds2 = remainingCached.allObjects ?: @[];
-        NSArray<PHAsset *> *insertedAssets2 = [self as_fetchAssetsByLocalIdsChunked:insertedIds];
-
-        ASIncLog(@"fallback diff result | inserted=%lu removed=%lu",
-                 (unsigned long)insertedAssets2.count,
-                 (unsigned long)removedIds2.count);
-
-        if (insertedAssets2.count == 0 && removedIds2.count == 0) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                self.snapshot.state = ASScanStateFinished;
-                if (self.progressBlock) self.progressBlock(self.snapshot);
-            });
-            return;
-        }
-
-        [self incrementalRebuildWithInserted:insertedAssets2 removedIDs:removedIds2];
-        [self refreshAllAssetsFetchResult];
+        [self checkIncrementalFromDiskAnchorForceFallback];
         return;
     }
 
@@ -3178,17 +3283,16 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
     //关键：在同一次 main dispatch 中，先更新公开容器，再回调 UI
     dispatch_async(dispatch_get_main_queue(), ^{
         self.duplicateGroups = dupCopy;
-
-        // UI similar = sim + dup
         self.similarGroups = [self mergedSimilarGroupsForUIFromDup:dupCopy sim:simCopy];
-
         self.screenshots = shotCopy;
         self.screenRecordings = recCopy;
         self.bigVideos = bigCopy;
         self.blurryPhotos = blurryCopy;
         self.otherPhotos  = otherCopy;
-        if (self.progressBlock) self.progressBlock(snap);
+
+        [self notifyProgressObserversOnMain:snap]; // ✅ 广播
     });
+
 }
 
 

@@ -258,13 +258,13 @@ static inline NSString *ASDurationText(NSTimeInterval seconds) {
 
 - (uint64_t)cleanableBytes {
     uint64_t s = 0;
-    for (NSInteger i=0; i<(NSInteger)self.models.count; i++) s += self.models[i].fileSizeBytes;
+    for (NSInteger i=1; i<(NSInteger)self.models.count; i++) s += self.models[i].fileSizeBytes;
     return s;
 }
 
 - (BOOL)isAllCleanablesSelected {
     if (self.models.count == 0) return NO;
-    for (NSInteger i=0; i<(NSInteger)self.models.count; i++) {
+    for (NSInteger i=1; i<(NSInteger)self.models.count; i++) {
         NSString *lid = self.models[i].localId ?: @"";
         if (lid.length && ![self.selectedIds containsObject:lid]) return NO;
     }
@@ -439,6 +439,7 @@ static inline void ASNoAnim(dispatch_block_t block) {
 @property (nonatomic, strong) UILabel *badge;     // 右下角：类型
 @property (nonatomic, strong) UILabel *sizeLabel; // 右下角：大小（在 badge 下）
 @property (nonatomic, strong) UIImageView *selectIcon; // 右上角 24x24
+@property (nonatomic, strong) UIButton *selectBtn;
 - (void)applySelected:(BOOL)sel;
 @end
 
@@ -454,18 +455,27 @@ static inline void ASNoAnim(dispatch_block_t block) {
         _img.clipsToBounds = YES;
 
         _badge = [UILabel new];
-        _badge.hidden = YES; // ✅ 隐藏类型
+        _badge.hidden = YES;
 
         _sizeLabel = [UILabel new];
-        _sizeLabel.hidden = YES; // ✅ 隐藏大小
+        _sizeLabel.hidden = YES;
 
         _selectIcon = [UIImageView new];
         _selectIcon.contentMode = UIViewContentModeScaleAspectFit;
+
+        // ✅ 关键：创建按钮（之前缺这个）
+        _selectBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        _selectBtn.backgroundColor = UIColor.clearColor;
+        _selectBtn.adjustsImageWhenHighlighted = NO;
+        _selectBtn.showsTouchWhenHighlighted = NO;
+        _selectBtn.exclusiveTouch = YES;
+        _selectBtn.userInteractionEnabled = YES;
 
         [self.contentView addSubview:_img];
         [self.contentView addSubview:_badge];
         [self.contentView addSubview:_sizeLabel];
         [self.contentView addSubview:_selectIcon];
+        [self.contentView addSubview:_selectBtn]; // ✅ 现在不是 nil 了
     }
     return self;
 }
@@ -477,6 +487,7 @@ static inline void ASNoAnim(dispatch_block_t block) {
     CGFloat pad = 10;
     CGFloat s = 24;
     self.selectIcon.frame = CGRectMake(self.contentView.bounds.size.width - pad - s, pad, s, s);
+    self.selectBtn.frame = CGRectInset(self.selectIcon.frame, -8, -8);
 }
 
 - (void)prepareForReuse {
@@ -879,7 +890,7 @@ static inline void ASNoAnim(dispatch_block_t block) {
 
 - (uint64_t)cleanableBytes {
     uint64_t s = 0;
-    for (NSInteger i = 0; i < (NSInteger)self.models.count; i++) {
+    for (NSInteger i = 1; i < (NSInteger)self.models.count; i++) {
         s += self.models[i].fileSizeBytes;
     }
     return s;
@@ -887,7 +898,7 @@ static inline void ASNoAnim(dispatch_block_t block) {
 
 - (BOOL)isAllCleanablesSelected {
     if (self.models.count == 0) return NO;
-    for (NSInteger i=0; i<(NSInteger)self.models.count; i++) {
+    for (NSInteger i=1; i<(NSInteger)self.models.count; i++) {
         NSString *lid = self.models[i].localId ?: @"";
         if (lid.length && ![self.selectedIds containsObject:lid]) return NO;
     }
@@ -2077,6 +2088,24 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     }];
 }
 
+
+- (void)onTapGridSelectBtn:(UIButton *)btn {
+    CGPoint p = [btn convertPoint:CGPointMake(CGRectGetMidX(btn.bounds), CGRectGetMidY(btn.bounds))
+                           toView:self.cv];
+    NSIndexPath *ip = [self.cv indexPathForItemAtPoint:p];
+    if (!ip) return;
+
+    ASAssetModel *m = self.sections[ip.section].assets[ip.item];
+    if (!m.localId.length) return;
+
+    if ([self.selectedIds containsObject:m.localId]) [self.selectedIds removeObject:m.localId];
+    else [self.selectedIds addObject:m.localId];
+
+    [self updateOneCell:ip];
+    [self recomputeBytesAndRefreshTopOnly];
+    [self syncNavSelectAllState];
+}
+
 #pragma mark - Collection DS
 
 - (NSInteger)numberOfSectionsInCollectionView:(UICollectionView *)collectionView {
@@ -2131,6 +2160,8 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     ASAssetGridCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ASAssetGridCell"
                                                                       forIndexPath:indexPath];
     ASAssetModel *m = self.sections[indexPath.section].assets[indexPath.item];
+    [cell.selectBtn removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
+    [cell.selectBtn addTarget:self action:@selector(onTapGridSelectBtn:) forControlEvents:UIControlEventTouchUpInside];
 
 //    cell.badge.text = ASTypeText(m.mediaType);
 //    cell.sizeLabel.text = ASHumanSize(m.fileSizeBytes);
@@ -2146,6 +2177,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     PHAsset *a = (m.localId.length ? self.assetById[m.localId] : nil);
     if (!a) return cell;
 
+    
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.networkAccessAllowed = YES;
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
@@ -2317,16 +2349,45 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     if ([self isGroupMode]) return;
     [collectionView deselectItemAtIndexPath:indexPath animated:NO];
+    [self goPreviewSingle:indexPath];
+}
 
-    ASAssetModel *m = self.sections[indexPath.section].assets[indexPath.item];
+- (void)goPreviewSingle:(NSIndexPath *)ip {
+    if (ip.section < 0 || ip.section >= (NSInteger)self.sections.count) return;
+    ASAssetSection *sec = self.sections[ip.section];
+    if (ip.item < 0 || ip.item >= (NSInteger)sec.assets.count) return;
+
+    ASAssetModel *m = sec.assets[ip.item];
     if (!m.localId.length) return;
 
-    if ([self.selectedIds containsObject:m.localId]) [self.selectedIds removeObject:m.localId];
-    else [self.selectedIds addObject:m.localId];
+    PHAsset *a = self.assetById[m.localId];
+    if (!a) return;
 
-    [self updateOneCell:indexPath];
-    [self recomputeBytesAndRefreshTopOnly];
+    NSIndexSet *preSel = ([self.selectedIds containsObject:m.localId]
+                          ? [NSIndexSet indexSetWithIndex:0]
+                          : [NSIndexSet indexSet]);
+
+    ASMediaPreviewViewController *p =
+    [[ASMediaPreviewViewController alloc] initWithAssets:@[a]
+                                           initialIndex:0
+                                        selectedIndexes:preSel];
+
+    p.bestIndex = 0;
+    p.showsBestBadge = NO; // ✅ 单个预览不显示 best
+
+    __weak typeof(self) weakSelf = self;
+    p.onBack = ^(NSArray<PHAsset *> *selectedAssets, NSIndexSet *selectedIndexes) {
+        if ([selectedIndexes containsIndex:0]) [weakSelf.selectedIds addObject:m.localId];
+        else [weakSelf.selectedIds removeObject:m.localId];
+
+        [weakSelf updateOneCell:ip];
+        [weakSelf recomputeBytesAndRefreshUI];
+        [weakSelf syncNavSelectAllState];
+    };
+
+    [self.navigationController pushViewController:p animated:YES];
 }
+
 
 - (void)updateOneCell:(NSIndexPath *)ip {
     if ([self isGroupMode]) {

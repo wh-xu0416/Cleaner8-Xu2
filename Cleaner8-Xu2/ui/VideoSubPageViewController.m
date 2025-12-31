@@ -319,6 +319,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 @property (nonatomic, strong) NSTimer *scanUITimer;
 @property (nonatomic) BOOL pendingScanUIUpdate;
 @property (nonatomic) CFTimeInterval lastScanUIFire;
+@property (nonatomic, strong) NSUUID *scanProgressToken;
 
 @end
 
@@ -332,6 +333,10 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 }
 
 - (void)dealloc {
+    if (self.scanProgressToken) {
+         [[ASPhotoScanManager shared] removeProgressObserver:self.scanProgressToken];
+         self.scanProgressToken = nil;
+     }
     [self.scanUITimer invalidate];
     self.scanUITimer = nil;
 }
@@ -358,7 +363,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     [self rebuildModulesAndReloadIsFinal:(self.scanMgr.snapshot.state != ASScanStateScanning)];
 
     __weak typeof(self) weakSelf = self;
-    [self.scanMgr subscribeProgress:^(ASScanSnapshot *snapshot) {
+    self.scanProgressToken = [[ASPhotoScanManager shared] addProgressObserver:^(ASScanSnapshot *snapshot) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!weakSelf) return;
 

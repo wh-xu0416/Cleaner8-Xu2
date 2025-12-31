@@ -10,6 +10,7 @@ typedef struct {
 
 extern const ASComparePolicy kPolicySimilar;
 extern const ASComparePolicy kPolicyDuplicate;
+extern NSNotificationName const ASPhotoScanManagerVideosDidChangeNotification;
 
 typedef NS_ENUM(NSUInteger, ASScanState) {
     ASScanStateNotScanned = 0,
@@ -105,6 +106,7 @@ typedef NS_ENUM(NSInteger, ASModuleScanState) {
 
 typedef void(^ASScanProgressBlock)(ASScanSnapshot *snapshot);
 typedef void(^ASScanCompletionBlock)(ASScanSnapshot *snapshot, NSError *_Nullable error);
+typedef void (^ASScanProgressBlock)(ASScanSnapshot * _Nullable snapshot);
 
 @interface ASPhotoScanManager : NSObject <PHPhotoLibraryChangeObserver>
 
@@ -146,7 +148,11 @@ typedef void(^ASScanCompletionBlock)(ASScanSnapshot *snapshot, NSError *_Nullabl
 - (NSArray<ASAssetModel *> *)allScreenshotAssets;
 - (NSArray<ASAssetModel *> *)allScreenRecordingAssets;
 - (NSArray<ASAssetModel *> *)allBigVideoAssets;
+/// 添加观察者，返回 token（block 为空会返回 nil）
+- (nullable NSUUID *)addProgressObserver:(ASScanProgressBlock)block;
 
+/// 移除观察者（传 nil 也安全）
+- (void)removeProgressObserver:(nullable NSUUID *)token;
 @end
 
 NS_ASSUME_NONNULL_END
