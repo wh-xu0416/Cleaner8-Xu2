@@ -547,7 +547,8 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 }
 
 - (BOOL)shouldInvalidateLayoutForBoundsChange:(CGRect)newBounds {
-    return YES;
+    if (!self.collectionView) return NO;
+    return fabs(newBounds.size.width - self.collectionView.bounds.size.width) > 0.5;
 }
 
 @end
@@ -787,7 +788,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     self.representedLocalIds = @[];
     self.thumbKey = nil;
 
-    self.appliedCoverKey = nil;      // ✅ 关键：复用时清掉 cover key
+    self.appliedCoverKey = nil;    
 
     self.reqId1 = PHInvalidImageRequestID;
     self.reqId2 = PHInvalidImageRequestID;
@@ -882,6 +883,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 // 去重集合
 @property (nonatomic, strong) NSSet<NSString *> *allCleanableIds;
 @property (nonatomic) uint64_t allCleanableBytes;
+
+@property (nonatomic, strong) dispatch_queue_t homeBuildQueue;
+@property (nonatomic) CGFloat lastHeaderHeight;
 @end
 
 @implementation HomeViewController
@@ -967,6 +971,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 - (void)viewDidLoad {
     [super viewDidLoad];
     [self setupUI];
+    self.homeBuildQueue = dispatch_queue_create("com.xiaoxu2.home.build", DISPATCH_QUEUE_SERIAL);
 
     self.imgMgr = [[PHCachingImageManager alloc] init];
     self.scanMgr = [ASPhotoScanManager shared];
@@ -992,13 +997,52 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
                                                object:nil];
 
     // 首屏先渲染一波（即使没权限也能显示缓存摘要 + 占位）
-    [self rebuildModulesAndReload];
-
+    [self rebuildModulesAndReloadAsyncFinal:NO];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self rebuildModulesAndReloadAsyncFinal:YES];
+    });
     // gate 按钮补上点击
     [self.permissionGateButton addTarget:self
                                   action:@selector(onTapPermissionGate)
                         forControlEvents:UIControlEventTouchUpInside];
 }
+
+- (void)rebuildModulesAndReloadAsyncFinal:(BOOL)isFinal {
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(self.homeBuildQueue, ^{
+        @autoreleasepool {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+
+            // 这些都可以后台算
+            [self computeDiskSpace];
+
+            // 扫描中不要做重建（你原逻辑保留）
+            if (self.scanMgr.snapshot.state == ASScanStateScanning) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self scheduleScanUIUpdateCoalesced];
+                });
+                return;
+            }
+
+            NSArray<ASHomeModuleVM *> *old = self.modules ?: @[];
+            NSArray<ASHomeModuleVM *> *newMods = [self buildModulesFromManagerAndComputeClutterIsFinal:isFinal];
+
+            // 如果你希望“封面继承，避免抖动”，可以启用你写的 preserve
+            // [self preserveCoversFromOld:old toNew:newMods];
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) self2 = weakSelf;
+                if (!self2) return;
+
+                self2.modules = newMods;
+                [self2.cv reloadData];
+                [self2 updateHeaderDuringScanning];
+            });
+        }
+    });
+}
+
 
 - (void)onTapPermissionGate {
     PHAuthorizationStatus st = [self currentPHAuthStatus];
@@ -1134,7 +1178,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     [self.scanMgr startFullScanWithProgress:nil
                                  completion:^(__unused ASScanSnapshot *snapshot, __unused NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            [weakSelf rebuildModulesAndReload];
+            [weakSelf rebuildModulesAndReloadAsyncFinal:YES];
         });
     }];
 }
@@ -1214,10 +1258,13 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 
     ASWaterfallLayout *wf = (ASWaterfallLayout *)self.cv.collectionViewLayout;
-    if ([wf isKindOfClass:ASWaterfallLayout.class]) {
-        wf.headerHeight = [self collectionView:self.cv layout:wf referenceSizeForHeaderInSection:0].height;
-        [wf invalidateLayout];
-    }
+      if ([wf isKindOfClass:ASWaterfallLayout.class]) {
+          CGFloat newH = [self collectionView:self.cv layout:wf referenceSizeForHeaderInSection:0].height;
+          if (fabs(wf.headerHeight - newH) > 0.5) {
+              wf.headerHeight = newH;
+              [wf invalidateLayout];
+          }
+      }
     
     // Permission gate layout (占位)
     CGFloat gateW = self.view.bounds.size.width - 32;
@@ -1469,11 +1516,11 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 
     cell.appliedCoverKey = coverKey;
-    cell.thumbKey = coverKey;                 // ✅ 回调校验统一用 coverKey
+    cell.thumbKey = coverKey;               
     cell.representedLocalIds = ids;
 
     [cell setNeedsLayout];
-    [cell layoutIfNeeded];
+//    [cell layoutIfNeeded];
 
     if (vm.isVideoCover) {
         [self loadVideoPreviewForVM:vm intoCell:cell atIndexPath:indexPath];
@@ -2126,7 +2173,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         [cell stopVideoIfNeeded];
     }
 
-    [self requestCoverIfNeededForCell:cell vm:vm indexPath:indexPath];
+//    [self requestCoverIfNeededForCell:cell vm:vm indexPath:indexPath];
 
     return cell;
 }
@@ -2250,6 +2297,27 @@ referenceSizeForHeaderInSection:(NSInteger)section {
             [nav pushViewController:vc animated:YES];
         } break;
     }
+}
+
+- (void)collectionView:(UICollectionView *)collectionView
+      willDisplayCell:(UICollectionViewCell *)cell
+    forItemAtIndexPath:(NSIndexPath *)indexPath {
+
+    if (![cell isKindOfClass:HomeModuleCell.class]) return;
+    if (![self hasPhotoAccess]) return;
+    if (indexPath.item >= self.modules.count) return;
+
+    HomeModuleCell *c = (HomeModuleCell *)cell;
+    ASHomeModuleVM *vm = self.modules[indexPath.item];
+    if (vm.thumbLocalIds.count == 0) return;
+
+    // ✅ 延迟到下一帧，让首屏先完成 layout / display
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // cell 可能已经复用/消失，做一次校验
+        HomeModuleCell *now = (HomeModuleCell *)[collectionView cellForItemAtIndexPath:indexPath];
+        if (now != c) return;
+        [self requestCoverIfNeededForCell:now vm:vm indexPath:indexPath];
+    });
 }
 
 - (void)collectionView:(UICollectionView *)collectionView

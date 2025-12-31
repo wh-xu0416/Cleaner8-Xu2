@@ -17,7 +17,6 @@ UIGestureRecognizerDelegate
 
 - (void)presentFlowController:(UIViewController *)vc {
 
-    // 隐藏浮动 Tab
     self.floatingTab.hidden = YES;
 
     UINavigationController *nav =
@@ -31,7 +30,6 @@ UIGestureRecognizerDelegate
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 设置底部五个页面
     self.viewControllers = @[
         [self navWithVC:[HomeViewController new]   title:@"Cleaner" image:@""],
         [self navWithVC:[VideoViewController new]    title:@"Video" image:@""],
@@ -42,7 +40,6 @@ UIGestureRecognizerDelegate
 
     self.tabBar.hidden = YES;
 
-    // 创建浮动 tab
     self.floatingTab = [[ASFloatingTabBar alloc] initWithItems:@[
         [ASFloatingTabBarItem itemWithTitle:@"Cleaner" normal:@"ic_cleaner_n" selected:@"ic_cleaner_s"],
         [ASFloatingTabBarItem itemWithTitle:@"Video" normal:@"ic_video_n"  selected:@"ic_video_s"],
@@ -63,20 +60,17 @@ UIGestureRecognizerDelegate
     UINavigationController *rootNav =
            self.navigationController;
 
-    // 恢复系统侧滑返回
     rootNav.interactivePopGestureRecognizer.enabled = YES;
     rootNav.interactivePopGestureRecognizer.delegate = self;
     
-    // 只在首页显示浮动 tab
     if (self.selectedIndex == 0) {
-        [self.view addSubview:self.floatingTab];  // 首页显示浮动 tab
+        [self.view addSubview:self.floatingTab];
     }
 }
 
 #pragma mark - UIGestureRecognizerDelegate
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
-    // 栈里只有一个 VC（MainTabBarController）时，禁止返回
     return self.navigationController.viewControllers.count > 1;
 }
 
@@ -101,20 +95,12 @@ UIGestureRecognizerDelegate
                                         w - side * 2,
                                         h);
 
-    // 保证浮动 tab 在最上层
     [self.view bringSubviewToFront:self.floatingTab];
 }
 
 - (void)setSelectedIndex:(NSUInteger)selectedIndex {
     [super setSelectedIndex:selectedIndex];
-
-    // 确保浮动 tab 只在首页显示
-    if (selectedIndex == 0) {
-        [self.view addSubview:self.floatingTab];  // 首页显示浮动 tab
-    } else {
-        // 在其他页面不隐藏，只是被系统的 tabBar 覆盖
-        // 浮动 tab 不会被移除或隐藏
-    }
+    [self.view addSubview:self.floatingTab];
 }
 
 - (UINavigationController *)navWithVC:(UIViewController *)vc title:(NSString *)title image:(NSString *)imageName {
