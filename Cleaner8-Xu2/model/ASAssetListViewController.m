@@ -2,8 +2,18 @@
 #import <Photos/Photos.h>
 #import "ASPhotoScanManager.h"
 #import "ASCustomNavBar.h"
+#import "ASMediaPreviewViewController.h"
 
 #pragma mark - UI helpers
+typedef NS_ENUM(NSInteger, ASAssetSortMode) {
+    ASAssetSortModeNewest = 0,   // 新 -> 旧（默认）
+    ASAssetSortModeOldest,
+    ASAssetSortModeLargest,
+    ASAssetSortModeSmallest
+};
+static inline UIColor *ASBgColor(void) {
+    return [UIColor colorWithRed:0xF6/255.0 green:0xF6/255.0 blue:0xF6/255.0 alpha:1.0];
+}
 
 static inline NSString *ASHumanSize(uint64_t bytes) {
     double b = (double)bytes;
@@ -14,10 +24,402 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
 }
 
 static inline NSString *ASTypeText(PHAssetMediaType t) {
-    return (t == PHAssetMediaTypeVideo) ? @"视频" : @"图片";
+    return (t == PHAssetMediaTypeVideo) ? @"video" : @"photo";
 }
 
+static inline NSString *ASDurationText(NSTimeInterval seconds) {
+    if (seconds < 0) seconds = 0;
+    NSInteger s = (NSInteger)llround(seconds);
+    NSInteger h = s / 3600;
+    NSInteger m = (s % 3600) / 60;
+    NSInteger ss = s % 60;
+    if (h > 0) return [NSString stringWithFormat:@"%ld:%02ld:%02ld", (long)h, (long)m, (long)ss];
+    return [NSString stringWithFormat:@"%ld:%02ld", (long)m, (long)ss];
+}
+
+@interface ASVideoGroupThumbCell : UICollectionViewCell
+@property (nonatomic, copy) NSString *representedLocalId;
+
+@property (nonatomic, strong) UIImageView *coverView;
+@property (nonatomic, strong) UILabel *infoLabel;       // size + duration
+@property (nonatomic, strong) UIImageView *selectIcon;  // 24x24
+@property (nonatomic, strong) UIButton *selectBtn;
+@property (nonatomic, strong) UIButton *previewBtn;
+
+@property (nonatomic, strong) UIImageView *bestBadge;   // 60x24 ic_best
+
+- (void)applySelected:(BOOL)sel;
+- (void)applyBest:(BOOL)isBest;
+@end
+
+@implementation ASVideoGroupThumbCell
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self=[super initWithFrame:frame]) {
+        _coverView = [UIImageView new];
+        _coverView.contentMode = UIViewContentModeScaleAspectFill;
+        _coverView.clipsToBounds = YES;
+        _coverView.layer.cornerRadius = 8;
+
+        _infoLabel = [UILabel new];
+        _infoLabel.numberOfLines = 2;
+        _infoLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+        _infoLabel.textColor = UIColor.whiteColor;
+
+        _selectIcon = [UIImageView new];
+        _selectIcon.contentMode = UIViewContentModeScaleAspectFit;
+
+        _selectBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        _selectBtn.backgroundColor = UIColor.clearColor;
+
+        _previewBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        _previewBtn.backgroundColor = UIColor.clearColor;
+
+        _bestBadge = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ic_best"]];
+        _bestBadge.contentMode = UIViewContentModeScaleAspectFit;
+        _bestBadge.hidden = YES;
+
+        [self.contentView addSubview:_coverView];
+        [self.contentView addSubview:_previewBtn];
+        [self.contentView addSubview:_infoLabel];
+        [self.contentView addSubview:_bestBadge];
+        [self.contentView addSubview:_selectIcon];
+        [self.contentView addSubview:_selectBtn];
+    }
+    return self;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    self.coverView.frame = self.contentView.bounds;
+    self.previewBtn.frame = self.contentView.bounds;
+    CGRect b = self.contentView.bounds;
+    CGFloat pad = 10;
+
+    CGFloat infoW = self.contentView.bounds.size.width - pad*2 - 24 - 6;
+    self.infoLabel.frame = CGRectMake(pad, pad, MAX(40, infoW), 34);
+
+    CGFloat s = 24;
+    self.selectIcon.frame = CGRectMake(self.contentView.bounds.size.width - pad - s, pad, s, s);
+    self.selectBtn.frame = CGRectInset(self.selectIcon.frame, -8, -8);
+
+    CGFloat bw = 60, bh = 24;
+    self.bestBadge.frame = CGRectMake(pad,CGRectGetHeight(b) - pad - bh,bw, bh);
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.representedLocalId = @"";
+    self.coverView.image = nil;
+    self.infoLabel.text = @"";
+    self.bestBadge.hidden = YES;
+    [self applySelected:NO];
+}
+
+- (void)applyBest:(BOOL)isBest { self.bestBadge.hidden = !isBest; }
+
+- (void)applySelected:(BOOL)sel {
+    self.selectIcon.image = [UIImage imageNamed:(sel ? @"ic_select_s" : @"ic_select_n")];
+}
+@end
+
+@interface ASVideoGroupCardCell : UICollectionViewCell <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
+@property (nonatomic) NSInteger sectionIndex;
+
+@property (nonatomic, strong) UIView *card;
+@property (nonatomic, strong) UILabel *countLabel;   // “4 Videos”
+@property (nonatomic, strong) UILabel *sizeLabel;    // “654.89MB”
+@property (nonatomic, strong) UIButton *selectAllBtn;
+
+@property (nonatomic, strong) UICollectionView *thumbCV;
+
+@property (nonatomic, strong) NSArray<ASAssetModel *> *models;
+@property (nonatomic, strong) NSDictionary<NSString*, PHAsset*> *assetById;
+@property (nonatomic, strong) PHCachingImageManager *imgMgr;
+@property (nonatomic, strong) NSSet<NSString*> *selectedIds;
+@property (nonatomic, copy) NSString *unitText;
+
+@property (nonatomic, copy) void (^onTapSelectAll)(NSInteger sectionIndex);
+@property (nonatomic, copy) void (^onToggleIndex)(NSInteger sectionIndex, NSInteger modelIndex);
+@property (nonatomic, copy) void (^onPreviewIndex)(NSInteger sectionIndex, NSInteger modelIndex);
+
+- (void)bindModels:(NSArray<ASAssetModel *> *)models
+      sectionIndex:(NSInteger)sectionIndex
+          unitText:(NSString *)unitText
+        selectedIds:(NSSet<NSString*> *)selectedIds
+         assetById:(NSDictionary<NSString*, PHAsset*> *)assetById
+            imgMgr:(PHCachingImageManager *)imgMgr;
+
+- (void)refreshSelectionUI;
+@end
+
+@implementation ASVideoGroupCardCell
+
+- (CGFloat)as_textW:(NSString *)t font:(UIFont *)f h:(CGFloat)h {
+    if (t.length == 0) return 0;
+    return ceil([t boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, h)
+                               options:NSStringDrawingUsesLineFragmentOrigin|NSStringDrawingUsesFontLeading
+                            attributes:@{NSFontAttributeName:f}
+                               context:nil].size.width);
+}
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self=[super initWithFrame:frame]) {
+
+        _card = [UIView new];
+        _card.backgroundColor = UIColor.whiteColor;
+        _card.layer.cornerRadius = 20;
+        _card.clipsToBounds = YES;
+
+        _countLabel = [UILabel new];
+        _countLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
+        _countLabel.textColor = UIColor.blackColor;
+
+        _sizeLabel = [UILabel new];
+        _sizeLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        _sizeLabel.textColor = [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
+
+        _selectAllBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        _selectAllBtn.adjustsImageWhenHighlighted = NO;
+        _selectAllBtn.showsTouchWhenHighlighted = NO;
+        _selectAllBtn.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+        _selectAllBtn.backgroundColor = UIColor.clearColor;
+        _selectAllBtn.layer.cornerRadius = 18;
+        _selectAllBtn.layer.borderWidth = 1;
+        _selectAllBtn.contentEdgeInsets = UIEdgeInsetsMake(8, 8, 8, 8);
+
+        [_selectAllBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+        [_selectAllBtn setTitleColor:UIColor.blackColor forState:UIControlStateHighlighted];
+        [_selectAllBtn addTarget:self action:@selector(onTapSelectAllBtn) forControlEvents:UIControlEventTouchUpInside];
+
+        UICollectionViewFlowLayout *l = [UICollectionViewFlowLayout new];
+        l.scrollDirection = UICollectionViewScrollDirectionHorizontal;
+        l.minimumLineSpacing = 10;
+        l.minimumInteritemSpacing = 10;
+
+        _thumbCV = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:l];
+        _thumbCV.backgroundColor = UIColor.clearColor;
+        _thumbCV.showsHorizontalScrollIndicator = NO;
+        _thumbCV.dataSource = self;
+        _thumbCV.delegate = self;
+        _thumbCV.allowsSelection = NO;
+        _thumbCV.contentInset = UIEdgeInsetsZero;
+        [_thumbCV registerClass:ASVideoGroupThumbCell.class forCellWithReuseIdentifier:@"ASVideoGroupThumbCell"];
+
+        [_card addSubview:_countLabel];
+        [_card addSubview:_sizeLabel];
+        [_card addSubview:_selectAllBtn];
+        [_card addSubview:_thumbCV];
+
+        [self.contentView addSubview:_card];
+        self.contentView.backgroundColor = UIColor.clearColor;
+    }
+    return self;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    self.card.frame = self.contentView.bounds;
+
+    CGFloat pad = 20;
+    CGFloat twoLineGap = 4;
+
+    CGFloat countH = ceil(self.countLabel.font.lineHeight); // ~24
+    CGFloat sizeH  = ceil(self.sizeLabel.font.lineHeight);  // ~14
+    CGFloat leftBlockH = countH + twoLineGap + sizeH;
+
+    CGFloat btnH = 36;
+    UIFont *bf = self.selectAllBtn.titleLabel.font ?: [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    UIEdgeInsets in = self.selectAllBtn.contentEdgeInsets;
+
+    CGFloat t1 = [self as_textW:@"Select All" font:bf h:btnH];
+    CGFloat t2 = [self as_textW:@"Deselect All" font:bf h:btnH];
+    CGFloat wText = MAX(t1, t2);
+
+    CGFloat btnW = ceil(in.left + wText + in.right);
+    btnW = MIN(btnW, self.card.bounds.size.width - pad*2);
+
+    CGFloat btnY = pad + floor((leftBlockH - btnH)/2.0);
+    self.selectAllBtn.frame = CGRectMake(self.card.bounds.size.width - pad - btnW, btnY, btnW, btnH);
+
+    CGFloat leftW = CGRectGetMinX(self.selectAllBtn.frame) - pad - 12;
+    self.countLabel.frame = CGRectMake(pad, pad, MAX(60, leftW), countH);
+    self.sizeLabel.frame  = CGRectMake(pad, CGRectGetMaxY(self.countLabel.frame) + twoLineGap, MAX(60, leftW), sizeH);
+
+    CGFloat listY = CGRectGetMaxY(self.sizeLabel.frame) + 10;
+
+    // 列表左边距 20（你说的）
+    self.thumbCV.frame = CGRectMake(pad,
+                                    listY,
+                                    self.card.bounds.size.width - pad, // 右侧贴满或你也可以减 pad
+                                    160);
+}
+
+- (uint64_t)cleanableBytes {
+    uint64_t s = 0;
+    for (NSInteger i=0; i<(NSInteger)self.models.count; i++) s += self.models[i].fileSizeBytes;
+    return s;
+}
+
+- (BOOL)isAllCleanablesSelected {
+    if (self.models.count <= 1) return NO;
+    for (NSInteger i=1; i<(NSInteger)self.models.count; i++) {
+        NSString *lid = self.models[i].localId ?: @"";
+        if (lid.length && ![self.selectedIds containsObject:lid]) return NO;
+    }
+    return YES;
+}
+
+- (void)bindModels:(NSArray<ASAssetModel *> *)models
+      sectionIndex:(NSInteger)sectionIndex
+          unitText:(NSString *)unitText
+        selectedIds:(NSSet<NSString*> *)selectedIds
+         assetById:(NSDictionary<NSString*, PHAsset*> *)assetById
+            imgMgr:(PHCachingImageManager *)imgMgr {
+
+    self.sectionIndex = sectionIndex;
+    self.models = models ?: @[];
+    self.unitText = unitText ?: @"Videos";
+    self.selectedIds = selectedIds ?: [NSSet set];
+    self.assetById = assetById ?: @{};
+    self.imgMgr = imgMgr;
+
+    self.countLabel.text = [NSString stringWithFormat:@"%lu %@", (unsigned long)self.models.count, self.unitText];
+    self.sizeLabel.text = ASHumanSize([self cleanableBytes]);
+
+    [UIView performWithoutAnimation:^{ [self.thumbCV reloadData]; }];
+    [self refreshSelectionUI];
+}
+
+- (void)refreshSelectionUI {
+    UIColor *blue = [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
+    UIColor *grayBorder = [UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0];
+
+    BOOL all = [self isAllCleanablesSelected];
+
+    [UIView performWithoutAnimation:^{
+        if (all) {
+            [self.selectAllBtn setTitle:@"Deselect All" forState:UIControlStateNormal];
+            [self.selectAllBtn setTitleColor:blue forState:UIControlStateNormal];
+            [self.selectAllBtn setTitleColor:blue forState:UIControlStateHighlighted];
+            self.selectAllBtn.layer.borderColor = blue.CGColor;
+        } else {
+            [self.selectAllBtn setTitle:@"Select All" forState:UIControlStateNormal];
+            [self.selectAllBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+            [self.selectAllBtn setTitleColor:UIColor.blackColor forState:UIControlStateHighlighted];
+            self.selectAllBtn.layer.borderColor = grayBorder.CGColor;
+        }
+    }];
+
+    // 刷 visible item 勾选+best
+    [UIView performWithoutAnimation:^{
+        for (ASVideoGroupThumbCell *c in self.thumbCV.visibleCells) {
+            NSIndexPath *ip = [self.thumbCV indexPathForCell:c];
+            if (!ip || ip.item >= (NSInteger)self.models.count) continue;
+            ASAssetModel *m = self.models[ip.item];
+            NSString *lid = m.localId ?: @"";
+            [c applyBest:(ip.item == 0)];
+            [c applySelected:(lid.length && [self.selectedIds containsObject:lid])];
+        }
+    }];
+}
+
+
+- (void)onTapSelectAllBtn {
+    if (self.onTapSelectAll) self.onTapSelectAll(self.sectionIndex);
+}
+
+#pragma mark - thumb cv
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
+    return self.models.count;
+}
+
+- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    ASVideoGroupThumbCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ASVideoGroupThumbCell" forIndexPath:indexPath];
+
+    ASAssetModel *m = self.models[indexPath.item];
+    NSString *lid = m.localId ?: @"";
+    cell.representedLocalId = lid;
+    cell.coverView.image = nil;
+
+    BOOL isBest = (indexPath.item == 0);
+    [cell applyBest:isBest];
+    [cell applySelected:(lid.length && [self.selectedIds containsObject:lid])];
+
+    PHAsset *a = (lid.length ? self.assetById[lid] : nil);
+    cell.infoLabel.text = [NSString stringWithFormat:@"%@\n%@", ASHumanSize(m.fileSizeBytes), (a ? ASDurationText(a.duration) : @"")];
+
+    cell.previewBtn.tag = indexPath.item;
+    [cell.previewBtn removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
+    [cell.previewBtn addTarget:self action:@selector(onTapPreviewBtn:) forControlEvents:UIControlEventTouchUpInside];
+
+    cell.selectBtn.tag = indexPath.item;
+    [cell.selectBtn removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
+    [cell.selectBtn addTarget:self action:@selector(onTapSelectBtn:) forControlEvents:UIControlEventTouchUpInside];
+
+    if (!a || !self.imgMgr) return cell;
+
+    PHImageRequestOptions *opt = [PHImageRequestOptions new];
+    opt.networkAccessAllowed = YES;
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
+    opt.resizeMode = PHImageRequestOptionsResizeModeFast;
+    opt.synchronous = NO;
+
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGSize target = CGSizeMake(120*scale, 160*scale);
+
+    __weak typeof(cell) weakCell = cell;
+    NSString *expect = lid;
+
+    [self.imgMgr requestImageForAsset:a
+                           targetSize:target
+                          contentMode:PHImageContentModeAspectFill
+                              options:opt
+                        resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+        if (!result) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            ASVideoGroupThumbCell *c = weakCell;
+            if (!c) return;
+            if (![c.representedLocalId isEqualToString:expect]) return;
+            c.coverView.image = result;
+        });
+    }];
+
+    return cell;
+}
+
+- (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
+    return CGSizeMake(120, 160);
+}
+
+- (UIEdgeInsets)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout insetForSectionAtIndex:(NSInteger)section {
+    return UIEdgeInsetsZero;
+}
+
+- (void)onTapSelectBtn:(UIButton *)btn {
+    NSInteger idx = btn.tag;
+    if (self.onToggleIndex) self.onToggleIndex(self.sectionIndex, idx);
+}
+- (void)onTapPreviewBtn:(UIButton *)btn {
+    NSInteger idx = btn.tag;
+    if (self.onPreviewIndex) self.onPreviewIndex(self.sectionIndex, idx);
+}
+@end
+
+
 #pragma mark - Section model
+@interface ASNoHighlightButton : UIButton
+@end
+@implementation ASNoHighlightButton
+- (void)setHighlighted:(BOOL)highlighted { /* no-op */ }
+@end
+static inline void ASNoAnim(dispatch_block_t block) {
+    [UIView performWithoutAnimation:^{
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        if (block) block();
+        [CATransaction commit];
+    }];
+}
 
 @interface ASAssetSection : NSObject
 @property (nonatomic, copy) NSString *title;
@@ -34,15 +436,15 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 @property (nonatomic, strong) UIImageView *img;
 @property (nonatomic, strong) UILabel *badge;     // 右下角：类型
 @property (nonatomic, strong) UILabel *sizeLabel; // 右下角：大小（在 badge 下）
-@property (nonatomic, strong) UIView *checkDot;   // 右上角勾选点
+@property (nonatomic, strong) UIImageView *selectIcon; // 右上角 24x24
 - (void)applySelected:(BOOL)sel;
 @end
 
 @implementation ASAssetGridCell
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self=[super initWithFrame:frame]) {
-        self.contentView.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1];
-        self.contentView.layer.cornerRadius = 10;
+        self.contentView.backgroundColor = UIColor.clearColor;
+        self.contentView.layer.cornerRadius = 0;
         self.contentView.clipsToBounds = YES;
 
         _img = [UIImageView new];
@@ -50,61 +452,45 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
         _img.clipsToBounds = YES;
 
         _badge = [UILabel new];
-        _badge.font = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
-        _badge.textColor = UIColor.whiteColor;
-        _badge.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
-        _badge.textAlignment = NSTextAlignmentCenter;
-        _badge.layer.cornerRadius = 8;
-        _badge.clipsToBounds = YES;
+        _badge.hidden = YES; // ✅ 隐藏类型
 
         _sizeLabel = [UILabel new];
-        _sizeLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightRegular];
-        _sizeLabel.textColor = UIColor.whiteColor;
-        _sizeLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
-        _sizeLabel.textAlignment = NSTextAlignmentCenter;
-        _sizeLabel.layer.cornerRadius = 8;
-        _sizeLabel.clipsToBounds = YES;
+        _sizeLabel.hidden = YES; // ✅ 隐藏大小
 
-        _checkDot = [UIView new];
-        _checkDot.layer.cornerRadius = 10;
-        _checkDot.layer.borderWidth = 2;
-        _checkDot.layer.borderColor = [UIColor whiteColor].CGColor;
-        _checkDot.backgroundColor = [UIColor colorWithWhite:0 alpha:0.25];
+        _selectIcon = [UIImageView new];
+        _selectIcon.contentMode = UIViewContentModeScaleAspectFit;
 
         [self.contentView addSubview:_img];
         [self.contentView addSubview:_badge];
         [self.contentView addSubview:_sizeLabel];
-        [self.contentView addSubview:_checkDot];
+        [self.contentView addSubview:_selectIcon];
     }
     return self;
 }
+
 - (void)layoutSubviews {
     [super layoutSubviews];
     self.img.frame = self.contentView.bounds;
 
-    CGFloat pad = 6;
-    self.checkDot.frame = CGRectMake(self.contentView.bounds.size.width - 20 - pad, pad, 20, 20);
-
-    CGFloat w = 54;
-    CGFloat h = 16;
-    self.sizeLabel.frame = CGRectMake(self.contentView.bounds.size.width - w - pad,
-                                      self.contentView.bounds.size.height - h - pad,
-                                      w, h);
-    self.badge.frame = CGRectMake(self.contentView.bounds.size.width - w - pad,
-                                  CGRectGetMinY(self.sizeLabel.frame) - h - 4,
-                                  w, h);
+    CGFloat pad = 10;
+    CGFloat s = 24;
+    self.selectIcon.frame = CGRectMake(self.contentView.bounds.size.width - pad - s, pad, s, s);
 }
+
 - (void)prepareForReuse {
     [super prepareForReuse];
     self.representedLocalId = @"";
     self.img.image = nil;
     self.badge.text = @"";
     self.sizeLabel.text = @"";
+    self.selectIcon.image = nil;
     [self applySelected:NO];
 }
+
 - (void)applySelected:(BOOL)sel {
-    self.checkDot.backgroundColor = sel ? [UIColor systemBlueColor] : [UIColor colorWithWhite:0 alpha:0.25];
+    self.selectIcon.image = [UIImage imageNamed:(sel ? @"ic_select_s" : @"ic_select_n")];
 }
+
 @end
 
 
@@ -119,12 +505,15 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 @implementation ASAssetSectionHeader
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self=[super initWithFrame:frame]) {
+
         _titleLabel = [UILabel new];
         _titleLabel.font = [UIFont boldSystemFontOfSize:15];
 
         _selectAllBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+        _selectAllBtn.adjustsImageWhenHighlighted = NO;
+        _selectAllBtn.showsTouchWhenHighlighted = NO;
         _selectAllBtn.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-        [_selectAllBtn setTitle:@"全选" forState:UIControlStateNormal];
+        [_selectAllBtn setTitle:@"Select All" forState:UIControlStateNormal];
         [_selectAllBtn addTarget:self action:@selector(onTap) forControlEvents:UIControlEventTouchUpInside];
 
         [self addSubview:_titleLabel];
@@ -134,26 +523,547 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGFloat pad = 16;
+    CGFloat pad = 10;
     self.titleLabel.frame = CGRectMake(pad, 0, self.bounds.size.width - pad*2 - 80, self.bounds.size.height);
     self.selectAllBtn.frame = CGRectMake(self.bounds.size.width - pad - 80, 0, 80, self.bounds.size.height);
 }
 - (void)onTap { if (self.tapSelectAll) self.tapSelectAll(); }
 @end
 
+#pragma mark - Group Card Thumb Cell
+
+@interface ASGroupThumbCell : UICollectionViewCell
+@property (nonatomic, copy) NSString *representedLocalId;
+@property (nonatomic, strong) UIImageView *imgView;     // 圆图
+@property (nonatomic, strong) UIImageView *checkView;   // 右上角 12x12
+@property (nonatomic, strong) UIButton *checkBtn;       // 点击勾选/取消
+@property (nonatomic, strong) UIButton *previewBtn;     // 点击预览（覆盖整块）
+@property (nonatomic, strong) UIImageView *bestBadge;   // ic_best（仅第一个显示）
+- (void)applySelected:(BOOL)sel;
+- (void)applyBest:(BOOL)isBest;
+@end
+
+@implementation ASGroupThumbCell
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self = [super initWithFrame:frame]) {
+
+        _imgView = [UIImageView new];
+        _imgView.contentMode = UIViewContentModeScaleAspectFill;
+        _imgView.clipsToBounds = YES;
+        _imgView.layer.cornerRadius = 20;
+        _imgView.layer.borderWidth = 1;
+        _imgView.layer.borderColor = UIColor.whiteColor.CGColor;
+
+        _previewBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        _previewBtn.backgroundColor = UIColor.clearColor;
+
+        _checkView = [UIImageView new];
+        _checkView.contentMode = UIViewContentModeScaleAspectFit;
+
+        _checkBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        _checkBtn.backgroundColor = UIColor.clearColor;
+
+        _bestBadge = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ic_best"]];
+        _bestBadge.contentMode = UIViewContentModeScaleAspectFit;
+        _bestBadge.hidden = YES;
+
+        [self.contentView addSubview:_imgView];
+        [self.contentView addSubview:_previewBtn];
+        [self.contentView addSubview:_bestBadge];
+        [self.contentView addSubview:_checkView];
+        [self.contentView addSubview:_checkBtn];
+
+        self.contentView.backgroundColor = UIColor.clearColor;
+    }
+    return self;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    self.imgView.frame = self.contentView.bounds;
+    self.previewBtn.frame = self.contentView.bounds;
+
+    // 右上角 check 12x12
+    CGFloat s = 12;
+    self.checkView.frame = CGRectMake(self.contentView.bounds.size.width - s,
+                                      0,
+                                      s, s);
+    self.checkBtn.frame = CGRectInset(self.checkView.frame, -8, -8); // 放大点击区域
+
+    // best badge：底部覆盖（大概居中）
+    CGFloat bw = 34, bh = 14;
+    self.bestBadge.frame = CGRectMake((self.contentView.bounds.size.width - bw)/2.0,
+                                      self.contentView.bounds.size.height - bh + 2,
+                                      bw, bh);
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.representedLocalId = @"";
+    self.imgView.image = nil;
+    self.bestBadge.hidden = YES;
+    self.checkView.hidden = NO;
+    self.checkBtn.hidden = NO;
+}
+
+- (void)applyBest:(BOOL)isBest {
+    self.bestBadge.hidden = !isBest;
+}
+
+- (void)applySelected:(BOOL)sel {
+    UIImage *img = [UIImage imageNamed:(sel ? @"ic_select_s" : @"ic_small_select_n")];
+    self.checkView.image = img;
+}
+@end
+
+#pragma mark - Group Card Cell
+
+@interface ASAssetGroupCardCell : UICollectionViewCell <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
+@property (nonatomic) NSInteger sectionIndex;
+
+@property (nonatomic, strong) UIView *card;
+@property (nonatomic, strong) UIView *leftPanel;
+@property (nonatomic, strong) UILabel *countLabel;
+@property (nonatomic, strong) UILabel *sizeLabel;
+@property (nonatomic, strong) UIButton *selectAllBtn;
+
+@property (nonatomic, strong) UIView *rightPanel;
+@property (nonatomic, strong) UIImageView *bestBg;
+@property (nonatomic, strong) UICollectionView *thumbCV;
+
+@property (nonatomic, strong) NSArray<ASAssetModel *> *models;
+@property (nonatomic, strong) NSDictionary<NSString*, PHAsset*> *assetById;
+@property (nonatomic, strong) PHCachingImageManager *imgMgr;
+@property (nonatomic, strong) NSSet<NSString*> *selectedIds;
+@property (nonatomic, copy) NSString *unitText;
+
+@property (nonatomic, copy) void (^onTapSelectAll)(NSInteger sectionIndex);
+@property (nonatomic, copy) void (^onToggleIndex)(NSInteger sectionIndex, NSInteger modelIndex);
+@property (nonatomic, copy) void (^onPreviewIndex)(NSInteger sectionIndex, NSInteger modelIndex);
+
+@property (nonatomic) CGFloat cachedLeftW;   // fallback
+@property (nonatomic) CGFloat fixedLeftW;    // VC 传下来的统一宽度
+
+@property (nonatomic, copy) NSString *representedBestId;
+@property (nonatomic) CGSize lastBestTarget; // 防止反复请求
+
+- (void)bindModels:(NSArray<ASAssetModel *> *)models
+      sectionIndex:(NSInteger)sectionIndex
+          unitText:(NSString *)unitText
+        selectedIds:(NSSet<NSString*> *)selectedIds
+         assetById:(NSDictionary<NSString*, PHAsset*> *)assetById
+            imgMgr:(PHCachingImageManager *)imgMgr
+        fixedLeftW:(CGFloat)fixedLeftW;
+
+- (void)refreshSelectionUI;
+@end
+
+@implementation ASAssetGroupCardCell
+
+- (BOOL)collectionView:(UICollectionView *)collectionView shouldHighlightItemAtIndexPath:(NSIndexPath *)indexPath {
+    return NO;
+}
+
+- (CGFloat)as_textWidth:(NSString *)t font:(UIFont *)f {
+    if (t.length == 0) return 0;
+    return ceil([t boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, 100)
+                                options:NSStringDrawingUsesLineFragmentOrigin|NSStringDrawingUsesFontLeading
+                             attributes:@{NSFontAttributeName:f}
+                                context:nil].size.width);
+}
+
+- (void)updateCachedLeftWidth {
+    CGFloat pad = 14;
+
+    CGFloat wCount = [self as_textWidth:self.countLabel.text font:self.countLabel.font];
+    CGFloat wSize  = [self as_textWidth:self.sizeLabel.text  font:self.sizeLabel.font];
+
+    CGFloat wT1 = [self as_textWidth:@"Select All"   font:self.selectAllBtn.titleLabel.font];
+    CGFloat wT2 = [self as_textWidth:@"Deselect All" font:self.selectAllBtn.titleLabel.font];
+    CGFloat wTitleMax = MAX(wT1, wT2);
+
+    UIEdgeInsets in = self.selectAllBtn.contentEdgeInsets;
+    CGFloat wBtn = wTitleMax + in.left + in.right;
+
+    CGFloat contentW = MAX(MAX(wCount, wSize), wBtn);
+    CGFloat leftW = contentW + pad * 2;
+
+    self.cachedLeftW = MIN(180, MAX(110, leftW));
+}
+
+- (void)refreshVisibleThumbSelectionOnly {
+    ASNoAnim(^{
+        for (ASGroupThumbCell *c in self.thumbCV.visibleCells) {
+            NSIndexPath *ip = [self.thumbCV indexPathForCell:c];
+            if (!ip) continue;
+            if (ip.item < 0 || ip.item >= (NSInteger)self.models.count) continue;
+
+            ASAssetModel *m = self.models[ip.item];
+            NSString *lid = m.localId ?: @"";
+
+            [c applyBest:(ip.item == 0)];
+
+            BOOL sel = (lid.length && [self.selectedIds containsObject:lid]);
+            [c applySelected:sel];
+        }
+    });
+}
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self=[super initWithFrame:frame]) {
+
+        _card = [UIView new];
+        _card.backgroundColor = UIColor.whiteColor;
+        _card.layer.cornerRadius = 22;
+        _card.clipsToBounds = YES;
+
+        _leftPanel = [UIView new];
+        _leftPanel.backgroundColor = UIColor.whiteColor;
+
+        _countLabel = [UILabel new];
+        _countLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
+        _countLabel.textColor = UIColor.blackColor;
+
+        _sizeLabel = [UILabel new];
+        _sizeLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        _sizeLabel.textColor = [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
+
+        _selectAllBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        _selectAllBtn.adjustsImageWhenHighlighted = NO;
+        _selectAllBtn.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+        _selectAllBtn.backgroundColor = UIColor.clearColor;
+        _selectAllBtn.layer.cornerRadius = 18;
+        _selectAllBtn.layer.borderWidth = 1;
+        _selectAllBtn.contentEdgeInsets = UIEdgeInsetsMake(8, 8, 8, 8);
+        _selectAllBtn.titleLabel.lineBreakMode = NSLineBreakByClipping;
+        _selectAllBtn.titleLabel.adjustsFontSizeToFitWidth = NO;
+        _selectAllBtn.titleLabel.minimumScaleFactor = 1.0;
+        [_selectAllBtn addTarget:self action:@selector(onTapSelectAllBtn) forControlEvents:UIControlEventTouchUpInside];
+
+        [_leftPanel addSubview:_countLabel];
+        [_leftPanel addSubview:_sizeLabel];
+        [_leftPanel addSubview:_selectAllBtn];
+
+        _rightPanel = [UIView new];
+        _rightPanel.backgroundColor = UIColor.clearColor;
+
+        _bestBg = [UIImageView new];
+        _bestBg.contentMode = UIViewContentModeScaleAspectFill;
+        _bestBg.clipsToBounds = YES;
+
+        UICollectionViewFlowLayout *l = [UICollectionViewFlowLayout new];
+        l.scrollDirection = UICollectionViewScrollDirectionHorizontal;
+        l.minimumLineSpacing = 10;
+        l.minimumInteritemSpacing = 10;
+
+        _thumbCV = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:l];
+        _thumbCV.backgroundColor = UIColor.clearColor;
+        _thumbCV.showsHorizontalScrollIndicator = NO;
+        _thumbCV.delaysContentTouches = NO;
+        _thumbCV.canCancelContentTouches = YES;
+        _thumbCV.dataSource = self;
+        _thumbCV.delegate = self;
+        _thumbCV.allowsSelection = NO;
+        [_thumbCV registerClass:ASGroupThumbCell.class forCellWithReuseIdentifier:@"ASGroupThumbCell"];
+
+        [_rightPanel addSubview:_bestBg];
+        [_rightPanel addSubview:_thumbCV];
+
+        [_card addSubview:_leftPanel];
+        [_card addSubview:_rightPanel];
+        [self.contentView addSubview:_card];
+
+        self.contentView.backgroundColor = UIColor.clearColor;
+        _lastBestTarget = CGSizeZero;
+    }
+    return self;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+
+    self.card.frame = self.contentView.bounds;
+
+    CGFloat leftW = (self.fixedLeftW > 0 ? self.fixedLeftW
+                    : (self.cachedLeftW > 0 ? self.cachedLeftW : 120));
+
+    self.leftPanel.frame  = CGRectMake(0, 0, leftW, self.card.bounds.size.height);
+    self.rightPanel.frame = CGRectMake(leftW, 0, self.card.bounds.size.width - leftW, self.card.bounds.size.height);
+
+    CGFloat pad = 14;
+    CGFloat topY = 18;
+    CGFloat lineGap = 2;
+
+    CGFloat y = topY;
+    self.countLabel.frame = CGRectMake(pad, y, leftW - pad*2, 26);
+    y += 26 + lineGap;
+    self.sizeLabel.frame  = CGRectMake(pad, y, leftW - pad*2, 16);
+
+    NSString *t1 = @"Select All";
+    NSString *t2 = @"Deselect All";
+    CGFloat wT = MAX([self as_textWidth:t1 font:self.selectAllBtn.titleLabel.font],
+                     [self as_textWidth:t2 font:self.selectAllBtn.titleLabel.font]);
+    UIEdgeInsets in = self.selectAllBtn.contentEdgeInsets;
+    CGFloat pillW = ceil(wT + in.left + in.right);
+    pillW = MIN(pillW, leftW - pad*2);
+
+    CGFloat btnH = 36;
+    CGFloat btnY = self.card.bounds.size.height - 18 - btnH;
+    CGFloat btnX = floor((leftW - pillW)/2.0);
+    self.selectAllBtn.frame = CGRectMake(btnX, btnY, pillW, btnH);
+
+    self.bestBg.frame = self.rightPanel.bounds;
+
+    CGFloat listH = 56;
+    self.thumbCV.frame = CGRectMake(0,
+                                    self.rightPanel.bounds.size.height - listH - 10,
+                                    self.rightPanel.bounds.size.width,
+                                    listH);
+
+    [self reloadBestBgIfNeeded];
+}
+
+- (void)reloadBestBgIfNeeded {
+    if (!self.imgMgr) return;
+    if (self.representedBestId.length == 0) return;
+
+    PHAsset *a = self.assetById[self.representedBestId];
+    if (!a) return;
+
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGSize sz = self.rightPanel.bounds.size;
+    if (sz.width < 2 || sz.height < 2) return;
+
+    CGSize target = CGSizeMake(sz.width * scale, sz.height * scale);
+    if (CGSizeEqualToSize(target, self.lastBestTarget) && self.bestBg.image != nil) return;
+
+    self.lastBestTarget = target;
+
+    PHImageRequestOptions *opt = [PHImageRequestOptions new];
+    opt.networkAccessAllowed = YES;
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
+    opt.resizeMode = PHImageRequestOptionsResizeModeFast;
+    opt.synchronous = NO;
+
+    __weak typeof(self) weakSelf = self;
+    NSString *expect = self.representedBestId;
+
+    [self.imgMgr requestImageForAsset:a
+                           targetSize:target
+                          contentMode:PHImageContentModeAspectFill
+                              options:opt
+                        resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+        if (!result) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (![weakSelf.representedBestId isEqualToString:expect]) return;
+            weakSelf.bestBg.image = result;
+        });
+    }];
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.representedBestId = @"";
+    self.bestBg.image = nil;
+    self.models = @[];
+    self.selectedIds = [NSSet set];
+    self.assetById = @{};
+    self.imgMgr = nil;
+    self.fixedLeftW = 0;
+    self.cachedLeftW = 0;
+    self.lastBestTarget = CGSizeZero;
+    [self.thumbCV reloadData];
+}
+
+- (uint64_t)cleanableBytes {
+    uint64_t s = 0;
+    for (NSInteger i = 0; i < (NSInteger)self.models.count; i++) {
+        s += self.models[i].fileSizeBytes;
+    }
+    return s;
+}
+
+- (BOOL)isAllCleanablesSelected {
+    if (self.models.count <= 1) return NO;
+    for (NSInteger i = 1; i < (NSInteger)self.models.count; i++) {
+        NSString *lid = self.models[i].localId ?: @"";
+        if (lid.length == 0) continue;
+        if (![self.selectedIds containsObject:lid]) return NO;
+    }
+    return YES;
+}
+
+- (void)refreshSelectionUI {
+    BOOL all = [self isAllCleanablesSelected];
+
+    ASNoAnim(^{
+        if (all) {
+            [self.selectAllBtn setTitle:@"Deselect All" forState:UIControlStateNormal];
+            UIColor *blue = [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
+            [self.selectAllBtn setTitleColor:blue forState:UIControlStateNormal];
+            self.selectAllBtn.layer.borderColor = blue.CGColor;
+        } else {
+            [self.selectAllBtn setTitle:@"Select All" forState:UIControlStateNormal];
+            [self.selectAllBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+            self.selectAllBtn.layer.borderColor = [UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0].CGColor;
+        }
+        [self setNeedsLayout];
+        [self layoutIfNeeded];
+    });
+
+    [self refreshVisibleThumbSelectionOnly];
+}
+
+- (void)bindModels:(NSArray<ASAssetModel *> *)models
+      sectionIndex:(NSInteger)sectionIndex
+          unitText:(NSString *)unitText
+        selectedIds:(NSSet<NSString*> *)selectedIds
+         assetById:(NSDictionary<NSString*, PHAsset*> *)assetById
+            imgMgr:(PHCachingImageManager *)imgMgr
+        fixedLeftW:(CGFloat)fixedLeftW {
+
+    self.sectionIndex = sectionIndex;
+    self.models = models ?: @[];
+    self.unitText = unitText ?: @"Photos";
+    self.selectedIds = selectedIds ?: [NSSet set];
+    self.assetById = assetById ?: @{};
+    self.imgMgr = imgMgr;
+    self.fixedLeftW = fixedLeftW;
+
+    self.countLabel.text = [NSString stringWithFormat:@"%lu %@", (unsigned long)self.models.count, self.unitText];
+    self.sizeLabel.text  = ASHumanSize([self cleanableBytes]);
+
+    [self updateCachedLeftWidth];
+
+    // ✅ bestId 只记录，真正加载交给 layoutSubviews 的 reloadBestBgIfNeeded（有正确 size）
+    ASAssetModel *best = (self.models.count > 0 ? self.models[0] : nil);
+    self.representedBestId = best.localId ?: @"";
+    self.bestBg.image = nil;
+    self.lastBestTarget = CGSizeZero;
+
+    ASNoAnim(^{
+        [self.thumbCV reloadData];
+    });
+
+    [self refreshSelectionUI];
+}
+
+- (void)onTapSelectAllBtn {
+    if (self.onTapSelectAll) self.onTapSelectAll(self.sectionIndex);
+}
+
+#pragma mark - thumb cv
+
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
+    return self.models.count;
+}
+
+- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    ASGroupThumbCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ASGroupThumbCell" forIndexPath:indexPath];
+
+    ASAssetModel *m = self.models[indexPath.item];
+    NSString *lid = m.localId ?: @"";
+    cell.representedLocalId = lid;
+    cell.imgView.image = nil;
+
+    BOOL isBest = (indexPath.item == 0);
+    [cell applyBest:isBest];
+
+    BOOL sel = (lid.length && [self.selectedIds containsObject:lid]);
+    [cell applySelected:sel];
+
+    // actions
+    cell.previewBtn.tag = indexPath.item;
+    [cell.previewBtn removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
+    [cell.previewBtn addTarget:self action:@selector(onTapPreviewBtn:) forControlEvents:UIControlEventTouchUpInside];
+
+    cell.checkBtn.tag = indexPath.item;
+    [cell.checkBtn removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
+    [cell.checkBtn addTarget:self action:@selector(onTapCheckBtn:) forControlEvents:UIControlEventTouchUpInside];
+
+    // image load
+    PHAsset *a = (lid.length ? self.assetById[lid] : nil);
+    if (!a || !self.imgMgr) return cell;
+
+    PHImageRequestOptions *opt = [PHImageRequestOptions new];
+    opt.networkAccessAllowed = YES;
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
+    opt.resizeMode = PHImageRequestOptionsResizeModeFast;
+    opt.synchronous = NO;
+
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGSize target = CGSizeMake(40 * scale, 40 * scale);
+
+    __weak typeof(cell) weakCell = cell;
+    NSString *expect = lid;
+
+    [self.imgMgr requestImageForAsset:a
+                           targetSize:target
+                          contentMode:PHImageContentModeAspectFill
+                              options:opt
+                        resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+        if (!result) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            ASGroupThumbCell *c = weakCell;
+            if (!c) return;
+            if (![c.representedLocalId isEqualToString:expect]) return;
+            c.imgView.image = result;
+        });
+    }];
+
+    return cell;
+}
+
+- (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
+    return CGSizeMake(40, 40);
+}
+
+- (UIEdgeInsets)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout insetForSectionAtIndex:(NSInteger)section {
+    return UIEdgeInsetsMake(8, 14, 8, 14);
+}
+
+- (void)onTapCheckBtn:(UIButton *)btn {
+    NSInteger idx = btn.tag;
+    if (idx < 0 || idx >= (NSInteger)self.models.count) return;
+    if (self.onToggleIndex) self.onToggleIndex(self.sectionIndex, idx);
+}
+
+- (void)onTapPreviewBtn:(UIButton *)btn {
+    NSInteger idx = btn.tag;
+    if (idx < 0 || idx >= (NSInteger)self.models.count) return;
+    if (self.onPreviewIndex) self.onPreviewIndex(self.sectionIndex, idx);
+}
+
+@end
+
+static inline CGFloat ASTextW(NSString *t, UIFont *f) {
+    if (t.length == 0) return 0;
+    return ceil([t boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, 100)
+                                options:NSStringDrawingUsesLineFragmentOrigin|NSStringDrawingUsesFontLeading
+                             attributes:@{NSFontAttributeName:f}
+                                context:nil].size.width);
+}
+
+static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFloat spacing, UIEdgeInsets insets) {
+    return insets.left + imgW + (title.length ? spacing : 0) + ASTextW(title, font) + insets.right;
+}
+
 #pragma mark - VC
 
 @interface ASAssetListViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
-
+@property (nonatomic) ASAssetSortMode sortMode;
+@property (nonatomic, strong) UIImageView *homeBgImageView;
+@property (nonatomic, strong) UIView *listBgView;
 @property (nonatomic, strong) UILabel *topSummaryLabel;
 @property (nonatomic, strong) UIButton *topSelectAllBtn;
 @property (nonatomic, strong) UIButton *topSortBtn;
+@property (nonatomic) CGFloat groupCardLeftW;
 
 @property (nonatomic) NSUInteger totalItemCount;      // 当前列表总数
 @property (nonatomic) NSUInteger cleanableItemCount;  // 当前“可清理”数量（分组模式会排除每组第1张）
 
 @property (nonatomic, strong) ASCustomNavBar *navBar;
-@property (nonatomic, strong) UIView *topToolbar;  // 用于放置全选按钮
+@property (nonatomic, strong) UIView *topToolbar;
 
 @property (nonatomic) ASAssetListMode mode;
 
@@ -173,12 +1083,40 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 @property (nonatomic) uint64_t selectedBytes;
 
 @property (nonatomic, strong) NSDictionary<NSString*, PHAsset*> *assetById;
+
 @end
 
 @implementation ASAssetListViewController
 
+- (CGFloat)measurePillWidthWithTitle:(NSString *)title imageName:(NSString *)imgName height:(CGFloat)h {
+    UIButton *tmp = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self configPillButtonBase:tmp];
+
+    UIImage *img = [[UIImage imageNamed:imgName] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [tmp setImage:img forState:UIControlStateNormal];
+    [tmp setTitle:title forState:UIControlStateNormal];
+
+    CGSize s = [tmp sizeThatFits:CGSizeMake(CGFLOAT_MAX, h)];
+    return ceil(s.width);
+}
+
+- (void)as_noAnim:(dispatch_block_t)block {
+    [UIView performWithoutAnimation:^{
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        if (block) block();
+        [CATransaction commit];
+    }];
+}
+
+- (BOOL)useVideoGroupStyle {
+    return (self.mode == ASAssetListModeSimilarVideo ||
+            self.mode == ASAssetListModeDuplicateVideo);
+}
+
 - (instancetype)initWithMode:(ASAssetListMode)mode {
     if (self=[super init]) {
+        _sortMode = ASAssetSortModeNewest;
         _mode = mode;
         _sections = [NSMutableArray array];
         _selectedIds = [NSMutableSet set];
@@ -193,11 +1131,59 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
     self.navigationController.navigationBar.hidden = YES;
 }
 
+- (void)recomputeGroupCardLeftWidth {
+    if (![self isGroupMode]) { self.groupCardLeftW = 0; return; }
+
+    UIFont *countFont = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
+    UIFont *sizeFont  = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    UIFont *btnFont   = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+
+    NSString *unit = [self isVideoMode] ? @"Videos" : @"Photos";
+
+    // 卡片左侧 padding（你想更窄就减小）
+    CGFloat sidePad = 14;
+
+    // 分组全选胶囊的内边距（和 cell 里保持一致）
+    UIEdgeInsets btnInsets = UIEdgeInsetsMake(8, 8, 8, 8);
+    CGFloat btnImgW = 0;        // 分组全选按钮没有左图
+    CGFloat btnSpacing = 0;
+
+    // ⚠️ 关键：取两种标题里最大宽度，避免 Select/Deselect 切换抖动
+    CGFloat btnWMax = MAX(ASPillW(@"Select All", btnFont, btnImgW, btnSpacing, btnInsets),
+                          ASPillW(@"Deselect All", btnFont, btnImgW, btnSpacing, btnInsets));
+
+    CGFloat maxContentW = 0;
+
+    for (ASAssetSection *sec in self.sections) {
+        NSString *countText = [NSString stringWithFormat:@"%lu %@", (unsigned long)sec.assets.count, unit];
+        NSString *sizeText  = ASHumanSize([self cleanableBytesForSection:sec]); // 仍然排除 best 的逻辑
+
+        CGFloat w1 = ASTextW(countText, countFont);
+        CGFloat w2 = ASTextW(sizeText,  sizeFont);
+
+        CGFloat contentW = MAX(MAX(w1, w2), btnWMax);
+        if (contentW > maxContentW) maxContentW = contentW;
+    }
+
+    CGFloat leftW = maxContentW + sidePad * 2;
+
+    // 给一个合理范围（避免太宽/太窄）
+    self.groupCardLeftW = MIN(180, MAX(110, leftW));
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = UIColor.whiteColor;
-    
+    self.view.backgroundColor = ASBgColor(); // #F6F6F6FF
+    UIImage *bg = [UIImage imageNamed:@"ic_home_bg"];
+    UIImageView *iv = [[UIImageView alloc] initWithImage:bg];
+    iv.contentMode = UIViewContentModeScaleAspectFill;
+    iv.clipsToBounds = YES;
+    iv.userInteractionEnabled = NO;
+    [self.view addSubview:iv];
+    [self.view sendSubviewToBack:iv];
+    self.homeBgImageView = iv;
+  
     // 只隐藏系统 nav，不影响手势
     self.navigationController.navigationBarHidden = YES;
 
@@ -223,7 +1209,9 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
         [self rebuildDataFromManager];
         dispatch_async(dispatch_get_main_queue(), ^{
             [self applyDefaultSelectionRule];
-            [self.cv reloadData];
+            [self recomputeGroupCardLeftWidth];
+            [self applyCurrentSortAndReload];
+//            [self.cv reloadData];
             [self recomputeBytesAndRefreshUI];
             [self syncNavSelectAllState];
         });
@@ -255,30 +1243,82 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
     CGFloat pad = 16;
     self.topSummaryLabel.frame = CGRectMake(pad, 0, self.topToolbar.bounds.size.width - pad*2, 44);
 
-    self.topSelectAllBtn.frame = CGRectMake(pad, 44, 80, 44);
-    self.topSortBtn.frame = CGRectMake(self.topToolbar.bounds.size.width - pad - 80, 44, 80, 44);
+    CGFloat rowY = 44 + (44 - 36)/2.0;
+    CGFloat btnH = 36;
+    CGFloat gap = 10;
 
-    // list (cv)
+    CGFloat w1 = [self pillWidthForButton:self.topSelectAllBtn height:btnH];
+    CGFloat w2 = [self pillWidthForButton:self.topSortBtn height:btnH];
+
+    w1 = MAX(96, w1);
+    w2 = MAX(96, w2);
+
+    CGFloat maxTotal = self.topToolbar.bounds.size.width - pad*2;
+    CGFloat totalNeed = w1 + gap + w2;
+
+    if (totalNeed > maxTotal) {
+        CGFloat minGap = 6;
+        gap = MAX(minGap, gap - (totalNeed - maxTotal));
+        totalNeed = w1 + gap + w2;
+
+        if (totalNeed > maxTotal) {
+            self.topSelectAllBtn.titleLabel.adjustsFontSizeToFitWidth = YES;
+            self.topSelectAllBtn.titleLabel.minimumScaleFactor = 0.75;
+
+            self.topSortBtn.titleLabel.adjustsFontSizeToFitWidth = YES;
+            self.topSortBtn.titleLabel.minimumScaleFactor = 0.75;
+
+            CGFloat remain = maxTotal - gap;
+            CGFloat w2Max = MIN(w2, remain * 0.5);
+            CGFloat w1Max = remain - w2Max;
+
+            w1 = MIN(w1, w1Max);
+            w2 = MIN(w2, w2Max);
+        }
+    }
+
+    self.topSelectAllBtn.frame = CGRectMake(pad, rowY, w1, btnH);
+    self.topSortBtn.frame = CGRectMake(self.topToolbar.bounds.size.width - pad - w2, rowY, w2, btnH);
+
     CGFloat cvY = navH + toolbarH;
-    self.cv.frame = CGRectMake(0,
-                               cvY,
-                               self.view.bounds.size.width,
-                               self.view.bounds.size.height - cvY);
+    CGRect listFrame = CGRectMake(0,
+                                  cvY,
+                                  self.view.bounds.size.width,
+                                  self.view.bounds.size.height - cvY);
 
-    // 底部浮动删除按钮：只有选中才显示（frame 先摆好，显示/隐藏在 recompute 里控制）
+    if ([self isGroupMode]) {
+        self.cv.frame = listFrame;
+    } else {
+        self.listBgView.frame = listFrame;
+        self.cv.frame = self.listBgView.bounds;
+    }
+
     if (!self.bottomBar.superview) [self.view addSubview:self.bottomBar];
 
-    // ✅ 贴紧屏幕底部（考虑 safeArea）
     CGFloat floatBtnY = self.view.bounds.size.height - bottomSafe - floatBtnH;
 
     self.bottomBar.frame = CGRectMake(floatBtnX, floatBtnY, floatBtnW, floatBtnH);
     self.deleteBtn.frame = self.bottomBar.bounds;
 
-    // ✅ 列表底部 inset：只在按钮显示时为它让出高度
     CGFloat insetBottom = bottomSafe + (self.deleteBtn.hidden ? 0 : floatBtnH);
     self.cv.contentInset = UIEdgeInsetsMake(0, 0, insetBottom, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 
+    if (self.homeBgImageView.image) {
+        CGFloat w = self.view.bounds.size.width;
+
+        UIImage *img = self.homeBgImageView.image;
+        CGFloat h = 0;
+        if (img.size.width > 0) {
+            h = w * (img.size.height / img.size.width);
+        }
+
+        CGFloat minH = CGRectGetMaxY(self.topToolbar.frame);
+        if (h < minH) h = minH;
+
+        self.homeBgImageView.frame = CGRectMake(0, 0, w, h);
+    }
+    
     [self.view bringSubviewToFront:self.navBar];
     [self.view bringSubviewToFront:self.topToolbar];
     [self.view bringSubviewToFront:self.bottomBar];
@@ -306,12 +1346,11 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
     }
 
     self.navBar.allSelected = all;
-    [self.topSelectAllBtn setTitle:(all ? @"取消全选" : @"全选") forState:UIControlStateNormal];
+    [self updateTopSelectAllButtonUIWithAll:all];
 }
 
 - (void)setupTopToolbar {
     self.topToolbar = [[UIView alloc] initWithFrame:CGRectZero];
-    self.topToolbar.backgroundColor = UIColor.whiteColor;
 
     // 第一行：居中 summary
     UILabel *summary = [UILabel new];
@@ -322,23 +1361,19 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
     summary.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
     self.topSummaryLabel = summary;
 
-    // 第二行：左 全选
-    UIButton *selectAllBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    selectAllBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
-    [selectAllBtn setTitle:@"全选" forState:UIControlStateNormal];
-    [selectAllBtn setTitleColor:[UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0]
-                       forState:UIControlStateNormal];
+    ASNoHighlightButton *selectAllBtn = [ASNoHighlightButton buttonWithType:UIButtonTypeCustom];
+    [self configPillButtonBase:selectAllBtn];
     [selectAllBtn addTarget:self action:@selector(toggleSelectAll) forControlEvents:UIControlEventTouchUpInside];
     self.topSelectAllBtn = selectAllBtn;
 
-    // 第二行：右 排序
-    UIButton *sortBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    sortBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
-    [sortBtn setTitle:@"排序" forState:UIControlStateNormal];
-    [sortBtn setTitleColor:[UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0]
-                  forState:UIControlStateNormal];
+    ASNoHighlightButton *sortBtn = [ASNoHighlightButton buttonWithType:UIButtonTypeCustom];
+    [self configPillButtonBase:sortBtn];
     [sortBtn addTarget:self action:@selector(onTapSort) forControlEvents:UIControlEventTouchUpInside];
     self.topSortBtn = sortBtn;
+
+    // 初始 UI
+    [self updateTopSortButtonUI];
+    [self updateTopSelectAllButtonUIWithAll:NO];
 
     [self.topToolbar addSubview:summary];
     [self.topToolbar addSubview:selectAllBtn];
@@ -347,69 +1382,57 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
     [self.view addSubview:self.topToolbar];
 }
 
+- (void)updatePillButton:(UIButton *)btn imageName:(NSString *)imgName title:(NSString *)title {
+    UIImage *img = [[UIImage imageNamed:imgName] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self as_noAnim:^{
+        [btn setImage:img forState:UIControlStateNormal];
+        [btn setTitle:title forState:UIControlStateNormal];
+        [btn invalidateIntrinsicContentSize];
+    }];
+    [self.view setNeedsLayout];
+}
+
 - (void)onTapSort {
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"排序"
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Sort"
                                                                 message:nil
                                                          preferredStyle:UIAlertControllerStyleActionSheet];
 
     __weak typeof(self) weakSelf = self;
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"按时间（最新优先）"
+    void (^apply)(ASAssetSortMode) = ^(ASAssetSortMode m) {
+        weakSelf.sortMode = m;
+        [weakSelf applyCurrentSortAndReload];
+    };
+
+    [ac addAction:[UIAlertAction actionWithTitle:@"Newest"
                                           style:UIAlertActionStyleDefault
-                                        handler:^(UIAlertAction * _Nonnull action) {
-        [weakSelf sortByDateDesc];
+                                        handler:^(__unused UIAlertAction * _Nonnull action) {
+        apply(ASAssetSortModeNewest);
     }]];
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"按大小（小到大）"
+    [ac addAction:[UIAlertAction actionWithTitle:@"Oldest"
                                           style:UIAlertActionStyleDefault
-                                        handler:^(UIAlertAction * _Nonnull action) {
-        [weakSelf sortBySizeDesc];
+                                        handler:^(__unused UIAlertAction * _Nonnull action) {
+        apply(ASAssetSortModeOldest);
     }]];
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"取消"
+    [ac addAction:[UIAlertAction actionWithTitle:@"Largest"
+                                          style:UIAlertActionStyleDefault
+                                        handler:^(__unused UIAlertAction * _Nonnull action) {
+        apply(ASAssetSortModeLargest);
+    }]];
+
+    [ac addAction:[UIAlertAction actionWithTitle:@"Smallest"
+                                          style:UIAlertActionStyleDefault
+                                        handler:^(__unused UIAlertAction * _Nonnull action) {
+        apply(ASAssetSortModeSmallest);
+    }]];
+
+    [ac addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                           style:UIAlertActionStyleCancel
                                         handler:nil]];
 
     [self presentViewController:ac animated:YES completion:nil];
-}
-
-- (void)sortByDateDesc {
-    if ([self isGroupMode]) {
-        [self.sections sortUsingComparator:^NSComparisonResult(ASAssetSection *a, ASAssetSection *b) {
-            return [b.groupDate compare:a.groupDate];
-        }];
-    } else {
-        ASAssetSection *sec = self.sections.firstObject;
-        [sec.assets sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
-            NSDate *da = [self dateForModel:a];
-            NSDate *db = [self dateForModel:b];
-            if (!da && !db) return NSOrderedSame;
-            if (!da) return NSOrderedDescending;
-            if (!db) return NSOrderedAscending;
-            return [db compare:da];
-        }];
-    }
-    [self.cv reloadData];
-}
-
-- (void)sortBySizeDesc {
-    if ([self isGroupMode]) {
-        // 组按“可清理大小”排序（排除每组第1个）
-        [self.sections sortUsingComparator:^NSComparisonResult(ASAssetSection *a, ASAssetSection *b) {
-            uint64_t sa = 0, sb = 0;
-            for (NSInteger i=1; i<a.assets.count; i++) sa += a.assets[i].fileSizeBytes;
-            for (NSInteger i=1; i<b.assets.count; i++) sb += b.assets[i].fileSizeBytes;
-            if (sa == sb) return NSOrderedSame;
-            return (sb > sa) ? NSOrderedAscending : NSOrderedDescending;
-        }];
-    } else {
-        ASAssetSection *sec = self.sections.firstObject;
-        [sec.assets sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
-            if (a.fileSizeBytes == b.fileSizeBytes) return NSOrderedSame;
-            return (b.fileSizeBytes > a.fileSizeBytes) ? NSOrderedAscending : NSOrderedDescending;
-        }];
-    }
-    [self.cv reloadData];
 }
 
 #pragma mark - UI 设置
@@ -440,7 +1463,6 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 }
 
 - (NSAttributedString *)topSummaryAttributedText {
-    // 文案：12.7GB Free Up |  2343 / 3000 Photos
     NSString *freeStr = ASHumanSize(self.totalCleanableBytes);
     NSString *cleanableStr = [NSString stringWithFormat:@"%lu", (unsigned long)self.cleanableItemCount];
     NSString *totalStr = [NSString stringWithFormat:@"%lu", (unsigned long)self.totalItemCount];
@@ -472,42 +1494,71 @@ static inline NSString *ASTypeText(PHAssetMediaType t) {
 }
 
 - (void)setupUI {
-    self.bottomBarH = 64;  // 底部按钮的高度
+    self.bottomBarH = 64;
 
     UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
-    layout.minimumInteritemSpacing = 8;
-    layout.minimumLineSpacing = 8;
-    layout.sectionInset = UIEdgeInsetsMake(0, 12, 0, 12);
-    layout.headerReferenceSize = CGSizeMake(self.view.bounds.size.width, 44);
 
-    self.cv = [[UICollectionView alloc] initWithFrame:self.view.bounds
-                                 collectionViewLayout:layout];
-    self.cv.backgroundColor = UIColor.whiteColor;
+    if ([self isGroupMode]) {
+        layout.minimumInteritemSpacing = 0;
+        layout.minimumLineSpacing = 10;
+        layout.sectionInset = [self useVideoGroupStyle] ? UIEdgeInsetsMake(10, 20, 0, 20)
+                                                        : UIEdgeInsetsMake(10, 20, 0, 20);
+        layout.headerReferenceSize = CGSizeZero;
+    } else {
+        layout.minimumInteritemSpacing = 2;
+        layout.minimumLineSpacing = 2;
+        layout.sectionInset = UIEdgeInsetsMake(10, 10, 10, 10);
+        layout.headerReferenceSize = CGSizeMake(self.view.bounds.size.width, 44);
+    }
+
+    self.cv = [[UICollectionView alloc] initWithFrame:self.view.bounds collectionViewLayout:layout];
     self.cv.dataSource = self;
     self.cv.delegate = self;
 
-    [self.cv registerClass:ASAssetGridCell.class forCellWithReuseIdentifier:@"ASAssetGridCell"];
-    [self.cv registerClass:ASAssetSectionHeader.class
-forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
-       withReuseIdentifier:@"ASAssetSectionHeader"];
+    if ([self isGroupMode]) {
+        [self.cv registerClass:ASAssetGroupCardCell.class forCellWithReuseIdentifier:@"ASAssetGroupCardCell"];
+        [self.cv registerClass:ASVideoGroupCardCell.class forCellWithReuseIdentifier:@"ASVideoGroupCardCell"];
+    } else {
+        [self.cv registerClass:ASAssetGridCell.class forCellWithReuseIdentifier:@"ASAssetGridCell"];
+        [self.cv registerClass:ASAssetSectionHeader.class
+    forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
+           withReuseIdentifier:@"ASAssetSectionHeader"];
+    }
 
-    [self.view addSubview:self.cv];
+    if ([self isGroupMode]) {
+        self.cv.backgroundColor = UIColor.clearColor;
+        self.cv.backgroundView = nil;
+        self.cv.opaque = NO; // 更彻底，避免系统当成不透明渲染
+        [self.view addSubview:self.cv];
+    } else {
+        UIView *bg = [UIView new];
+        bg.backgroundColor = UIColor.whiteColor;
+        bg.layer.cornerRadius = 16;
+        bg.layer.masksToBounds = YES;
+        if (@available(iOS 11.0, *)) {
+            bg.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+        }
+        self.listBgView = bg;
+        [self.view addSubview:bg];
+
+        self.cv.backgroundColor = UIColor.clearColor;
+        [bg addSubview:self.cv];
+    }
 
     UIView *bar = [UIView new];
     bar.backgroundColor = UIColor.clearColor;
+    bar.userInteractionEnabled = NO;
 
-    UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+    ASNoHighlightButton *btn = [ASNoHighlightButton buttonWithType:UIButtonTypeCustom];
+    btn.userInteractionEnabled = YES;
+
     btn.layer.cornerRadius = 35;
-    btn.layer.masksToBounds = NO;
-
-    // 背景 #024DFF
+    btn.layer.masksToBounds = YES;
     btn.backgroundColor = [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
 
-    // 阴影：offset 0,0 blur 20 spread 0 color #0000001A
-    btn.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0x1A/255.0].CGColor;
-    btn.layer.shadowOffset = CGSizeMake(0, 0);
-    btn.layer.shadowOpacity = 1.0;
-    btn.layer.shadowRadius = 20;
+    btn.layer.shadowOpacity = 0;
+    btn.layer.shadowRadius = 0;
+    btn.layer.shadowPath = nil;
 
     [btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     btn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
@@ -552,7 +1603,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 
     if (alreadyAll) {
-        [self.selectedIds removeAllObjects];
+        [self.selectedIds minusSet:shouldAll];
     } else {
         [self.selectedIds unionSet:shouldAll];
     }
@@ -561,22 +1612,81 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     [self syncNavSelectAllState];
 }
 
+- (CGFloat)pillWidthForButton:(UIButton *)btn height:(CGFloat)h {
+    NSString *t = [btn titleForState:UIControlStateNormal] ?: @"";
+    UIFont *f = btn.titleLabel.font ?: [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+
+    CGFloat textW = ceil([t boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, h)
+                                        options:NSStringDrawingUsesLineFragmentOrigin|NSStringDrawingUsesFontLeading
+                                     attributes:@{NSFontAttributeName:f}
+                                        context:nil].size.width);
+
+    CGFloat imgW = 0;
+    UIImage *img = [btn imageForState:UIControlStateNormal];
+    if (img) imgW = ceil(img.size.width);
+
+    UIEdgeInsets in = btn.contentEdgeInsets;
+    CGFloat spacing = (img && t.length) ? 6 : 0;
+
+    return ceil(in.left + imgW + spacing + textW + in.right);
+}
+
+- (void)configPillButtonBase:(UIButton *)btn {
+    btn.backgroundColor = UIColor.whiteColor;
+    btn.layer.cornerRadius = 18;
+    btn.layer.masksToBounds = YES;
+
+    btn.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    btn.titleLabel.numberOfLines = 1;
+    btn.titleLabel.lineBreakMode = NSLineBreakByClipping;
+    btn.titleLabel.adjustsFontSizeToFitWidth = NO;
+
+    [btn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+
+    btn.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
+    btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+
+    btn.contentEdgeInsets = UIEdgeInsetsMake(6, 8, 6, 8);
+
+    btn.imageEdgeInsets = UIEdgeInsetsZero;
+    btn.titleEdgeInsets = UIEdgeInsetsMake(0, 6, 0, 0);
+}
+
+- (NSString *)sortTitle {
+    switch (self.sortMode) {
+        case ASAssetSortModeNewest:   return @"Newest";
+        case ASAssetSortModeOldest:   return @"Oldest";
+        case ASAssetSortModeLargest:  return @"Largest";
+        case ASAssetSortModeSmallest: return @"Smallest";
+    }
+    return @"Newest";
+}
+
+- (void)updateTopSelectAllButtonUIWithAll:(BOOL)all {
+    [self updatePillButton:self.topSelectAllBtn
+                 imageName:(all ? @"ic_select_s" : @"ic_select_gray_n")
+                     title:(all ? @"Deselect All" : @"Select All")];
+}
+
+- (void)updateTopSortButtonUI {
+    [self updatePillButton:self.topSortBtn imageName:@"ic_sort" title:[self sortTitle]];
+}
 
 #pragma mark - Build data
 
 - (NSString *)titleForMode:(ASAssetListMode)mode {
     switch (mode) {
-        case ASAssetListModeSimilarImage: return @"相似图片";
-        case ASAssetListModeSimilarVideo: return @"相似视频";
-        case ASAssetListModeDuplicateImage: return @"重复图片";
-        case ASAssetListModeDuplicateVideo: return @"重复视频";
-        case ASAssetListModeScreenshots: return @"截屏";
-        case ASAssetListModeScreenRecordings: return @"录屏";
-        case ASAssetListModeBigVideos: return @">20MB 视频";
-        case ASAssetListModeBlurryPhotos: return @"模糊照片";
-        case ASAssetListModeOtherPhotos: return @"其他照片";
+        case ASAssetListModeSimilarImage: return @"Similar Photos";
+        case ASAssetListModeSimilarVideo: return @"Similar Videos";
+        case ASAssetListModeDuplicateImage: return @"Duplicate Photos";
+        case ASAssetListModeDuplicateVideo: return @"Duplicate Videos";
+        case ASAssetListModeScreenshots: return @"Screenshots";
+        case ASAssetListModeScreenRecordings: return @"Screen Recoeding";
+        case ASAssetListModeBigVideos: return @"Big Videos";
+        case ASAssetListModeBlurryPhotos: return @"Blurry Photos";
+        case ASAssetListModeOtherPhotos: return @"Other Photos";
     }
-    return @"列表";
+    return @"List";
 }
 
 - (NSDate *)dateForModel:(ASAssetModel *)m {
@@ -610,7 +1720,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 }
 
-/// ✅ 核心：构建 sections + 一次性 batch fetch 所有 ids，填 assetById
 - (void)rebuildDataFromManager {
     [self.sections removeAllObjects];
     self.assetById = @{}; // 先清空
@@ -684,7 +1793,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         [self.sections addObject:s];
     }
 
-    // ✅ 统一收集所有 localId，一次性 fetch PHAsset，并过滤掉已经不存在的 id
     NSMutableArray<NSString *> *allIds = [NSMutableArray array];
 
     for (ASAssetSection *sec in self.sections) {
@@ -731,15 +1839,108 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             [self.sections removeObjectAtIndex:si];
         }
     }
+}
 
-    // 分组标题重排（因为过滤后可能删了组）
+- (uint64_t)cleanableBytesForSection:(ASAssetSection *)sec {
+    uint64_t s = 0;
+    for (NSInteger i = 1; i < (NSInteger)sec.assets.count; i++) {
+        s += sec.assets[i].fileSizeBytes;
+    }
+    return s;
+}
+
+- (void)applyCurrentSortAndReload {
+
     if ([self isGroupMode]) {
-        NSInteger idx2 = 1;
+
+        switch (self.sortMode) {
+
+            case ASAssetSortModeNewest: {
+                [self.sections sortUsingComparator:^NSComparisonResult(ASAssetSection *a, ASAssetSection *b) {
+                    return [b.groupDate compare:a.groupDate];
+                }];
+            } break;
+
+            case ASAssetSortModeOldest: {
+                [self.sections sortUsingComparator:^NSComparisonResult(ASAssetSection *a, ASAssetSection *b) {
+                    return [a.groupDate compare:b.groupDate];
+                }];
+            } break;
+
+            case ASAssetSortModeLargest: {
+                [self.sections sortUsingComparator:^NSComparisonResult(ASAssetSection *a, ASAssetSection *b) {
+                    uint64_t sa = [self cleanableBytesForSection:a];
+                    uint64_t sb = [self cleanableBytesForSection:b];
+                    if (sa == sb) return NSOrderedSame;
+                    return (sa > sb) ? NSOrderedAscending : NSOrderedDescending;
+                }];
+            } break;
+
+            case ASAssetSortModeSmallest: {
+                [self.sections sortUsingComparator:^NSComparisonResult(ASAssetSection *a, ASAssetSection *b) {
+                    uint64_t sa = [self cleanableBytesForSection:a];
+                    uint64_t sb = [self cleanableBytesForSection:b];
+                    if (sa == sb) return NSOrderedSame;
+                    return (sa < sb) ? NSOrderedAscending : NSOrderedDescending;
+                }];
+            } break;
+        }
+
+        // 分组标题序号重排
+        NSInteger idx = 1;
         for (ASAssetSection *sec in self.sections) {
-            sec.title = [NSString stringWithFormat:@"第 %ld 组（%lu）", (long)idx2, (unsigned long)sec.assets.count];
-            idx2++;
+            sec.title = [NSString stringWithFormat:@"第 %ld 组（%lu）", (long)idx, (unsigned long)sec.assets.count];
+            idx++;
+        }
+
+    } else {
+
+        ASAssetSection *sec = self.sections.firstObject;
+        if (!sec) return;
+
+        switch (self.sortMode) {
+
+            case ASAssetSortModeNewest: {
+                [sec.assets sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
+                    NSDate *da = [self dateForModel:a];
+                    NSDate *db = [self dateForModel:b];
+                    if (!da && !db) return NSOrderedSame;
+                    if (!da) return NSOrderedDescending;
+                    if (!db) return NSOrderedAscending;
+                    return [db compare:da]; // 新->旧
+                }];
+            } break;
+
+            case ASAssetSortModeOldest: {
+                [sec.assets sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
+                    NSDate *da = [self dateForModel:a];
+                    NSDate *db = [self dateForModel:b];
+                    if (!da && !db) return NSOrderedSame;
+                    if (!da) return NSOrderedDescending;
+                    if (!db) return NSOrderedAscending;
+                    return [da compare:db]; // 旧->新
+                }];
+            } break;
+
+            case ASAssetSortModeLargest: {
+                [sec.assets sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
+                    if (a.fileSizeBytes == b.fileSizeBytes) return NSOrderedSame;
+                    return (a.fileSizeBytes > b.fileSizeBytes) ? NSOrderedAscending : NSOrderedDescending;
+                }];
+            } break;
+
+            case ASAssetSortModeSmallest: {
+                [sec.assets sortUsingComparator:^NSComparisonResult(ASAssetModel *a, ASAssetModel *b) {
+                    if (a.fileSizeBytes == b.fileSizeBytes) return NSOrderedSame;
+                    return (a.fileSizeBytes < b.fileSizeBytes) ? NSOrderedAscending : NSOrderedDescending;
+                }];
+            } break;
         }
     }
+
+    [self recomputeGroupCardLeftWidth];
+    [self updateTopSortButtonUI];
+    [self.cv reloadData];
 }
 
 #pragma mark - Default selection rule
@@ -791,22 +1992,30 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.totalCleanableBytes = total;
     self.selectedBytes = selected;
 
-    self.totalLabel.text = [NSString stringWithFormat:@"总可清理：%@\n已选：%@",
-                            ASHumanSize(self.totalCleanableBytes),
-                            ASHumanSize(self.selectedBytes)];
-
-    BOOL canDelete = (self.selectedIds.count > 0);
-
     for (NSIndexPath *ip in self.cv.indexPathsForVisibleItems) {
         if (ip.section >= self.sections.count) continue;
-        ASAssetSection *sec = self.sections[ip.section];
-        if (ip.item >= sec.assets.count) continue;
 
-        ASAssetGridCell *cell = (ASAssetGridCell *)[self.cv cellForItemAtIndexPath:ip];
-        if (!cell) continue;
+        if ([self isGroupMode]) {
+            UICollectionViewCell *raw = [self.cv cellForItemAtIndexPath:ip];
+            if ([raw isKindOfClass:ASVideoGroupCardCell.class]) {
+                ASVideoGroupCardCell *cell = (ASVideoGroupCardCell *)raw;
+                cell.selectedIds = self.selectedIds;
+                [cell refreshSelectionUI];
+            } else if ([raw isKindOfClass:ASAssetGroupCardCell.class]) {
+                ASAssetGroupCardCell *cell = (ASAssetGroupCardCell *)raw;
+                cell.selectedIds = self.selectedIds;
+                [cell refreshSelectionUI];
+            }
+        } else {
+            ASAssetSection *sec = self.sections[ip.section];
+            if (ip.item >= sec.assets.count) continue;
 
-        ASAssetModel *m = sec.assets[ip.item];
-        [cell applySelected:[self.selectedIds containsObject:m.localId]];
+            ASAssetGridCell *cell = (ASAssetGridCell *)[self.cv cellForItemAtIndexPath:ip];
+            if (!cell) continue;
+
+            ASAssetModel *m = sec.assets[ip.item];
+            [cell applySelected:[self.selectedIds containsObject:m.localId]];
+        }
     }
 }
 
@@ -880,24 +2089,65 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 }
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    return self.sections[section].assets.count;
+    if ([self isGroupMode]) return 1;          // ✅ 一组一个卡片
+    return self.sections[section].assets.count; // 非分组保持原样
 }
 
 - (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    ASAssetGridCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ASAssetGridCell" forIndexPath:indexPath];
+
+    if ([self isGroupMode]) {
+        ASAssetSection *sec = self.sections[indexPath.section];
+        NSString *unit = [self isVideoMode] ? @"Videos" : @"Photos";
+        __weak typeof(self) weakSelf = self;
+
+        if ([self useVideoGroupStyle]) {
+            ASVideoGroupCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ASVideoGroupCardCell"
+                                                                                   forIndexPath:indexPath];
+            [cell bindModels:sec.assets
+                sectionIndex:indexPath.section
+                    unitText:unit
+                  selectedIds:self.selectedIds
+                   assetById:self.assetById
+                      imgMgr:self.imgMgr];
+
+            cell.onTapSelectAll = ^(NSInteger sectionIndex) { [weakSelf toggleSectionAll:sectionIndex]; };
+            cell.onToggleIndex  = ^(NSInteger sectionIndex, NSInteger modelIndex) { [weakSelf toggleOneModelAtSection:sectionIndex modelIndex:modelIndex]; };
+            cell.onPreviewIndex = ^(NSInteger sectionIndex, NSInteger modelIndex) { [weakSelf goPreviewSection:sectionIndex initialIndex:modelIndex]; };
+            return cell;
+        }
+
+        // ✅ 非视频：保持你原来的样式完全不变
+        ASAssetGroupCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ASAssetGroupCardCell"
+                                                                              forIndexPath:indexPath];
+        [cell bindModels:sec.assets
+            sectionIndex:indexPath.section
+                unitText:unit
+              selectedIds:self.selectedIds
+               assetById:self.assetById
+                  imgMgr:self.imgMgr
+              fixedLeftW:self.groupCardLeftW];
+
+        cell.onTapSelectAll = ^(NSInteger sectionIndex) { [weakSelf toggleSectionAll:sectionIndex]; };
+        cell.onToggleIndex  = ^(NSInteger sectionIndex, NSInteger modelIndex) { [weakSelf toggleOneModelAtSection:sectionIndex modelIndex:modelIndex]; };
+        cell.onPreviewIndex = ^(NSInteger sectionIndex, NSInteger modelIndex) { [weakSelf goPreviewSection:sectionIndex initialIndex:modelIndex]; };
+        return cell;
+    }
+
+    ASAssetGridCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ASAssetGridCell"
+                                                                      forIndexPath:indexPath];
     ASAssetModel *m = self.sections[indexPath.section].assets[indexPath.item];
 
-    cell.badge.text = ASTypeText(m.mediaType);
-    cell.sizeLabel.text = ASHumanSize(m.fileSizeBytes);
+//    cell.badge.text = ASTypeText(m.mediaType);
+//    cell.sizeLabel.text = ASHumanSize(m.fileSizeBytes);
+    cell.badge.text = @"";
+    cell.sizeLabel.text = @"";
 
     BOOL sel = [self.selectedIds containsObject:m.localId];
     [cell applySelected:sel];
 
-    // 先清空，避免复用闪旧图
     cell.img.image = nil;
     cell.representedLocalId = m.localId ?: @"";
 
-    // ✅ 关键：不再每个 cell fetch，一次性缓存里拿
     PHAsset *a = (m.localId.length ? self.assetById[m.localId] : nil);
     if (!a) return cell;
 
@@ -909,9 +2159,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     CGFloat scale = UIScreen.mainScreen.scale;
     CGSize viewSize = cell.img.bounds.size;
-    if (viewSize.width <= 1 || viewSize.height <= 1) {
-        viewSize = cell.contentView.bounds.size;
-    }
+    if (viewSize.width <= 1 || viewSize.height <= 1) viewSize = cell.contentView.bounds.size;
     CGSize target = CGSizeMake(viewSize.width * scale, viewSize.height * scale);
 
     __weak typeof(cell) weakCell = cell;
@@ -923,7 +2171,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                               options:opt
                         resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
         if (!result) return;
-
         dispatch_async(dispatch_get_main_queue(), ^{
             ASAssetGridCell *c = weakCell;
             if (!c) return;
@@ -933,6 +2180,81 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }];
 
     return cell;
+}
+
+- (NSArray<PHAsset *> *)phAssetsForSection:(ASAssetSection *)sec {
+    NSMutableArray<PHAsset *> *arr = [NSMutableArray array];
+    for (ASAssetModel *m in sec.assets) {
+        PHAsset *a = (m.localId.length ? self.assetById[m.localId] : nil);
+        if (a) [arr addObject:a];
+    }
+    return arr;
+}
+
+- (NSIndexSet *)selectedIndexSetForSection:(ASAssetSection *)sec {
+    NSMutableIndexSet *set = [NSMutableIndexSet indexSet];
+    for (NSInteger i = 0; i < (NSInteger)sec.assets.count; i++) {
+        ASAssetModel *m = sec.assets[i];
+        if (m.localId.length && [self.selectedIds containsObject:m.localId]) {
+            [set addIndex:i];
+        }
+    }
+    return set;
+}
+
+- (void)applySelectedFromPreviewIndexes:(NSIndexSet *)idxSet forSection:(ASAssetSection *)sec {
+    for (NSInteger i = 0; i < (NSInteger)sec.assets.count; i++) {
+        ASAssetModel *m = sec.assets[i];
+        if (m.localId.length) [self.selectedIds removeObject:m.localId];
+    }
+    [idxSet enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL * _Nonnull stop) {
+        if (idx >= (NSUInteger)sec.assets.count) return;
+        ASAssetModel *m = sec.assets[idx];
+        if (m.localId.length) [self.selectedIds addObject:m.localId];
+    }];
+}
+
+- (void)goPreviewSection:(NSInteger)sectionIndex initialIndex:(NSInteger)initialIndex {
+    if (sectionIndex < 0 || sectionIndex >= (NSInteger)self.sections.count) return;
+    ASAssetSection *sec = self.sections[sectionIndex];
+
+    NSArray<PHAsset *> *assets = [self phAssetsForSection:sec];
+    if (assets.count == 0) return;
+
+    NSIndexSet *preSel = [self selectedIndexSetForSection:sec];
+
+    ASMediaPreviewViewController *p =
+    [[ASMediaPreviewViewController alloc] initWithAssets:assets
+                                           initialIndex:MAX(0, MIN((NSInteger)assets.count - 1, initialIndex))
+                                        selectedIndexes:preSel];
+
+    p.bestIndex = 0;
+    p.showsBestBadge = YES;
+
+//    __weak typeof(self) weakSelf = self;
+//    p.onBack = ^(NSArray<PHAsset *> *selectedAssets, NSIndexSet *selectedIndexes) {
+//        // 用 indexSet 回写 selectedIds（保持 best 不选）
+//        [weakSelf applySelectedFromPreviewIndexes:selectedIndexes forSection:sec];
+//        [weakSelf recomputeBytesAndRefreshUI];
+//        [weakSelf syncNavSelectAllState];
+//    };
+
+    [self.navigationController pushViewController:p animated:YES];
+}
+
+- (void)toggleOneModelAtSection:(NSInteger)section modelIndex:(NSInteger)idx {
+    if (section < 0 || section >= (NSInteger)self.sections.count) return;
+    ASAssetSection *sec = self.sections[section];
+    if (idx < 0 || idx >= (NSInteger)sec.assets.count) return;
+
+    ASAssetModel *m = sec.assets[idx];
+    if (!m.localId.length) return;
+
+    if ([self.selectedIds containsObject:m.localId]) [self.selectedIds removeObject:m.localId];
+    else [self.selectedIds addObject:m.localId];
+
+    [self recomputeBytesAndRefreshUI];
+    [self syncNavSelectAllState];
 }
 
 #pragma mark - Selection (tap)
@@ -956,31 +2278,40 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.totalCleanableBytes = total;
     self.selectedBytes = selected;
 
-    // ✅ 数量
     [self recomputeCountsOnly];
     [self updateTopSummaryUI];
 
-    // ✅ 浮动删除按钮：未选中 -> 不显示；选中 -> 显示（数量 + 大小）
     NSUInteger selCount = self.selectedIds.count;
     BOOL show = (selCount > 0);
-
-    self.deleteBtn.hidden = !show;
-    self.deleteBtn.enabled = show;
-
+    
+    NSString *title = @"";
     if (show) {
-        NSString *title = [NSString stringWithFormat:@"删除  %lu 项 · %@",
-                           (unsigned long)selCount,
-                           ASHumanSize(self.selectedBytes)];
-        [self.deleteBtn setTitle:title forState:UIControlStateNormal];
-    } else {
-        [self.deleteBtn setTitle:@"" forState:UIControlStateNormal];
+        if ([self isVideoMode]) {
+            title = [NSString stringWithFormat:@"Delete %lu Videos (%@)",
+                     (unsigned long)selCount,
+                     ASHumanSize(self.selectedBytes)];
+        } else {
+            title = [NSString stringWithFormat:@"Delete %lu Photos (%@)",
+                     (unsigned long)selCount,
+                     ASHumanSize(self.selectedBytes)];
+        }
     }
 
-    // 触发布局更新（用于更新 collectionView 的 bottom inset）
-    [self.view setNeedsLayout];
+    [self as_noAnim:^{
+        self.bottomBar.hidden = !show;
+        self.deleteBtn.hidden = !show;
+        self.deleteBtn.enabled = show;
+        [self.deleteBtn setTitle:title forState:UIControlStateNormal];
+    }];
+
+    [self as_noAnim:^{
+        [self.view setNeedsLayout];
+        [self.view layoutIfNeeded];
+    }];
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+    if ([self isGroupMode]) return;
     [collectionView deselectItemAtIndexPath:indexPath animated:NO];
 
     ASAssetModel *m = self.sections[indexPath.section].assets[indexPath.item];
@@ -994,6 +2325,14 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 }
 
 - (void)updateOneCell:(NSIndexPath *)ip {
+    if ([self isGroupMode]) {
+        ASAssetGroupCardCell *cell = (ASAssetGroupCardCell *)[self.cv cellForItemAtIndexPath:ip];
+        if (![cell isKindOfClass:ASAssetGroupCardCell.class]) return;
+        cell.selectedIds = self.selectedIds;
+        [cell refreshSelectionUI];
+        return;
+    }
+
     ASAssetGridCell *cell = (ASAssetGridCell *)[self.cv cellForItemAtIndexPath:ip];
     if (!cell) return;
     ASAssetModel *m = self.sections[ip.section].assets[ip.item];
@@ -1003,6 +2342,14 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 #pragma mark - Layout (3 columns)
 
 - (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
+
+    if ([self isGroupMode]) {
+        UIEdgeInsets inset = ((UICollectionViewFlowLayout *)layout).sectionInset;
+        CGFloat w = collectionView.bounds.size.width - inset.left - inset.right;
+        CGFloat h = [self useVideoGroupStyle] ? 262 : 214;
+        return CGSizeMake(floor(w), h);
+    }
+
     UIEdgeInsets inset = ((UICollectionViewFlowLayout *)layout).sectionInset;
     CGFloat gap = ((UICollectionViewFlowLayout *)layout).minimumInteritemSpacing;
     CGFloat w = collectionView.bounds.size.width - inset.left - inset.right;
@@ -1015,6 +2362,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 - (UICollectionReusableView *)collectionView:(UICollectionView *)collectionView
            viewForSupplementaryElementOfKind:(NSString *)kind
                                  atIndexPath:(NSIndexPath *)indexPath {
+    if ([self isGroupMode]) return [UICollectionReusableView new];
+
     if (![kind isEqualToString:UICollectionElementKindSectionHeader]) return [UICollectionReusableView new];
 
     ASAssetSectionHeader *h = [collectionView dequeueReusableSupplementaryViewOfKind:kind
@@ -1033,12 +2382,16 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     return h;
 }
 
+- (BOOL)collectionView:(UICollectionView *)collectionView shouldSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+    if ([self isGroupMode]) return NO;
+    return YES;
+}
+
 - (CGSize)collectionView:(UICollectionView *)collectionView
                   layout:(UICollectionViewLayout *)layout
 referenceSizeForHeaderInSection:(NSInteger)section {
-    if ([self isGroupMode]) {
-        return CGSizeMake(collectionView.bounds.size.width, 44);
-    }
-    return CGSizeZero;
+    if ([self isGroupMode]) return CGSizeZero;
+    return [self isGroupMode] ? CGSizeMake(collectionView.bounds.size.width, 44) : CGSizeZero;
 }
+
 @end
