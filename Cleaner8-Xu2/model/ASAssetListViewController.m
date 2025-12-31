@@ -2347,8 +2347,13 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    if ([self isGroupMode]) return;
     [collectionView deselectItemAtIndexPath:indexPath animated:NO];
+
+    if ([self isGroupMode]) {
+        [self goPreviewSection:indexPath.section initialIndex:0];
+        return;
+    }
+
     [self goPreviewSingle:indexPath];
 }
 
@@ -2448,7 +2453,6 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 }
 
 - (BOOL)collectionView:(UICollectionView *)collectionView shouldSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    if ([self isGroupMode]) return NO;
     return YES;
 }
 

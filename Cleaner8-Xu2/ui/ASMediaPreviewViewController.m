@@ -987,11 +987,8 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     return arr;
 }
 
-- (void)onTapBack {
-    if (self.didSendBackCallback) {
-        [self.navigationController popViewControllerAnimated:YES];
-        return;
-    }
+- (void)sendBackIfNeeded {
+    if (self.didSendBackCallback) return;
     self.didSendBackCallback = YES;
 
     NSIndexSet *idxs = [self.selected copy];
@@ -999,8 +996,20 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     if (self.onBack) self.onBack(assets, idxs);
     if (self.onSelectionChanged) self.onSelectionChanged(idxs);
+}
 
+- (void)onTapBack {
+    [self sendBackIfNeeded];
     [self.navigationController popViewControllerAnimated:YES];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+
+    // ✅ 手势返回 / interactive pop 会走这里
+    if (self.isMovingFromParentViewController || self.isBeingDismissed) {
+        [self sendBackIfNeeded];
+    }
 }
 
 #pragma mark - Top texts & overlays
