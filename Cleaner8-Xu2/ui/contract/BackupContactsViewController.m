@@ -1,18 +1,138 @@
 #import "BackupContactsViewController.h"
-#import "ASCustomNavBar.h"
-#import "ContactCell.h"
 #import "ContactsManager.h"
 #import "AllContactsViewController.h"
+#import "ASSelectTitleBar.h"
+#import <UIKit/UIKit.h>
+
+#pragma mark - UI Helpers
+
+static inline UIColor *ASACRGB(CGFloat r, CGFloat g, CGFloat b) {
+    return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
+}
+static inline UIColor *ASACBlue(void) {      // #024DFFFF
+    return [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
+}
+static inline UIColor *ASACGray666(void) {   // #666666FF
+    return [UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0];
+}
+static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:size weight:weight];
+}
+
+#pragma mark - Cell
+
+@interface ASBackupInfoCell : UICollectionViewCell
+@property (nonatomic, copy) void (^onSelectTap)(void);
+
+@property (nonatomic, strong) UILabel *dateLabel;   // Dec 24,2025
+@property (nonatomic, strong) UILabel *subLabel;    // 4 Contacts | 10:10am
+@property (nonatomic, strong) UIButton *selectButton;
+
+- (void)configDateText:(NSString *)dateText
+               subText:(NSString *)subText
+              selected:(BOOL)selected;
+@end
+
+@implementation ASBackupInfoCell
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self = [super initWithFrame:frame]) {
+
+        self.contentView.backgroundColor = UIColor.whiteColor;
+        self.contentView.layer.cornerRadius = 16;
+        self.contentView.layer.masksToBounds = YES;
+
+        self.dateLabel = [UILabel new];
+        self.dateLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        self.dateLabel.font = ASACFont(24, UIFontWeightMedium);
+        self.dateLabel.textColor = UIColor.blackColor;
+        self.dateLabel.numberOfLines = 1;
+        [self.contentView addSubview:self.dateLabel];
+
+        self.subLabel = [UILabel new];
+        self.subLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        self.subLabel.font = ASACFont(17, UIFontWeightRegular);
+        self.subLabel.textColor = ASACGray666();
+        self.subLabel.numberOfLines = 1;
+        [self.contentView addSubview:self.subLabel];
+
+        self.selectButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        self.selectButton.translatesAutoresizingMaskIntoConstraints = NO;
+        self.selectButton.adjustsImageWhenHighlighted = NO;
+        self.selectButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
+        self.selectButton.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10); // 放大点击区域，图标仍 24
+        self.selectButton.exclusiveTouch = YES;
+        [self.selectButton addTarget:self action:@selector(onSelectButtonTap) forControlEvents:UIControlEventTouchUpInside];
+        [self.contentView addSubview:self.selectButton];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [self.dateLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:20],
+            [self.dateLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectButton.leadingAnchor constant:-12],
+            [self.dateLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:18],
+
+            [self.subLabel.leadingAnchor constraintEqualToAnchor:self.dateLabel.leadingAnchor],
+            [self.subLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.dateLabel.trailingAnchor],
+            [self.subLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-18],
+            [self.subLabel.topAnchor constraintGreaterThanOrEqualToAnchor:self.dateLabel.bottomAnchor constant:7],
+
+            [self.selectButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-20],
+            [self.selectButton.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+            [self.selectButton.widthAnchor constraintEqualToConstant:44],
+            [self.selectButton.heightAnchor constraintEqualToConstant:44],
+        ]];
+    }
+    return self;
+}
+
+- (void)updateSelectedState:(BOOL)selected {
+    NSString *iconName = selected ? @"ic_select_s" : @"ic_select_gray_n";
+    UIImage *img = [[UIImage imageNamed:iconName] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+
+    [UIView performWithoutAnimation:^{
+        [self.selectButton setImage:img forState:UIControlStateNormal];
+        [self.selectButton layoutIfNeeded];
+    }];
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.onSelectTap = nil;
+}
+
+- (void)onSelectButtonTap {
+    if (self.onSelectTap) self.onSelectTap();
+}
+
+- (void)configDateText:(NSString *)dateText
+               subText:(NSString *)subText
+              selected:(BOOL)selected {
+    self.dateLabel.text = dateText ?: @"";
+    self.subLabel.text = subText ?: @"";
+    [self updateSelectedState:selected];
+}
+
+@end
+
+#pragma mark - VC
 
 @interface BackupContactsViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
-@property (nonatomic, strong) ASCustomNavBar *navBar;
-@property (nonatomic, strong) UICollectionView *cv;
-@property (nonatomic, strong) NSArray<CMBackupInfo *> *backups;
 @property (nonatomic, strong) ContactsManager *contactsManager;
+@property (nonatomic, strong) NSArray<CMBackupInfo *> *backups;
 
-// 空态
+@property (nonatomic, strong) UIImageView *bgTop;
+
+@property (nonatomic, strong) ASSelectTitleBar *titleBar;
+
+@property (nonatomic, strong) UICollectionView *cv;
+
+@property (nonatomic, strong) UIButton *addBackupsButton;
+
+@property (nonatomic, strong) NSMutableSet<NSString *> *selectedBackupIds;
+
 @property (nonatomic, strong) UIView *emptyView;
-@property (nonatomic, strong) UIButton *goBackupButton;
+@property (nonatomic, strong) UIImageView *emptyImage;
+@property (nonatomic, strong) UILabel *emptyTitle;
+
 @end
 
 @implementation BackupContactsViewController
@@ -20,21 +140,22 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = UIColor.whiteColor;
+    self.view.backgroundColor = ASACRGB(246, 248, 251);
     self.contactsManager = [ContactsManager shared];
-    
+    self.backups = @[];
+    self.selectedBackupIds = [NSMutableSet set];
+
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(onBackupDidFinish)
                                                  name:@"CMBackupDidFinish"
                                                object:nil];
 
-    [self setupNavBar];
-    [self setupUI];
+    [self buildBackground];
+    [self setupTitleBar];
+    [self setupCollectionView];
+    [self setupBottomButton];
     [self setupEmptyView];
-    [self loadBackups];
-}
 
-- (void)onBackupDidFinish {
     [self loadBackups];
 }
 
@@ -44,59 +165,195 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    // 从备份/恢复页返回后刷新列表
+    self.navigationController.navigationBarHidden = YES;
     [self loadBackups];
 }
 
-- (void)setupNavBar {
-    self.navBar = [[ASCustomNavBar alloc] initWithTitle:@"备份联系人"];
-    __weak typeof(self) weakSelf = self;
-    self.navBar.onBack = ^{ [weakSelf.navigationController popViewControllerAnimated:YES]; };
-    [self.navBar setShowRightButton:NO];
-    [self.view addSubview:self.navBar];
+- (void)onBackupDidFinish {
+    [self loadBackups];
 }
 
-- (void)setupUI {
-    UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
-    layout.minimumInteritemSpacing = 8;
-    layout.minimumLineSpacing = 8;
-    layout.sectionInset = UIEdgeInsetsMake(10, 16, 10, 16);
-    layout.itemSize = CGSizeMake(self.view.bounds.size.width - 32, 60);
+#pragma mark - UI
 
-    self.cv = [[UICollectionView alloc] initWithFrame:self.view.bounds collectionViewLayout:layout];
-    self.cv.backgroundColor = UIColor.whiteColor;
+- (void)buildBackground {
+    self.bgTop = [UIImageView new];
+    self.bgTop.translatesAutoresizingMaskIntoConstraints = NO;
+    self.bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
+    self.bgTop.contentMode = UIViewContentModeScaleAspectFill;
+    self.bgTop.clipsToBounds = YES;
+    self.bgTop.userInteractionEnabled = NO;
+    [self.view insertSubview:self.bgTop atIndex:0];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.bgTop.heightAnchor constraintEqualToConstant:360],
+    ]];
+}
+
+- (void)setupTitleBar {
+    __weak typeof(self) weakSelf = self;
+
+    self.titleBar = [[ASSelectTitleBar alloc] initWithTitle:@"Backups"];
+    self.titleBar.showTitle = YES;
+    self.titleBar.showSelectButton = YES;
+    self.titleBar.onBack = ^{
+        [weakSelf.navigationController popViewControllerAnimated:YES];
+    };
+    
+    self.titleBar.onToggleSelectAll = ^(BOOL __unused allSelected) {
+        if ([weakSelf isAllSelectedInBackups]) {
+            [weakSelf deselectAllBackups];
+        } else {
+            [weakSelf selectAllBackups];
+        }
+        [weakSelf syncTopSelectState];
+        [weakSelf updateBottomButtonState];
+
+        [UIView performWithoutAnimation:^{
+            [weakSelf.cv reloadData];
+        }];
+    };
+
+    [self.view addSubview:self.titleBar];
+}
+
+- (void)updateBottomButtonState {
+    NSUInteger n = self.selectedBackupIds.count;
+    if (n == 0) {
+        [self.addBackupsButton setTitle:@"Add Backups" forState:UIControlStateNormal];
+    } else {
+        NSString *t = [NSString stringWithFormat:@"Delete %lu Backups", (unsigned long)n];
+        [self.addBackupsButton setTitle:t forState:UIControlStateNormal];
+    }
+}
+
+- (NSSet<NSString *> *)allBackupIdsSet {
+    NSMutableSet *set = [NSMutableSet set];
+    for (CMBackupInfo *i in self.backups) {
+        if (i.backupId.length) [set addObject:i.backupId];
+    }
+    return set;
+}
+
+- (BOOL)isAllSelectedInBackups {
+    NSSet *all = [self allBackupIdsSet];
+    return (all.count > 0) && (self.selectedBackupIds.count == all.count);
+}
+
+- (void)selectAllBackups {
+    [self.selectedBackupIds removeAllObjects];
+    [self.selectedBackupIds unionSet:[self allBackupIdsSet]];
+}
+
+- (void)deselectAllBackups {
+    [self.selectedBackupIds removeAllObjects];
+}
+
+- (void)syncTopSelectState {
+    BOOL hasBackups = (self.backups.count > 0);
+    self.titleBar.showSelectButton = hasBackups;
+    self.titleBar.allSelected = hasBackups ? [self isAllSelectedInBackups] : NO;
+}
+
+- (void)setupCollectionView {
+    UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
+    layout.minimumLineSpacing = 10;
+    layout.minimumInteritemSpacing = 10;
+    layout.sectionInset = UIEdgeInsetsMake(10, 20, 10, 20);
+
+    self.cv = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
+    self.cv.backgroundColor = UIColor.clearColor;
     self.cv.dataSource = self;
     self.cv.delegate = self;
-    [self.cv registerClass:[ContactCell class] forCellWithReuseIdentifier:@"ContactCell"];
+    self.cv.showsVerticalScrollIndicator = NO;
+    if (@available(iOS 11.0, *)) {
+        self.cv.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    }
+
+    [self.cv registerClass:[ASBackupInfoCell class] forCellWithReuseIdentifier:@"ASBackupInfoCell"];
     [self.view addSubview:self.cv];
 
-    // ✅ 底部固定“去备份”按钮（无论是否有备份都显示）
-    self.goBackupButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.goBackupButton setTitle:@"去备份" forState:UIControlStateNormal];
-    self.goBackupButton.backgroundColor = [UIColor systemBlueColor];
-    [self.goBackupButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    self.goBackupButton.layer.cornerRadius = 12;
-    self.goBackupButton.clipsToBounds = YES;
-    [self.goBackupButton addTarget:self action:@selector(onGoBackup) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.goBackupButton];
+    // 顶部留 20 的滚动内边距（和你上面页面一致）
+    self.cv.contentInset = UIEdgeInsetsMake(20, 0, 0, 0);
+    self.cv.scrollIndicatorInsets = self.cv.contentInset;
+}
+
+- (UIButton *)buildPillButtonWithTitle:(NSString *)title bg:(UIColor *)bg {
+    UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
+    b.backgroundColor = bg;
+    [b setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    [b setTitle:title forState:UIControlStateNormal];
+    b.titleLabel.font = ASACFont(20, UIFontWeightRegular);
+    b.titleLabel.textAlignment = NSTextAlignmentCenter;
+    b.contentEdgeInsets = UIEdgeInsetsMake(22, 22, 22, 22); // 同 AllContacts
+    return b;
+}
+
+- (void)setupBottomButton {
+    self.addBackupsButton = [self buildPillButtonWithTitle:@"Add Backups" bg:ASACBlue()];
+    [self.addBackupsButton addTarget:self action:@selector(onBottomButtonTap) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.addBackupsButton];
+}
+
+- (void)onBottomButtonTap {
+    if (self.selectedBackupIds.count == 0) {
+        [self onAddBackups];
+        return;
+    }
+    [self confirmDeleteSelectedBackups];
+}
+
+- (void)confirmDeleteSelectedBackups {
+    NSUInteger n = self.selectedBackupIds.count;
+    if (n == 0) return;
+
+    __weak typeof(self) weakSelf = self;
+    NSString *msg = [NSString stringWithFormat:@"Are you sure you want to delete %lu backups?", (unsigned long)n];
+
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Delete Backups"
+                                                                message:msg
+                                                         preferredStyle:UIAlertControllerStyleAlert];
+    [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [ac addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
+
+        NSArray<NSString *> *ids = weakSelf.selectedBackupIds.allObjects;
+        [weakSelf.contactsManager deleteBackupsWithIds:ids completion:^(NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"delete backups failed: %@", error.localizedDescription);
+                return;
+            }
+            [weakSelf.selectedBackupIds removeAllObjects];
+            [weakSelf loadBackups]; 
+        }];
+    }]];
+
+    [self presentViewController:ac animated:YES completion:nil];
 }
 
 - (void)setupEmptyView {
-    self.emptyView = [[UIView alloc] initWithFrame:CGRectZero];
+    self.emptyView = [UIView new];
     self.emptyView.hidden = YES;
-
-    UILabel *tip = [[UILabel alloc] initWithFrame:CGRectZero];
-    tip.text = @"暂无备份";
-    tip.textAlignment = NSTextAlignmentCenter;
-    tip.textColor = [UIColor darkGrayColor];
-    tip.font = [UIFont systemFontOfSize:16];
-
-    [self.emptyView addSubview:tip];
     [self.view addSubview:self.emptyView];
+
+    self.emptyImage = [UIImageView new];
+    self.emptyImage.image = [UIImage imageNamed:@"ic_no_contact"];
+    self.emptyImage.contentMode = UIViewContentModeScaleAspectFit;
+    [self.emptyView addSubview:self.emptyImage];
+
+    self.emptyTitle = [UILabel new];
+    self.emptyTitle.text = @"No Content";
+    self.emptyTitle.textColor = UIColor.blackColor;
+    self.emptyTitle.font = ASACFont(24, UIFontWeightMedium);
+    self.emptyTitle.textAlignment = NSTextAlignmentCenter;
+    self.emptyTitle.numberOfLines = 1;
+    [self.emptyView addSubview:self.emptyTitle];
 }
 
+#pragma mark - Data
 
-- (void)onGoBackup {
+- (void)onAddBackups {
     AllContactsViewController *vc =
     [[AllContactsViewController alloc] initWithMode:AllContactsModeBackup backupId:nil];
     [self.navigationController pushViewController:vc animated:YES];
@@ -106,15 +363,25 @@
     __weak typeof(self) weakSelf = self;
     [self.contactsManager fetchBackupList:^(NSArray<CMBackupInfo *> * _Nullable backups, NSError * _Nullable error) {
         if (error) {
-            NSLog(@"读取备份列表失败: %@", error.localizedDescription);
             weakSelf.backups = @[];
+            [weakSelf.selectedBackupIds removeAllObjects];
             [weakSelf.cv reloadData];
             [weakSelf updateEmptyState];
+            [weakSelf syncTopSelectState];
+            [weakSelf updateBottomButtonState];
             return;
         }
         weakSelf.backups = backups ?: @[];
+        NSMutableSet *valid = [NSMutableSet set];
+        for (CMBackupInfo *i in weakSelf.backups) {
+            if (i.backupId.length) [valid addObject:i.backupId];
+        }
+        [weakSelf.selectedBackupIds intersectSet:valid];
+
         [weakSelf.cv reloadData];
         [weakSelf updateEmptyState];
+        [weakSelf syncTopSelectState];
+        [weakSelf updateBottomButtonState];
     }];
 }
 
@@ -123,43 +390,99 @@
     self.cv.hidden = empty;
     self.emptyView.hidden = !empty;
 
-    // ✅ “去备份”永远可用
-    self.goBackupButton.hidden = NO;
-    self.goBackupButton.enabled = YES;
-    self.goBackupButton.alpha = 1.0;
+    self.addBackupsButton.hidden = NO;
+    self.addBackupsButton.enabled = YES;
+    self.addBackupsButton.alpha = 1.0;
+    [self syncTopSelectState];
+    [self updateBottomButtonState];
 }
 
+#pragma mark - Format
+
+- (NSString *)dateStringForBackup:(CMBackupInfo *)info {
+    NSDate *d = info.date ?: [NSDate date];
+    NSDateFormatter *fmt = [NSDateFormatter new];
+    fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    fmt.dateFormat = @"MMM dd,yyyy"; // Dec 24,2025
+    return [fmt stringFromDate:d];
+}
+
+- (NSString *)timeStringForBackup:(CMBackupInfo *)info {
+    NSDate *d = info.date ?: [NSDate date];
+    NSDateFormatter *fmt = [NSDateFormatter new];
+    fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    fmt.dateFormat = @"h:mma";       // 10:10AM
+    return [[fmt stringFromDate:d] lowercaseString]; // 10:10am
+}
 
 #pragma mark - UICollectionView
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
+    (void)collectionView; (void)section;
     return self.backups.count;
 }
 
 - (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    ContactCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ContactCell" forIndexPath:indexPath];
+    ASBackupInfoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ASBackupInfoCell" forIndexPath:indexPath];
 
     CMBackupInfo *info = self.backups[indexPath.item];
+    NSString *dateText = [self dateStringForBackup:info];
 
-    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
-    fmt.locale = [NSLocale localeWithLocaleIdentifier:@"zh_CN"];
-    fmt.dateFormat = @"yyyy-MM-dd HH:mm:ss";
+    NSString *timeText = [self timeStringForBackup:info];
+    NSString *subText = [NSString stringWithFormat:@"%lu Contacts | %@", (unsigned long)info.count, timeText];
 
-    cell.nameLabel.text = [fmt stringFromDate:info.date ?: [NSDate date]];
-    cell.phoneLabel.text = [NSString stringWithFormat:@"数量：%lu", (unsigned long)info.count];
+    BOOL selected = (info.backupId.length > 0) && [self.selectedBackupIds containsObject:info.backupId];
+    [cell configDateText:dateText subText:subText selected:selected];
 
-    // 列表不需要勾选
-    cell.checkButton.hidden = YES;
-    cell.onSelect = nil;
+    __weak typeof(self) weakSelf = self;
+    __weak typeof(cell) weakCell = cell;
+
+    cell.onSelectTap = ^{
+        __strong typeof(weakSelf) self2 = weakSelf;
+        if (!self2) return;
+
+        NSIndexPath *ip = [self2.cv indexPathForCell:weakCell];
+        if (!ip || ip.item >= self2.backups.count) return;
+
+        CMBackupInfo *info2 = self2.backups[ip.item];
+        if (info2.backupId.length == 0) return;
+
+        BOOL nowSelected = NO;
+        if ([self2.selectedBackupIds containsObject:info2.backupId]) {
+            [self2.selectedBackupIds removeObject:info2.backupId];
+            nowSelected = NO;
+        } else {
+            [self2.selectedBackupIds addObject:info2.backupId];
+            nowSelected = YES;
+        }
+
+        ASBackupInfoCell *visibleCell = (ASBackupInfoCell *)[self2.cv cellForItemAtIndexPath:ip];
+        [visibleCell updateSelectedState:nowSelected];
+
+        [self2 syncTopSelectState];
+        [self2 updateBottomButtonState];
+    };
 
     return cell;
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    CMBackupInfo *info = self.backups[indexPath.item];
+    [collectionView deselectItemAtIndexPath:indexPath animated:YES];
 
-    AllContactsViewController *vc = [[AllContactsViewController alloc] initWithMode:AllContactsModeRestore backupId:info.backupId];
+    CMBackupInfo *info = self.backups[indexPath.item];
+    AllContactsViewController *vc =
+    [[AllContactsViewController alloc] initWithMode:AllContactsModeRestore backupId:info.backupId];
     [self.navigationController pushViewController:vc animated:YES];
+}
+
+#pragma mark - FlowLayout
+
+- (CGSize)collectionView:(UICollectionView *)collectionView
+                  layout:(UICollectionViewLayout *)collectionViewLayout
+  sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
+    (void)collectionViewLayout; (void)indexPath;
+    CGFloat w = collectionView.bounds.size.width - 40; // 左右 20
+    return CGSizeMake(w, 84); // 18 + 24 + 7 + 17 + 18 ≈ 84
 }
 
 #pragma mark - Layout
@@ -167,27 +490,45 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
 
-    CGFloat navH = 44 + self.view.safeAreaInsets.top;
-    self.navBar.frame = CGRectMake(0, 0, self.view.bounds.size.width, navH);
+    CGFloat W = self.view.bounds.size.width;
+    CGFloat H = self.view.bounds.size.height;
+    CGFloat safeTop = self.view.safeAreaInsets.top;
+    CGFloat safeBottom = self.view.safeAreaInsets.bottom;
 
-    // 底部按钮高度
-    CGFloat btnH = 44;
-    CGFloat bottomPadding = self.view.safeAreaInsets.bottom;
-    CGFloat btnY = self.view.bounds.size.height - bottomPadding - btnH - 12;
+    CGFloat navH = 44 + safeTop;
+    self.titleBar.frame = CGRectMake(0, 0, W, navH);
 
-    self.goBackupButton.frame = CGRectMake(16, btnY, self.view.bounds.size.width - 32, btnH);
+    CGFloat pagePad = 20.0;
+    CGFloat btnH = 64;
+    CGFloat btnY = H - safeBottom - btnH;
+    self.addBackupsButton.frame = CGRectMake(pagePad, btnY, W - pagePad*2, btnH);
+    self.addBackupsButton.layer.cornerRadius = btnH * 0.5;
 
-    // collectionView 留出按钮空间
-    CGFloat cvH = btnY - navH - 12;
-    self.cv.frame = CGRectMake(0, navH, self.view.bounds.size.width, cvH);
+    CGFloat listY = navH;
+    self.cv.frame = CGRectMake(0, listY, W, H - listY);
 
-    // emptyView 与 cv 同区域（按钮在下方）
-    self.emptyView.frame = CGRectMake(0, navH, self.view.bounds.size.width, cvH);
+    UIEdgeInsets insets = self.cv.contentInset;
+    insets.top = 20.0;
+    insets.bottom = safeBottom + btnH + 20.0;
+    self.cv.contentInset = insets;
+    self.cv.scrollIndicatorInsets = insets;
 
-    // 居中提示
-    UILabel *tip = (UILabel *)self.emptyView.subviews.firstObject;
-    tip.frame = CGRectMake(0, (self.emptyView.bounds.size.height - 30)/2.0,
-                           self.emptyView.bounds.size.width, 30);
+    self.emptyView.frame = CGRectMake(0, listY, W, H - listY - (btnH + safeBottom));
+
+    if (!self.emptyView.hidden) {
+        CGSize img = CGSizeMake(182, 168);
+        CGFloat centerY = self.emptyView.bounds.size.height * 0.5;
+
+        CGFloat imgY = centerY - img.height * 0.5 - 18;
+        self.emptyImage.frame = CGRectMake((W - img.width) * 0.5,
+                                           imgY,
+                                           img.width,
+                                           img.height);
+
+        CGFloat titleY = CGRectGetMaxY(self.emptyImage.frame) + 2;
+        self.emptyTitle.frame = CGRectMake(20, titleY, W - 40, 30);
+    }
+
 }
 
 @end

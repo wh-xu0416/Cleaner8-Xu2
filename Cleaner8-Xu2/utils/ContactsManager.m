@@ -1401,6 +1401,54 @@ static inline BOOL CMIsEmptyStr(NSString *s) {
     dst.postalAddresses = addrDict.allValues;
 }
 
+- (void)deleteBackupsWithIds:(NSArray<NSString *> *)backupIds completion:(CMVoidBlock)completion {
+    dispatch_async(self.workQueue, ^{
+        if (backupIds.count == 0) {
+            NSError *e = [NSError errorWithDomain:@"ContactsManager"
+                                             code:130
+                                         userInfo:@{NSLocalizedDescriptionKey:@"No backupIds to delete"}];
+            dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(e); });
+            return;
+        }
+
+        [self _ensureBackupDir];
+
+        // 1) 删文件（best-effort）
+        for (NSString *bid in backupIds) {
+            if (![bid isKindOfClass:[NSString class]] || bid.length == 0) continue;
+            NSURL *u = [self _backupFileURL:bid];
+            [[NSFileManager defaultManager] removeItemAtURL:u error:nil];
+        }
+
+        // 2) 更新 index.json
+        NSError *err = nil;
+        NSDictionary *idx = [self _readBackupIndex];
+        NSMutableArray *arr = [idx[@"backups"] mutableCopy];
+        if (![arr isKindOfClass:[NSMutableArray class]]) arr = [NSMutableArray array];
+
+        NSSet *rmSet = [NSSet setWithArray:backupIds];
+
+        NSIndexSet *rm = [arr indexesOfObjectsPassingTest:^BOOL(NSDictionary *obj, NSUInteger i, BOOL *stop) {
+            (void)i; (void)stop;
+            NSString *bid = [obj isKindOfClass:[NSDictionary class]] ? obj[@"backupId"] : nil;
+            return (bid.length > 0) && [rmSet containsObject:bid];
+        }];
+        if (rm.count > 0) [arr removeObjectsAtIndexes:rm];
+
+        NSMutableDictionary *newIdx = [idx mutableCopy];
+        if (![newIdx isKindOfClass:[NSMutableDictionary class]]) newIdx = [NSMutableDictionary dictionary];
+        newIdx[@"backups"] = arr;
+
+        BOOL ok = [self _writeBackupIndex:newIdx error:&err];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:CMBackupsDidChangeNotification object:nil];
+            if (!ok) { if (completion) completion(err); }
+            else { if (completion) completion(nil); }
+        });
+    });
+}
+
 - (void)restoreContactsOverwriteAllFromBackupId:(NSString *)backupId
                         contactIndicesInBackup:(NSArray<NSNumber *> *)indices
                                     completion:(CMVoidBlock)completion {

@@ -118,6 +118,9 @@ FOUNDATION_EXPORT NSString * const CMBackupsDidChangeNotification;
 /// 9 删除不完整联系人（批量，传 identifier 列表；删除会同步手机+云端，不可撤销）
 - (void)deleteIncompleteContactsWithIdentifiers:(NSArray<NSString *> *)identifiers
                                      completion:(CMVoidBlock)completion;
+
+- (void)deleteBackupsWithIds:(NSArray<NSString *> *)backupIds completion:(CMVoidBlock)completion;
+
 @end
 
 NS_ASSUME_NONNULL_END
