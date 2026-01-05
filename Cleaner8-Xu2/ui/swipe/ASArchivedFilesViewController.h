@@ -2,8 +2,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface SwipeViewController : UIViewController
-
+@interface ASArchivedFilesViewController : UIViewController
 @end
 
 NS_ASSUME_NONNULL_END

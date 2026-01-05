@@ -5,6 +5,7 @@
 #import "SecretViewController.h"
 #import "SwipeViewController.h"
 #import "MoreViewController.h"
+#import "SwipeManager.h"
 
 @interface MainTabBarController ()
 <
@@ -32,7 +33,7 @@ UIGestureRecognizerDelegate
 
     self.viewControllers = @[
         [self navWithVC:[HomeViewController new]   title:@"Cleaner" image:@""],
-        [self navWithVC:[VideoViewController new]    title:@"Video" image:@""],
+        [self navWithVC:[VideoViewController new]    title:@"Compress" image:@""],
         [self navWithVC:[SwipeViewController new]    title:@"Swipe" image:@""],
         [self navWithVC:[SecretViewController new] title:@"Private" image:@""],
         [self navWithVC:[MoreViewController new]    title:@"More" image:@""],
@@ -42,7 +43,7 @@ UIGestureRecognizerDelegate
 
     self.floatingTab = [[ASFloatingTabBar alloc] initWithItems:@[
         [ASFloatingTabBarItem itemWithTitle:@"Cleaner" normal:@"ic_cleaner_n" selected:@"ic_cleaner_s"],
-        [ASFloatingTabBarItem itemWithTitle:@"Video" normal:@"ic_video_n"  selected:@"ic_video_s"],
+        [ASFloatingTabBarItem itemWithTitle:@"Compress" normal:@"ic_video_n"  selected:@"ic_video_s"],
         [ASFloatingTabBarItem itemWithTitle:@"Swipe" normal:@"ic_swipe_n" selected:@"ic_swipe_s"],
         [ASFloatingTabBarItem itemWithTitle:@"Private" normal:@"ic_private_n" selected:@"ic_private_s"],
         [ASFloatingTabBarItem itemWithTitle:@"More" normal:@"ic_more_n" selected:@"ic_more_s"],
