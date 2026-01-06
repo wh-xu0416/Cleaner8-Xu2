@@ -32,7 +32,7 @@ FOUNDATION_EXPORT NSString * const SwipeManagerDidUpdateNotification;
 + (instancetype)shared;
 
 @property (nonatomic, strong, readonly) NSArray<SwipeModule *> *modules;
-/// 模块“处理到哪里了”：记录当前待处理（未处理）的 assetID
+/// 记录当前待处理（未处理）的 assetID
 - (nullable NSString *)currentUnprocessedAssetIDForModuleID:(NSString *)moduleID;
 - (void)setCurrentUnprocessedAssetID:(nullable NSString *)assetID forModuleID:(NSString *)moduleID;
 
@@ -41,6 +41,7 @@ FOUNDATION_EXPORT NSString * const SwipeManagerDidUpdateNotification;
 
 /// 重新扫描并生成模块（内部会清理已不存在的状态、更新随机20）
 - (void)reloadModules;
+- (uint64_t)archivedBytesInModule:(SwipeModule *)module;
 
 /// 状态读写
 - (SwipeAssetStatus)statusForAssetID:(NSString *)assetID;
@@ -64,7 +65,7 @@ FOUNDATION_EXPORT NSString * const SwipeManagerDidUpdateNotification;
 /// 归档总大小（去重）— 读取缓存值（归档/撤销时会更新）
 - (unsigned long long)totalArchivedBytesCached;
 
-/// 异步刷新归档总大小（对缓存做一次校验/补齐，可能较慢）
+/// 异步刷新归档总大小（对缓存做一次校验/补齐）
 - (void)refreshArchivedBytesIfNeeded:(void(^)(unsigned long long bytes))completion;
 
 /// 获取 PHAsset（常用）
@@ -74,7 +75,7 @@ FOUNDATION_EXPORT NSString * const SwipeManagerDidUpdateNotification;
 /// 模块排序设置（会持久化模块排序偏好）
 - (void)setSortAscending:(BOOL)ascending forModuleID:(NSString *)moduleID;
 
-/// 模块 undo：无限撤回（只在内存中维护栈；状态本身会持久化）
+/// 模块 undo：撤回（只在内存中维护栈；状态本身会持久化）
 - (BOOL)undoLastActionInModuleID:(NSString *)moduleID;
 
 /// 归档资产ID集合（去重）
@@ -82,6 +83,11 @@ FOUNDATION_EXPORT NSString * const SwipeManagerDidUpdateNotification;
 
 /// 删除资产（从系统相册删除，成功后会清理状态并刷新模块）
 - (void)deleteAssetsWithIDs:(NSArray<NSString *> *)assetIDs completion:(void(^)(BOOL success, NSError * _Nullable error))completion;
+
+- (nullable NSString *)undoLastActionAssetIDInModuleID:(NSString *)moduleID;
+
+/// 将指定 assetIDs 恢复为“未处理”(Unknown)；只影响传入的选中项
+- (void)recoverAssetIDsToUnprocessed:(NSArray<NSString *> *)assetIDs;
 
 @end
 

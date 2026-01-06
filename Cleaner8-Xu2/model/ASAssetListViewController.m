@@ -2232,15 +2232,12 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 - (void)applySelectedFromPreviewIndexes:(NSIndexSet *)idxSet forSection:(ASAssetSection *)sec {
 
     BOOL grouped = ([self isGroupMode] && sec.isGrouped);
-    NSInteger start = grouped ? 1 : 0;
 
-    // 先清掉该 section 所有可选项
-    for (NSInteger i = start; i < (NSInteger)sec.assets.count; i++) {
+    for (NSInteger i = 0; i < (NSInteger)sec.assets.count; i++) {
         ASAssetModel *m = sec.assets[i];
         if (m.localId.length) [self.selectedIds removeObject:m.localId];
     }
 
-    // 再把 idxSet 里勾选的加回来（分组会自动忽略 0）
     [idxSet enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL * _Nonnull stop) {
         if (idx >= (NSUInteger)sec.assets.count) return;
 
@@ -2269,7 +2266,6 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
     __weak typeof(self) weakSelf = self;
     p.onBack = ^(NSArray<PHAsset *> *selectedAssets, NSIndexSet *selectedIndexes) {
-        // 用 indexSet 回写 selectedIds（保持 best 不选）
         [weakSelf applySelectedFromPreviewIndexes:selectedIndexes forSection:sec];
         [weakSelf recomputeBytesAndRefreshUI];
         [weakSelf syncNavSelectAllState];

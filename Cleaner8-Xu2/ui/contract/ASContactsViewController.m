@@ -4,6 +4,7 @@
 #import "BackupContactsViewController.h"
 #import "ASCustomNavBar.h"
 #import "ContactsManager.h"
+#import <Contacts/Contacts.h>
 
 #pragma mark - UI Helpers
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
@@ -14,6 +15,8 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 }
 
 @interface ASContactsViewController ()
+@property (nonatomic, strong) CNContactStore *contactStore;
+
 @property (nonatomic, assign) BOOL refreshScheduled;
 @property (nonatomic, assign) BOOL isRefreshing;
 
@@ -50,6 +53,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     [self scheduleRefreshCounts];
+    [self requestContactsPermissionIfNeeded];
 }
 
 - (void)viewDidLoad {
@@ -77,7 +81,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
                                                  name:UIApplicationWillEnterForegroundNotification
                                                object:nil];
   
-    [self refreshCounts];
+    [self requestContactsPermissionIfNeeded];
 }
 
 - (void)dealloc {
@@ -111,7 +115,37 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [self scheduleRefreshCounts];
 }
 
+#pragma mark - Contacts Permission
 
+- (void)requestContactsPermissionIfNeeded {
+    CNAuthorizationStatus status = [CNContactStore authorizationStatusForEntityType:CNEntityTypeContacts];
+
+    switch (status) {
+        case CNAuthorizationStatusAuthorized: {
+            // 已授权：正常刷新
+            [self scheduleRefreshCounts];
+        } break;
+
+        case CNAuthorizationStatusNotDetermined: {
+            __weak typeof(self) weakSelf = self;
+            [self.contactStore requestAccessForEntityType:CNEntityTypeContacts completionHandler:^(BOOL granted, NSError * _Nullable error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (granted) {
+                        [weakSelf scheduleRefreshCounts];
+                    } else {
+                    }
+                });
+            }];
+        } break;
+
+        case CNAuthorizationStatusDenied:
+        case CNAuthorizationStatusRestricted: {
+        } break;
+
+        default: {
+        } break;
+    }
+}
 
 #pragma mark - Background
 

@@ -4,6 +4,16 @@
 #import <AVKit/AVKit.h>
 
 #pragma mark - Helpers
+static uint64_t ASFileBytes(NSURL *url) {
+    if (!url) return 0;
+
+    NSNumber *size = nil;
+    [url getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
+    if (size) return size.unsignedLongLongValue;
+
+    NSDictionary *attr = [[NSFileManager defaultManager] attributesOfItemAtPath:url.path error:nil];
+    return [attr[NSFileSize] unsignedLongLongValue];
+}
 
 static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; } // #024DFF
 static inline UIColor *ASGray666(void) { return [UIColor colorWithRed:102/255.0 green:102/255.0 blue:102/255.0 alpha:1.0]; } // #666666
@@ -169,6 +179,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 @property (nonatomic, strong) UIImageView *iv;
 @property (nonatomic, strong) PHCachingImageManager *mgr;
 @property (nonatomic, assign) PHImageRequestID rid;
+@property (nonatomic, strong) NSURL *fileURL;
 @end
 
 @implementation ASPreviewPhotoCell
@@ -219,6 +230,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     self.sv.zoomScale = 1.0;
     if (self.rid != PHInvalidImageRequestID) [self.mgr cancelImageRequest:self.rid];
     self.rid = PHInvalidImageRequestID;
+    self.fileURL = nil;
 }
 - (UIView *)viewForZoomingInScrollView:(UIScrollView *)scrollView { return self.iv; }
 - (void)onDoubleTap:(UITapGestureRecognizer *)g {
@@ -230,6 +242,25 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     [self.sv zoomToRect:CGRectMake(p.x-w/2.0, p.y-h/2.0, w, h) animated:YES];
 }
 - (void)prepareForDisplay {
+    if (self.fileURL) {
+        NSString *pid = self.fileURL.path ?: @"";
+        self.representedId = pid;
+        self.iv.image = nil;
+        self.sv.zoomScale = 1.0;
+
+        NSURL *u = self.fileURL;
+        __weak typeof(self) ws = self;
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            UIImage *img = [UIImage imageWithContentsOfFile:u.path];
+            if (!img) return;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (![ws.representedId isEqualToString:pid]) return;
+                ws.iv.image = img;
+            });
+        });
+        return;
+    }
+    
     if (!self.asset) return;
 
     NSString *aid = self.asset.localIdentifier ?: @"";
@@ -282,6 +313,8 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 @property (nonatomic, weak) UIViewController *hostVC; // 外部注入
 
 @property (nonatomic, copy) void(^onPlayerReady)(AVPlayer *player);
+@property (nonatomic, strong) NSURL *fileURL;
+
 @end
 
 @implementation ASPreviewVideoCell
@@ -301,6 +334,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     self.asset = nil;
     self.representedId = nil;
     self.hostVC = nil;
+    self.fileURL = nil;
 }
 
 - (void)layoutSubviews {
@@ -309,6 +343,36 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 }
 
 - (void)prepareForDisplay {
+    if (self.fileURL) {
+        NSString *pid = self.fileURL.path ?: @"";
+        self.representedId = pid;
+
+        [self endDisplay];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (![self.representedId isEqualToString:pid]) return;
+
+            self.player = [AVPlayer playerWithURL:self.fileURL];
+
+            if (!self.pvc) {
+                self.pvc = [AVPlayerViewController new];
+                self.pvc.showsPlaybackControls = YES;
+                self.pvc.videoGravity = AVLayerVideoGravityResizeAspect;
+                self.pvc.view.backgroundColor = UIColor.clearColor;
+
+                if (self.hostVC) [self.hostVC addChildViewController:self.pvc];
+                [self.contentView addSubview:self.pvc.view];
+                self.pvc.view.frame = self.contentView.bounds;
+                self.pvc.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+                if (self.hostVC) [self.pvc didMoveToParentViewController:self.hostVC];
+            }
+
+            self.pvc.player = self.player;
+            [self.player play];
+        });
+        return;
+    }
+
     if (!self.asset) return;
 
     NSString *aid = self.asset.localIdentifier ?: @"";
@@ -753,6 +817,12 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 @property (nonatomic, assign) BOOL isExiting;
 @property (nonatomic, assign) BOOL didSendBackCallback;
 
+@property (nonatomic, strong) NSArray<NSURL *> *fileURLs;
+@property (nonatomic, assign) BOOL usingFiles;
+@property (nonatomic, assign) BOOL didInitialScroll;
+
+- (NSInteger)itemCount;
+
 @end
 
 @implementation ASMediaPreviewViewController
@@ -768,6 +838,44 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.modalPresentationStyle = UIModalPresentationFullScreen;
     }
     return self;
+}
+
+- (NSInteger)itemCount { return self.usingFiles ? self.fileURLs.count : self.assets.count; }
+
+- (instancetype)initWithFileURLs:(NSArray<NSURL *> *)fileURLs initialIndex:(NSInteger)initialIndex {
+    if (self = [super init]) {
+        _fileURLs = fileURLs ?: @[];
+        _usingFiles = YES;
+
+        NSInteger c = _fileURLs.count;
+        if (c > 0) _currentIndex = MAX(0, MIN(initialIndex, c - 1));
+        else _currentIndex = 0;
+
+        _bestIndex = 0;
+        _showsBestBadge = NO;
+        _selected = [NSMutableIndexSet indexSet];
+        _mgr = [PHCachingImageManager new];
+
+        self.modalPresentationStyle = UIModalPresentationFullScreen;
+    }
+    return self;
+}
+
+- (instancetype)initWithFileURLs:(NSArray<NSURL *> *)fileURLs
+                    initialIndex:(NSInteger)initialIndex
+                 selectedIndexes:(NSIndexSet *)selectedIndexes {
+    if (self = [self initWithFileURLs:fileURLs initialIndex:initialIndex]) {
+        if (selectedIndexes.count) [self.selected addIndexes:selectedIndexes];
+    }
+    return self;
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    if (!self.didInitialScroll) {
+        self.didInitialScroll = YES;
+        [self scrollToIndex:self.currentIndex animated:NO];
+    }
 }
 
 - (void)as_updateThumbCurrentFrom:(NSInteger)oldIdx to:(NSInteger)newIdx {
@@ -1015,15 +1123,29 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 #pragma mark - Top texts & overlays
 
 - (void)reloadTopText {
-    if (self.assets.count == 0) { self.sizeLabel.text = @"--"; self.indexLabel.text = @"--"; return; }
-    PHAsset *a = self.assets[self.currentIndex];
-    uint64_t bytes = ASAssetTotalBytes(a);
+    NSInteger total = [self itemCount];
+    if (total <= 0) {
+        self.sizeLabel.text = @"--";
+        self.indexLabel.text = @"--";
+        return;
+    }
+
+    uint64_t bytes = 0;
+    if (self.usingFiles) {
+        NSURL *u = self.fileURLs[self.currentIndex];
+        bytes = ASFileBytes(u);
+    } else {
+        PHAsset *a = self.assets[self.currentIndex];
+        bytes = ASAssetTotalBytes(a);
+    }
+
     self.sizeLabel.text = bytes > 0 ? ASHumanSizeShort(bytes) : @"--";
-    self.indexLabel.text = [NSString stringWithFormat:@"%ld/%ld", (long)self.currentIndex+1, (long)self.assets.count];
+    self.indexLabel.text = [NSString stringWithFormat:@"%ld/%ld",
+                            (long)self.currentIndex + 1, (long)total];
 }
 
 - (void)updateOverlays {
-    BOOL multi = (self.assets.count > 1);
+    BOOL multi = ([self itemCount] > 1);
     self.topSelectBtn.hidden = !multi;
 
     if (!multi) {
@@ -1033,6 +1155,12 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     BOOL checked = [self.selected containsIndex:self.currentIndex];
     [self.topSelectBtn setImage:(checked ? ASSelectOnImg() : ASSelectGrayOffImg()) forState:UIControlStateNormal];
+
+    // 文件模式不显示 best
+    if (self.usingFiles) {
+        self.bestBadge.hidden = YES;
+        return;
+    }
 
     BOOL isBest = (self.currentIndex == self.bestIndex);
     self.bestBadge.hidden = !(multi && isBest);
@@ -1054,42 +1182,67 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 #pragma mark - Paging
 
 - (void)scrollToIndex:(NSInteger)idx animated:(BOOL)animated {
-    if (idx == self.currentIndex && !animated) return;
-    if (self.assets.count == 0) return;
-    idx = MAX(0, MIN(idx, (NSInteger)self.assets.count - 1));
+    NSInteger total = [self itemCount];
+    if (total <= 0) return;
+
+    idx = MAX(0, MIN(idx, total - 1));
 
     NSInteger old = self.currentIndex;
     self.currentIndex = idx;
 
     [self.view layoutIfNeeded];
     CGFloat w = self.pager.bounds.size.width;
-    [self.pager setContentOffset:CGPointMake(w * idx, 0) animated:animated];
+    if (w > 0) [self.pager setContentOffset:CGPointMake(w * idx, 0) animated:animated];
 
     [self reloadTopText];
     [self updateOverlays];
 
-    if (self.assets.count > 1) {
+    BOOL multi = (total > 1);
+    if (multi) {
         NSIndexPath *ip = [NSIndexPath indexPathForItem:idx inSection:0];
         [self.thumbs scrollToItemAtIndexPath:ip
                             atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally
                                     animated:animated];
 
-        [self as_updateThumbCurrentFrom:old to:idx];   // ✅ 只更新旧/新
+        [self as_updateThumbCurrentFrom:old to:idx];
     }
 }
 
 #pragma mark - UICollectionView
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    return self.assets.count;
+    return [self itemCount];
 }
 
 - (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    NSInteger count = [self itemCount];
+    if (indexPath.item >= count) return [collectionView dequeueReusableCellWithReuseIdentifier:@"photo" forIndexPath:indexPath];
 
     PHAsset *a = self.assets[indexPath.item];
     BOOL isLive = (a.mediaType == PHAssetMediaTypeImage) && ((a.mediaSubtypes & PHAssetMediaSubtypePhotoLive) != 0);
 
     if (collectionView == self.pager) {
+        if (self.usingFiles) {
+            NSURL *u = self.fileURLs[indexPath.item];
+            NSString *ext = u.pathExtension.lowercaseString;
+            BOOL isVideo = [@[@"mp4",@"mov",@"m4v"] containsObject:ext];
+
+            if (isVideo) {
+                ASPreviewVideoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"video" forIndexPath:indexPath];
+                cell.fileURL = u;
+                cell.asset = nil;
+                cell.hostVC = self;
+                [cell prepareForDisplay];
+                return cell;
+            } else {
+                ASPreviewPhotoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"photo" forIndexPath:indexPath];
+                cell.fileURL = u;
+                cell.asset = nil;
+                [cell prepareForDisplay];
+                return cell;
+            }
+        }
+        
         if (a.mediaType == PHAssetMediaTypeVideo) {
             ASPreviewVideoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"video" forIndexPath:indexPath];
             cell.asset = a;
@@ -1215,8 +1368,11 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     CGFloat w = self.pager.bounds.size.width;
     if (w <= 0) return;
 
+    NSInteger total = [self itemCount];
+    if (total <= 0) return;
+
     NSInteger idx = (NSInteger)lrint(scrollView.contentOffset.x / w);
-    idx = MAX(0, MIN(idx, (NSInteger)self.assets.count - 1));
+    idx = MAX(0, MIN(idx, total - 1));
     if (idx == self.currentIndex) return;
 
     NSInteger old = self.currentIndex;
@@ -1225,13 +1381,12 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     [self reloadTopText];
     [self updateOverlays];
 
-    if (self.assets.count > 1) {
+    if (total > 1) {
         NSIndexPath *ip = [NSIndexPath indexPathForItem:idx inSection:0];
         [self.thumbs scrollToItemAtIndexPath:ip
                             atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally
                                     animated:YES];
-
-        [self as_updateThumbCurrentFrom:old to:idx];   // ✅ 不 reloadData
+        [self as_updateThumbCurrentFrom:old to:idx];
     }
 }
 

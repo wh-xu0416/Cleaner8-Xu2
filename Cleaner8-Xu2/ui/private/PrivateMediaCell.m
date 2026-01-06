@@ -1,0 +1,53 @@
+#import "PrivateMediaCell.h"
+
+@implementation PrivateMediaCell
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self=[super initWithFrame:frame]) {
+        self.contentView.clipsToBounds = YES;
+
+        _thumb = [UIImageView new];
+        _thumb.translatesAutoresizingMaskIntoConstraints = NO;
+        _thumb.contentMode = UIViewContentModeScaleAspectFill;
+        [self.contentView addSubview:_thumb];
+
+        _check = [UIImageView new];
+        _check.translatesAutoresizingMaskIntoConstraints = NO;
+        _check.contentMode = UIViewContentModeScaleAspectFit;
+        [self.contentView addSubview:_check];
+        
+        self.checkButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        self.checkButton.translatesAutoresizingMaskIntoConstraints = NO;
+        self.checkButton.backgroundColor = UIColor.clearColor;
+        [self.checkButton addTarget:self action:@selector(checkTap) forControlEvents:UIControlEventTouchUpInside];
+        [self.contentView addSubview:self.checkButton];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [_thumb.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
+            [_thumb.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+            [_thumb.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
+            [_thumb.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
+
+            [_check.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:8],
+            [_check.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-8],
+            [_check.widthAnchor constraintEqualToConstant:20],
+            [_check.heightAnchor constraintEqualToConstant:20],
+            
+            [self.checkButton.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
+            [self.checkButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+            [self.checkButton.widthAnchor constraintEqualToConstant:44],
+            [self.checkButton.heightAnchor constraintEqualToConstant:44],
+        ]];
+    }
+    return self;
+}
+
+- (void)setSelectedMark:(BOOL)selected {
+    NSString *icon = selected ? @"ic_select_s" : @"ic_select_n";
+    self.check.image = [[UIImage imageNamed:icon] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+}
+
+- (void)checkTap {
+    if (self.onTapCheck) self.onTapCheck();
+}
+@end

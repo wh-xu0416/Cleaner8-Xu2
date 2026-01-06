@@ -199,8 +199,18 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
 @interface ASDCDupGroupHeaderView : UICollectionReusableView
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UIButton *selectBtn;
+@property (nonatomic, strong) UIButton *removeBtn;
+
+@property (nonatomic, strong) NSLayoutConstraint *selectBtnZeroWidth;
+@property (nonatomic, strong) NSLayoutConstraint *removeBtnZeroWidth;
+
 @property (nonatomic, copy) void (^onToggleSelectAll)(void);
-- (void)configTitle:(NSString *)title allSelected:(BOOL)allSelected showSelect:(BOOL)showSelect;
+@property (nonatomic, copy) void (^onRemoveGroup)(void);
+
+- (void)configTitle:(NSString *)title
+        allSelected:(BOOL)allSelected
+         showSelect:(BOOL)showSelect
+         showRemove:(BOOL)showRemove;
 @end
 
 @implementation ASDCDupGroupHeaderView
@@ -216,45 +226,85 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
         self.titleLabel.numberOfLines = 1;
         [self addSubview:self.titleLabel];
 
-        // 确保上下 15 不被压缩
         [self.titleLabel setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
         [self.titleLabel setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
 
+        // Select button
         self.selectBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         self.selectBtn.translatesAutoresizingMaskIntoConstraints = NO;
         self.selectBtn.backgroundColor = UIColor.clearColor;
         self.selectBtn.layer.cornerRadius = 16;
         self.selectBtn.layer.masksToBounds = YES;
         self.selectBtn.layer.borderWidth = 1.0;
-        self.selectBtn.layer.borderColor = ASDCGray666().CGColor;
         self.selectBtn.titleLabel.font = ASDCFont(13, UIFontWeightMedium);
-        [self.selectBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
-        self.selectBtn.contentEdgeInsets = UIEdgeInsetsMake(9, 20, 9, 20); // 左右20，上下9
-        [self.selectBtn addTarget:self action:@selector(tap) forControlEvents:UIControlEventTouchUpInside];
+        self.selectBtn.contentEdgeInsets = UIEdgeInsetsMake(9, 20, 9, 20);
+        [self.selectBtn addTarget:self action:@selector(tapSelect) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:self.selectBtn];
 
+        // Remove button (preview)
+        self.removeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        self.removeBtn.translatesAutoresizingMaskIntoConstraints = NO;
+        self.removeBtn.backgroundColor = UIColor.clearColor;
+        self.removeBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
+        UIImage *rm = [[UIImage imageNamed:@"ic_remove"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        [self.removeBtn setImage:rm forState:UIControlStateNormal];
+        [self.removeBtn addTarget:self action:@selector(tapRemove) forControlEvents:UIControlEventTouchUpInside];
+        [self addSubview:self.removeBtn];
+
+        // constraints
+        NSLayoutConstraint *titleToSelect =
+            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectBtn.leadingAnchor constant:-10];
+        NSLayoutConstraint *titleToRemove =
+            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.removeBtn.leadingAnchor constant:-10];
+
+        self.selectBtnZeroWidth = [self.selectBtn.widthAnchor constraintEqualToConstant:0];
+        self.removeBtnZeroWidth = [self.removeBtn.widthAnchor constraintEqualToConstant:0];
+
         [NSLayoutConstraint activateConstraints:@[
-            // title: 左 18，右到按钮 10，上下 15 固定
             [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:18],
             [self.titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:15],
             [self.titleLabel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-15],
-            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectBtn.leadingAnchor constant:-10],
 
-            // button: 右 10，垂直居中对齐 title
+            titleToSelect,
+            titleToRemove,
+
             [self.selectBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10],
             [self.selectBtn.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
+
+            // 44x44 点击区域，图标自然 24x24
+            [self.removeBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10],
+            [self.removeBtn.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
+            [self.removeBtn.widthAnchor constraintEqualToConstant:44],
+            [self.removeBtn.heightAnchor constraintEqualToConstant:44],
         ]];
     }
     return self;
 }
 
-- (void)configTitle:(NSString *)title allSelected:(BOOL)allSelected showSelect:(BOOL)showSelect {
+- (void)configTitle:(NSString *)title
+        allSelected:(BOOL)allSelected
+         showSelect:(BOOL)showSelect
+         showRemove:(BOOL)showRemove {
+
     self.titleLabel.text = title ?: @"";
+
     self.selectBtn.hidden = !showSelect;
-    [self.selectBtn setTitle:(allSelected ? @"Deselect All" : @"Select All") forState:UIControlStateNormal];
+    self.removeBtn.hidden = !showRemove;
+
+    self.selectBtnZeroWidth.active = !showSelect;
+    self.removeBtnZeroWidth.active = !showRemove;
+
+    if (showSelect) {
+        [self.selectBtn setTitle:(allSelected ? @"Deselect All" : @"Select All") forState:UIControlStateNormal];
+
+        UIColor *c = allSelected ? ASDCBlue() : ASDCGray666();
+        self.selectBtn.layer.borderColor = c.CGColor;
+        [self.selectBtn setTitleColor:(allSelected ? ASDCBlue() : UIColor.blackColor) forState:UIControlStateNormal];
+    }
 }
 
-- (void)tap { if (self.onToggleSelectAll) self.onToggleSelectAll(); }
+- (void)tapSelect { if (self.onToggleSelectAll) self.onToggleSelectAll(); }
+- (void)tapRemove { if (self.onRemoveGroup) self.onRemoveGroup(); }
 
 @end
 
@@ -391,7 +441,7 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
 @property (nonatomic, strong) ContactsManager *contactsManager;
 
 @property (nonatomic, assign) BOOL previewMode;
-@property (nonatomic, strong) NSArray<CMDuplicateGroup *> *previewGroups; // 进入预览时冻结
+@property (nonatomic, strong) NSMutableArray<CMDuplicateGroup *> *previewGroups; // 进入预览时冻结，可移除
 @property (nonatomic, assign) BOOL didMergeOnce;
 
 @end
@@ -572,6 +622,36 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
 #pragma mark - Helpers
 
+- (NSInteger)selectedMergeableContactCountInGroups:(NSArray<CMDuplicateGroup *> *)groups {
+    NSMutableSet<NSString *> *set = [NSMutableSet set];
+    for (CMDuplicateGroup *g in (groups ?: @[])) {
+        NSArray<NSString *> *ids = [self selectedIdentifiersInGroup:g];
+        if (ids.count < 2) continue;
+        [set addObjectsFromArray:ids];
+    }
+    return set.count;
+}
+
+- (void)removePreviewGroupAtIndex:(NSInteger)section {
+    if (!self.previewMode) return;
+    if (section < 0 || section >= (NSInteger)self.previewGroups.count) return;
+
+    [self.previewGroups removeObjectAtIndex:section];
+
+    // 全部移除：回到合并前（非预览）状态，可再次点预览
+    if (self.previewGroups.count == 0) {
+        self.previewMode = NO;
+        self.previewGroups = nil;
+        [self syncTopSelectState];
+        [self updateFloatingButtonState];
+        [self.cv reloadData];
+        return;
+    }
+
+    [self updateFloatingButtonState];
+    [self.cv reloadData];
+}
+
 - (NSSet<NSString *> *)allDuplicateIDsSet {
     NSMutableSet<NSString *> *set = [NSMutableSet set];
     for (CMDuplicateGroup *g in (self.allGroups ?: @[])) {
@@ -672,17 +752,16 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 }
 
 - (NSInteger)selectedMergeableContactCount {
-    NSMutableSet<NSString *> *set = [NSMutableSet set];
-    for (CMDuplicateGroup *g in [self currentMergeableGroups]) {
-        for (CNContact *c in g.items) {
-            if (c.identifier.length == 0) continue;
-            if ([self.selectedContactIds containsObject:c.identifier]) [set addObject:c.identifier];
-        }
+    if (self.previewMode) {
+        return [self selectedMergeableContactCountInGroups:self.previewGroups];
     }
-    return set.count;
+    return [self selectedMergeableContactCountInGroups:[self currentMergeableGroups]];
 }
 
 - (BOOL)hasMergeableGroup {
+    if (self.previewMode) {
+        return (self.previewGroups.count > 0);
+    }
     return [self currentMergeableGroups].count > 0;
 }
 
@@ -707,14 +786,13 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     if (!self.previewMode) {
         self.previewMode = YES;
-        self.previewGroups = [self currentMergeableGroups]; // 冻结预览内容
+        self.previewGroups = [[self currentMergeableGroups] mutableCopy];
         [self syncTopSelectState];
         [self updateFloatingButtonState];
         [self.cv reloadData];
         return;
     }
 
-    // previewMode == YES
     [self confirmMergeForPreviewGroups];
 }
 
@@ -802,7 +880,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     NSArray<CMDuplicateGroup *> *groups = self.previewGroups ?: @[];
     if (groups.count == 0) return;
 
-    // 组内只合并选中的 identifiers（>=2 才会在 previewGroups 里）
     NSMutableArray<NSArray<NSString *> *> *batches = [NSMutableArray array];
     for (CMDuplicateGroup *g in groups) {
         NSArray<NSString *> *ids = [self selectedIdentifiersInGroup:g];
@@ -999,30 +1076,38 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     CMDuplicateGroup *g = self.previewMode ? self.previewGroups[indexPath.section] : self.allGroups[indexPath.section];
 
     BOOL showSelect = !self.previewMode;
+    BOOL showRemove = self.previewMode;
     BOOL allSel = [self isGroupAllSelected:g];
 
     NSInteger countToShow = g.items.count;
     if (self.previewMode) {
-        // 预览里更贴近“合并了多少个”
         countToShow = [self selectedIdentifiersInGroup:g].count;
     }
 
     NSString *title = [NSString stringWithFormat:@"%ld Duplicate Contacts", (long)countToShow];
-    [v configTitle:title allSelected:allSel showSelect:showSelect];
+    [v configTitle:title allSelected:allSel showSelect:showSelect showRemove:showRemove];
 
     __weak typeof(self) weakSelf = self;
-    v.onToggleSelectAll = ^{
-        if (weakSelf.previewMode) return;
 
-        if ([weakSelf isGroupAllSelected:g]) {
-            [weakSelf deselectAllInGroup:g];
-        } else {
-            [weakSelf selectAllInGroup:g];
-        }
-        [weakSelf updateFloatingButtonState];
-        [weakSelf syncTopSelectState];
-        [weakSelf.cv reloadData];
-    };
+    if (!self.previewMode) {
+        v.onRemoveGroup = nil;
+        v.onToggleSelectAll = ^{
+            if ([weakSelf isGroupAllSelected:g]) {
+                [weakSelf deselectAllInGroup:g];
+            } else {
+                [weakSelf selectAllInGroup:g];
+            }
+            [weakSelf updateFloatingButtonState];
+            [weakSelf syncTopSelectState];
+            [weakSelf.cv reloadData];
+        };
+    } else {
+        v.onToggleSelectAll = nil;
+        NSInteger sectionToRemove = indexPath.section;
+        v.onRemoveGroup = ^{
+            [weakSelf removePreviewGroupAtIndex:sectionToRemove];
+        };
+    }
 
     return v;
 }

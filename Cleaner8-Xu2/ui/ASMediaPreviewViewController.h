@@ -26,6 +26,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, copy, nullable) void(^onSelectionChanged)(NSIndexSet *selectedIndexes);
 
+- (instancetype)initWithFileURLs:(NSArray<NSURL *> *)fileURLs initialIndex:(NSInteger)initialIndex;
+- (instancetype)initWithFileURLs:(NSArray<NSURL *> *)fileURLs
+                    initialIndex:(NSInteger)initialIndex
+                 selectedIndexes:(NSIndexSet *)selectedIndexes;
+
 @end
 
 NS_ASSUME_NONNULL_END

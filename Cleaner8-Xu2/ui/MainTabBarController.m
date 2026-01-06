@@ -2,7 +2,7 @@
 #import "ASFloatingTabBar.h"
 #import "HomeViewController.h"
 #import "VideoViewController.h"
-#import "SecretViewController.h"
+#import "PrivateViewController.h"
 #import "SwipeViewController.h"
 #import "MoreViewController.h"
 #import "SwipeManager.h"
@@ -35,7 +35,7 @@ UIGestureRecognizerDelegate
         [self navWithVC:[HomeViewController new]   title:@"Cleaner" image:@""],
         [self navWithVC:[VideoViewController new]    title:@"Compress" image:@""],
         [self navWithVC:[SwipeViewController new]    title:@"Swipe" image:@""],
-        [self navWithVC:[SecretViewController new] title:@"Private" image:@""],
+        [self navWithVC:[PrivateViewController new] title:@"Private" image:@""],
         [self navWithVC:[MoreViewController new]    title:@"More" image:@""],
     ];
 

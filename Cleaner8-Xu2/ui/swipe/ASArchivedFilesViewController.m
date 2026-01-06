@@ -1,43 +1,124 @@
 #import "ASArchivedFilesViewController.h"
+#import "ASMediaPreviewViewController.h"
 #import "SwipeManager.h"
+#import "ASSelectTitleBar.h"
+#import <Photos/Photos.h>
+
+static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
+    CGFloat r = ((rgba >> 24) & 0xFF) / 255.0;
+    CGFloat g = ((rgba >> 16) & 0xFF) / 255.0;
+    CGFloat b = ((rgba >> 8)  & 0xFF) / 255.0;
+    CGFloat a = ((rgba)       & 0xFF) / 255.0;
+    return [UIColor colorWithRed:r green:g blue:b alpha:a];
+}
+
+#pragma mark - Cell
 
 @interface ArchivedCell : UICollectionViewCell
 @property (nonatomic, strong) UIImageView *imageView;
-@property (nonatomic, strong) UIView *selectedOverlay;
+@property (nonatomic, strong) UIImageView *checkView;
+@property (nonatomic, copy) NSString *representedAssetID;
+@property (nonatomic, copy) void (^onTapPreview)(void);
+@property (nonatomic, copy) void (^onTapCheck)(void);
+- (void)setChecked:(BOOL)checked;
 @end
 
 @implementation ArchivedCell
+
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
-        self.contentView.layer.cornerRadius = 14;
-        self.contentView.layer.masksToBounds = YES;
-        self.contentView.backgroundColor = UIColor.secondarySystemBackgroundColor;
+        self.contentView.backgroundColor = UIColor.clearColor;
 
-        _imageView = [[UIImageView alloc] initWithFrame:CGRectZero];
+        _imageView = [UIImageView new];
+        _imageView.translatesAutoresizingMaskIntoConstraints = NO;
         _imageView.contentMode = UIViewContentModeScaleAspectFill;
         _imageView.clipsToBounds = YES;
+        _imageView.layer.cornerRadius = 12;
+        _imageView.layer.masksToBounds = YES;
         [self.contentView addSubview:_imageView];
 
-        _selectedOverlay = [[UIView alloc] initWithFrame:CGRectZero];
-        _selectedOverlay.backgroundColor = [[UIColor systemBlueColor] colorWithAlphaComponent:0.25];
-        _selectedOverlay.hidden = YES;
-        [self.contentView addSubview:_selectedOverlay];
+        _checkView = [UIImageView new];
+        _checkView.translatesAutoresizingMaskIntoConstraints = NO;
+        _checkView.contentMode = UIViewContentModeScaleAspectFit;
+        [self.contentView addSubview:_checkView];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [_imageView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
+            [_imageView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+            [_imageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
+            [_imageView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
+
+            [_checkView.widthAnchor constraintEqualToConstant:24],
+            [_checkView.heightAnchor constraintEqualToConstant:24],
+            [_checkView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
+            [_checkView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-6],
+        ]];
+
+        UIButton *previewBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        previewBtn.translatesAutoresizingMaskIntoConstraints = NO;
+        [previewBtn addTarget:self action:@selector(_tapPreview) forControlEvents:UIControlEventTouchUpInside];
+        [self.contentView addSubview:previewBtn];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [previewBtn.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
+            [previewBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+            [previewBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
+            [previewBtn.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
+        ]];
+
+        UIButton *checkBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        checkBtn.translatesAutoresizingMaskIntoConstraints = NO;
+        [checkBtn addTarget:self action:@selector(_tapCheck) forControlEvents:UIControlEventTouchUpInside];
+        [self.contentView addSubview:checkBtn];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [checkBtn.widthAnchor constraintEqualToConstant:44],
+            [checkBtn.heightAnchor constraintEqualToConstant:44],
+            [checkBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
+            [checkBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+        ]];
+
+        [self setChecked:NO];
+        self.selectedBackgroundView = [UIView new];
     }
     return self;
 }
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    _imageView.frame = self.contentView.bounds;
-    _selectedOverlay.frame = self.contentView.bounds;
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.imageView.image = nil;
+    self.representedAssetID = nil;
+    [self setChecked:NO];
 }
+
+- (void)setChecked:(BOOL)checked {
+    NSString *name = checked ? @"ic_select_s" : @"ic_select_n";
+    self.checkView.image = [[UIImage imageNamed:name] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+}
+
+- (void)_tapPreview { if (self.onTapPreview) self.onTapPreview(); }
+- (void)_tapCheck   { if (self.onTapCheck) self.onTapCheck(); }
+
 @end
 
-@interface ASArchivedFilesViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout>
-@property (nonatomic, strong) UILabel *summaryLabel;
-@property (nonatomic, strong) UICollectionView *collectionView;
+#pragma mark - VC
 
-@property (nonatomic, strong) UIButton *deleteButton;
-@property (nonatomic, strong) UIButton *undoButton;
+@interface ASArchivedFilesViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout>
+@property (nonatomic, strong) UIView *emptyView;
+@property (nonatomic, strong) UIImageView *emptyImageView;
+@property (nonatomic, strong) UILabel *emptyLabel;
+
+@property (nonatomic, strong) UIView *topGradientView;
+@property (nonatomic, strong) CAGradientLayer *gradientLayer;
+
+@property (nonatomic, strong) ASSelectTitleBar *titleBar;
+@property (nonatomic, strong) UILabel *headerLabel;
+@property (nonatomic, strong) UILabel *metaLabel;
+
+@property (nonatomic, strong) UICollectionView *collectionView;
+@property (nonatomic, strong) UIView *bottomButtonsHost;
+@property (nonatomic, strong) UIButton *deleteAllButton;
+@property (nonatomic, strong) UIButton *recoverAllButton;
 
 @property (nonatomic, strong) PHCachingImageManager *imageManager;
 
@@ -47,15 +128,27 @@
 
 @implementation ASArchivedFilesViewController
 
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self.navigationController setNavigationBarHidden:YES animated:animated];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"已归档";
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+
+    self.view.backgroundColor = ASColorFromRGBAHex(0xF6F6F6FF);
 
     self.imageManager = [PHCachingImageManager new];
     self.selectedIDs = [NSMutableSet set];
 
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleUpdate) name:SwipeManagerDidUpdateNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleUpdate)
+                                                 name:SwipeManagerDidUpdateNotification
+                                               object:nil];
 
     [self buildUI];
     [self handleUpdate];
@@ -66,121 +159,342 @@
 }
 
 - (void)buildUI {
-    _summaryLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    _summaryLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
-    _summaryLabel.textColor = UIColor.labelColor;
-    _summaryLabel.numberOfLines = 2;
-    [self.view addSubview:_summaryLabel];
+    self.topGradientView = [UIView new];
+    self.topGradientView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.topGradientView.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.topGradientView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.topGradientView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.topGradientView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.topGradientView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.topGradientView.heightAnchor constraintEqualToConstant:402],
+    ]];
+
+    self.gradientLayer = [CAGradientLayer layer];
+    self.gradientLayer.startPoint = CGPointMake(0.5, 0.0);
+    self.gradientLayer.endPoint   = CGPointMake(0.5, 1.0);
+    self.gradientLayer.colors = @[
+        (__bridge id)ASColorFromRGBAHex(0xE0E0E0FF).CGColor,
+        (__bridge id)ASColorFromRGBAHex(0x008DFF00).CGColor
+    ];
+    [self.topGradientView.layer insertSublayer:self.gradientLayer atIndex:0];
+
+    self.titleBar = [[ASSelectTitleBar alloc] initWithTitle:@""];
+    self.titleBar.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleBar.showTitle = NO;
+    self.titleBar.showSelectButton = YES;
+    __weak typeof(self) weakSelf = self;
+    self.titleBar.onBack = ^{
+        if (weakSelf.navigationController) {
+            [weakSelf.navigationController popViewControllerAnimated:YES];
+        } else {
+            [weakSelf dismissViewControllerAnimated:YES completion:nil];
+        }
+    };
+    self.titleBar.onToggleSelectAll = ^(BOOL allSelected) {
+        [weakSelf applySelectAll:allSelected];
+    };
+    [self.view addSubview:self.titleBar];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.titleBar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.titleBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.titleBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.titleBar.heightAnchor constraintEqualToConstant:44],
+    ]];
+
+    self.headerLabel = [UILabel new];
+    self.headerLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.headerLabel.text = @"Archive Files";
+    self.headerLabel.font = [UIFont systemFontOfSize:28 weight:UIFontWeightSemibold];
+    self.headerLabel.textColor = ASColorFromRGBAHex(0x000000FF);
+    self.headerLabel.numberOfLines = 1;
+    [self.view addSubview:self.headerLabel];
+
+    self.metaLabel = [UILabel new];
+    self.metaLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.metaLabel.numberOfLines = 1;
+    [self.view addSubview:self.metaLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.headerLabel.topAnchor constraintEqualToAnchor:self.titleBar.bottomAnchor constant:8],
+        [self.headerLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
+        [self.headerLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-20],
+
+        [self.metaLabel.topAnchor constraintEqualToAnchor:self.headerLabel.bottomAnchor constant:5],
+        [self.metaLabel.leadingAnchor constraintEqualToAnchor:self.headerLabel.leadingAnchor],
+        [self.metaLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-20],
+    ]];
 
     UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
-    layout.minimumLineSpacing = 12;
-    layout.minimumInteritemSpacing = 12;
+    layout.minimumLineSpacing = 5;
+    layout.minimumInteritemSpacing = 5;
 
-    _collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
-    _collectionView.backgroundColor = UIColor.clearColor;
-    _collectionView.dataSource = self;
-    _collectionView.delegate = self;
-    _collectionView.allowsMultipleSelection = YES;
-    _collectionView.contentInset = UIEdgeInsetsMake(12, 16, 16, 16);
-    [_collectionView registerClass:ArchivedCell.class forCellWithReuseIdentifier:@"ArchivedCell"];
-    [self.view addSubview:_collectionView];
+    self.collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
+    self.collectionView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.collectionView.backgroundColor = UIColor.clearColor;
+    self.collectionView.dataSource = self;
+    self.collectionView.delegate = self;
+    self.collectionView.allowsMultipleSelection = NO;
+    [self.collectionView registerClass:ArchivedCell.class forCellWithReuseIdentifier:@"ArchivedCell"];
+    [self.view addSubview:self.collectionView];
 
-    _deleteButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [_deleteButton setTitle:@"删除" forState:UIControlStateNormal];
-    _deleteButton.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-    [_deleteButton addTarget:self action:@selector(deleteTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:_deleteButton];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.collectionView.topAnchor constraintEqualToAnchor:self.metaLabel.bottomAnchor constant:15],
+        [self.collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.collectionView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor], // 延伸到底
+    ]];
 
-    _undoButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [_undoButton setTitle:@"撤销" forState:UIControlStateNormal];
-    _undoButton.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-    [_undoButton addTarget:self action:@selector(undoTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:_undoButton];
+    self.collectionView.contentInset = UIEdgeInsetsMake(0, 10, 12 + self.view.safeAreaInsets.bottom, 10);
+
+    self.emptyView = [UIView new];
+    self.emptyView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.emptyView.backgroundColor = UIColor.clearColor;
+    self.emptyView.hidden = YES;
+    [self.view addSubview:self.emptyView];
+
+    self.emptyImageView = [UIImageView new];
+    self.emptyImageView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.emptyImageView.contentMode = UIViewContentModeScaleAspectFit;
+    self.emptyImageView.image = [UIImage imageNamed:@"ic_no_contact"];
+    [self.emptyView addSubview:self.emptyImageView];
+
+    self.emptyLabel = [UILabel new];
+    self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.emptyLabel.text = @"No Content";
+    self.emptyLabel.textColor = UIColor.blackColor;
+    self.emptyLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightMedium];
+    self.emptyLabel.textAlignment = NSTextAlignmentCenter;
+    [self.emptyView addSubview:self.emptyLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.emptyView.centerXAnchor constraintEqualToAnchor:self.collectionView.centerXAnchor],
+        [self.emptyView.centerYAnchor constraintEqualToAnchor:self.collectionView.centerYAnchor],
+
+        [self.emptyImageView.centerXAnchor constraintEqualToAnchor:self.emptyView.centerXAnchor],
+        [self.emptyImageView.topAnchor constraintEqualToAnchor:self.emptyView.topAnchor],
+        [self.emptyImageView.widthAnchor constraintEqualToConstant:182],
+        [self.emptyImageView.heightAnchor constraintEqualToConstant:168],
+
+        [self.emptyLabel.topAnchor constraintEqualToAnchor:self.emptyImageView.bottomAnchor constant:2],
+        [self.emptyLabel.leadingAnchor constraintEqualToAnchor:self.emptyView.leadingAnchor],
+        [self.emptyLabel.trailingAnchor constraintEqualToAnchor:self.emptyView.trailingAnchor],
+        [self.emptyLabel.bottomAnchor constraintEqualToAnchor:self.emptyView.bottomAnchor],
+    ]];
+
+    self.bottomButtonsHost = [UIView new];
+    self.bottomButtonsHost.translatesAutoresizingMaskIntoConstraints = NO;
+    self.bottomButtonsHost.backgroundColor = UIColor.clearColor;
+    self.bottomButtonsHost.hidden = YES;
+    [self.view addSubview:self.bottomButtonsHost];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.bottomButtonsHost.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
+        [self.bottomButtonsHost.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.bottomButtonsHost.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:0],
+    ]];
+
+    self.deleteAllButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.deleteAllButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.deleteAllButton.backgroundColor = ASColorFromRGBAHex(0x024DFFFF);
+    self.deleteAllButton.layer.cornerRadius = 25.5; // 51/2
+    self.deleteAllButton.layer.masksToBounds = YES;
+    [self.deleteAllButton setTitle:@"Delete All" forState:UIControlStateNormal];
+    [self.deleteAllButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    self.deleteAllButton.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+    [self.deleteAllButton addTarget:self action:@selector(deleteTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.bottomButtonsHost addSubview:self.deleteAllButton];
+
+    self.recoverAllButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.recoverAllButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.recoverAllButton.backgroundColor = UIColor.whiteColor;
+    self.recoverAllButton.layer.cornerRadius = 25.5;
+    self.recoverAllButton.layer.masksToBounds = YES;
+    [self.recoverAllButton setTitle:@"Recover All" forState:UIControlStateNormal];
+    [self.recoverAllButton setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+    self.recoverAllButton.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
+    [self.recoverAllButton addTarget:self action:@selector(recoverTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.bottomButtonsHost addSubview:self.recoverAllButton];
+
+    CGFloat btnH = 51.0;
+    CGFloat gap = 15.0;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.deleteAllButton.leadingAnchor constraintEqualToAnchor:self.bottomButtonsHost.leadingAnchor],
+        [self.deleteAllButton.trailingAnchor constraintEqualToAnchor:self.bottomButtonsHost.trailingAnchor],
+        [self.deleteAllButton.topAnchor constraintEqualToAnchor:self.bottomButtonsHost.topAnchor],
+        [self.deleteAllButton.heightAnchor constraintEqualToConstant:btnH],
+
+        [self.recoverAllButton.leadingAnchor constraintEqualToAnchor:self.bottomButtonsHost.leadingAnchor],
+        [self.recoverAllButton.trailingAnchor constraintEqualToAnchor:self.bottomButtonsHost.trailingAnchor],
+        [self.recoverAllButton.topAnchor constraintEqualToAnchor:self.deleteAllButton.bottomAnchor constant:gap],
+        [self.recoverAllButton.heightAnchor constraintEqualToConstant:btnH],
+        [self.recoverAllButton.bottomAnchor constraintEqualToAnchor:self.bottomButtonsHost.bottomAnchor],
+    ]];
 }
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    self.gradientLayer.frame = self.topGradientView.bounds;
+}
 
-    CGFloat safeTop = self.view.safeAreaInsets.top;
-    CGFloat w = self.view.bounds.size.width;
+- (void)recoverTapped {
+    if (self.selectedIDs.count == 0) return;
 
-    self.summaryLabel.frame = CGRectMake(16, safeTop + 10, w - 32, 44);
+    NSArray<NSString *> *ids = self.selectedIDs.allObjects;
+    [[SwipeManager shared] recoverAssetIDsToUnprocessed:ids];
 
-    CGFloat btnY = CGRectGetMaxY(self.summaryLabel.frame) + 4;
-    self.undoButton.frame = CGRectMake(16, btnY, 90, 40);
-    self.deleteButton.frame = CGRectMake(w - 16 - 90, btnY, 90, 40);
+    [self.selectedIDs removeAllObjects];
+    [self updateDeleteButtonVisibilityAndInsets];
+    [self handleUpdate];
+}
 
-    CGFloat y = CGRectGetMaxY(self.undoButton.frame) + 6;
-    self.collectionView.frame = CGRectMake(0, y, w, self.view.bounds.size.height - y);
+#pragma mark - Data / UI
+
+- (NSArray<NSString *> *)sortedArchivedIDs {
+    NSSet<NSString *> *archivedSet = [[SwipeManager shared] archivedAssetIDSet];
+    NSArray<PHAsset *> *assets = [[SwipeManager shared] assetsForIDs:archivedSet.allObjects];
+    NSArray<PHAsset *> *sorted = [assets sortedArrayUsingComparator:^NSComparisonResult(PHAsset *a, PHAsset *b) {
+        NSDate *da = a.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+        NSDate *db = b.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+        return [db compare:da]; // 新 -> 旧
+    }];
+    NSMutableArray<NSString *> *ids = [NSMutableArray arrayWithCapacity:sorted.count];
+    for (PHAsset *a in sorted) {
+        if (a.localIdentifier) [ids addObject:a.localIdentifier];
+    }
+    return ids.copy;
 }
 
 - (void)handleUpdate {
     SwipeManager *mgr = [SwipeManager shared];
-    self.archivedIDs = [[[mgr archivedAssetIDSet] allObjects] sortedArrayUsingSelector:@selector(compare:)];
 
-    unsigned long long bytes = [mgr totalArchivedBytesCached];
-    self.summaryLabel.text = [NSString stringWithFormat:@"已归档：%lu 张\n总大小：%@（去重）",
-                              (unsigned long)self.archivedIDs.count, [self.class bytesToString:bytes]];
+    self.archivedIDs = [self sortedArchivedIDs];
 
-    // 清理已不存在的选择
+    BOOL isEmpty = (self.archivedIDs.count == 0);
+    self.emptyView.hidden = !isEmpty;
+    self.collectionView.hidden = isEmpty;
+
+    self.titleBar.showSelectButton = !isEmpty;
+
+    if (isEmpty) {
+        [self.selectedIDs removeAllObjects];
+        [self syncAllSelectedState];
+        [self updateDeleteButtonVisibilityAndInsets];
+    }
+
     NSMutableSet *valid = [NSMutableSet setWithArray:self.archivedIDs];
     [self.selectedIDs intersectSet:valid];
 
-    [self updateButtons];
+    [self updateMetaLabelWithCount:self.archivedIDs.count bytes:[mgr totalArchivedBytesCached]];
+
+    self.titleBar.showSelectButton = (self.archivedIDs.count > 0);
+
+    [self syncAllSelectedState];
+
+    [self updateDeleteButtonVisibilityAndInsets];
     [self.collectionView reloadData];
 
+    __weak typeof(self) weakSelf = self;
     [[SwipeManager shared] refreshArchivedBytesIfNeeded:^(unsigned long long newBytes) {
-        self.summaryLabel.text = [NSString stringWithFormat:@"已归档：%lu 张\n总大小：%@（去重）",
-                                  (unsigned long)self.archivedIDs.count, [self.class bytesToString:newBytes]];
+        [weakSelf updateMetaLabelWithCount:weakSelf.archivedIDs.count bytes:newBytes];
     }];
+}
+
+- (void)updateMetaLabelWithCount:(NSUInteger)count bytes:(unsigned long long)bytes {
+    NSString *countStr = [NSString stringWithFormat:@"%lu", (unsigned long)count];
+    NSString *filesWord = @" Files ";
+    NSString *sizeStr = [self.class bytesToString:bytes];
+
+    NSString *full = [NSString stringWithFormat:@"%@%@%@", countStr, filesWord, sizeStr];
+
+    UIColor *blue = ASColorFromRGBAHex(0x024DFFFF);
+    UIColor *gray = ASColorFromRGBAHex(0x666666FF);
+
+    UIFont *baseFont = [UIFont systemFontOfSize:16 weight:UIFontWeightRegular];
+    UIFont *blueFont = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+
+    NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full
+                                                                            attributes:@{
+        NSForegroundColorAttributeName: gray,
+        NSFontAttributeName: baseFont
+    }];
+
+    [att setAttributes:@{
+        NSForegroundColorAttributeName: blue,
+        NSFontAttributeName: blueFont
+    } range:NSMakeRange(0, countStr.length)];
+
+    NSRange sizeRange = NSMakeRange(full.length - sizeStr.length, sizeStr.length);
+    [att setAttributes:@{
+        NSForegroundColorAttributeName: blue,
+        NSFontAttributeName: blueFont
+    } range:sizeRange];
+
+    self.metaLabel.attributedText = att;
 }
 
 + (NSString *)bytesToString:(unsigned long long)bytes {
     double mb = (double)bytes / (1024.0 * 1024.0);
-    if (mb < 1024) return [NSString stringWithFormat:@"%.1fMB", mb];
+    if (mb < 1024.0) return [NSString stringWithFormat:@"%.1fMB", mb];
     double gb = mb / 1024.0;
     return [NSString stringWithFormat:@"%.2fGB", gb];
 }
 
-- (void)updateButtons {
-    BOOL has = self.selectedIDs.count > 0;
-    self.deleteButton.enabled = has;
-    self.undoButton.enabled = has;
-    self.deleteButton.alpha = has ? 1.0 : 0.4;
-    self.undoButton.alpha = has ? 1.0 : 0.4;
+- (void)applySelectAll:(BOOL)allSelected {
+    if (self.archivedIDs.count == 0) return;
+
+    if (allSelected) {
+        [self.selectedIDs removeAllObjects];
+        [self.selectedIDs addObjectsFromArray:self.archivedIDs];
+    } else {
+        [self.selectedIDs removeAllObjects];
+    }
+
+    for (ArchivedCell *cell in self.collectionView.visibleCells) {
+        NSString *aid = cell.representedAssetID;
+        [cell setChecked:(aid.length > 0 && [self.selectedIDs containsObject:aid])];
+    }
+
+    [self syncAllSelectedState];
+    [self updateDeleteButtonVisibilityAndInsets];
+}
+
+- (void)syncAllSelectedState {
+    BOOL all = (self.archivedIDs.count > 0 && self.selectedIDs.count == self.archivedIDs.count);
+    self.titleBar.allSelected = all;
+}
+
+- (void)updateDeleteButtonVisibilityAndInsets {
+    BOOL show = (self.selectedIDs.count > 0);
+    self.bottomButtonsHost.hidden = !show;
+
+    CGFloat btnH = 51.0;
+    CGFloat gap = 15.0;
+    CGFloat hostH = show ? (btnH + gap + btnH) : 0.0;
+
+    CGFloat bottomInset = 12 + self.view.safeAreaInsets.bottom + hostH;
+
+    UIEdgeInsets inset = self.collectionView.contentInset;
+    inset.bottom = bottomInset;
+    self.collectionView.contentInset = inset;
+    self.collectionView.scrollIndicatorInsets = inset;
 }
 
 #pragma mark - Actions
 
-- (void)undoTapped {
-    if (self.selectedIDs.count == 0) return;
-    NSArray *ids = self.selectedIDs.allObjects;
-
-    for (NSString *aid in ids) {
-        [[SwipeManager shared] resetStatusForAssetID:aid sourceModule:nil recordUndo:NO];
-    }
-    [self.selectedIDs removeAllObjects];
-    [self updateButtons];
-    [self handleUpdate];
-}
-
 - (void)deleteTapped {
     if (self.selectedIDs.count == 0) return;
 
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"删除"
-                                                                message:@"确定要从系统相册删除选中的照片吗？此操作不可恢复。"
-                                                         preferredStyle:UIAlertControllerStyleAlert];
     __weak typeof(self) weakSelf = self;
-    [ac addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [ac addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        NSArray *ids = weakSelf.selectedIDs.allObjects;
-        [[SwipeManager shared] deleteAssetsWithIDs:ids completion:^(BOOL success, NSError * _Nullable error) {
-            [weakSelf.selectedIDs removeAllObjects];
-            [weakSelf updateButtons];
-            [weakSelf handleUpdate];
-        }];
-    }]];
-    [self presentViewController:ac animated:YES completion:nil];
+    NSArray *ids = weakSelf.selectedIDs.allObjects;
+    [[SwipeManager shared] deleteAssetsWithIDs:ids completion:^(__unused BOOL success, __unused NSError * _Nullable error) {
+        [weakSelf.selectedIDs removeAllObjects];
+        [weakSelf updateDeleteButtonVisibilityAndInsets];
+        [weakSelf handleUpdate];
+    }];
 }
 
 #pragma mark - Collection
@@ -193,46 +507,104 @@
     ArchivedCell *cell = [cv dequeueReusableCellWithReuseIdentifier:@"ArchivedCell" forIndexPath:indexPath];
     NSString *aid = self.archivedIDs[indexPath.item];
 
-    cell.selectedOverlay.hidden = ![self.selectedIDs containsObject:aid];
+    NSString *prev = cell.representedAssetID;
+    cell.representedAssetID = aid;
+    [cell setChecked:[self.selectedIDs containsObject:aid]];
 
-    cell.imageView.image = nil;
+    if (![prev isEqualToString:aid]) {
+        cell.imageView.image = nil;
+    }
+
     PHAsset *asset = [[SwipeManager shared] assetForID:aid];
     if (asset) {
-        CGSize target = CGSizeMake(240, 240);
+        CGSize target = CGSizeMake(240, 320);
         PHImageRequestOptions *opt = [PHImageRequestOptions new];
         opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
         opt.resizeMode = PHImageRequestOptionsResizeModeFast;
         opt.networkAccessAllowed = YES;
 
+        __weak typeof(cell) weakCell = cell;
         [self.imageManager requestImageForAsset:asset
                                      targetSize:target
                                     contentMode:PHImageContentModeAspectFill
                                         options:opt
                                   resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
-            if (result) cell.imageView.image = result;
+            NSNumber *degraded = info[PHImageResultIsDegradedKey];
+            if (degraded.boolValue) {
+                if (!weakCell.imageView.image) {
+                    weakCell.imageView.image = result;
+                }
+            } else {
+                weakCell.imageView.image = result;
+            }
+
+            if (!result) return;
+            if (![weakCell.representedAssetID isEqualToString:aid]) return;
+            weakCell.imageView.image = result;
         }];
     }
+
+    __weak typeof(self) weakSelf = self;
+    __weak typeof(cv) weakCV = cv;
+    __weak typeof(cell) weakCell = cell;
+
+    cell.onTapPreview = ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+
+        PHAsset *asset = [[SwipeManager shared] assetForID:aid];
+        if (!asset) return;
+
+        NSArray<PHAsset *> *previewAssets = @[asset];
+        NSIndexSet *preSel = [NSIndexSet indexSet];
+
+        ASMediaPreviewViewController *p =
+        [[ASMediaPreviewViewController alloc] initWithAssets:previewAssets
+                                               initialIndex:0
+                                            selectedIndexes:preSel];
+
+        p.bestIndex = 0;
+        p.showsBestBadge = NO;
+
+        [self.navigationController pushViewController:p animated:YES];
+    };
+
+    cell.onTapCheck = ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+
+        BOOL checked = [self.selectedIDs containsObject:aid];
+        if (checked) {
+            [self.selectedIDs removeObject:aid];
+            [weakCell setChecked:NO];
+        } else {
+            [self.selectedIDs addObject:aid];
+            [weakCell setChecked:YES];
+        }
+
+        [self syncAllSelectedState];
+        [self updateDeleteButtonVisibilityAndInsets];
+    };
+
     return cell;
 }
 
-- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    NSString *aid = self.archivedIDs[indexPath.item];
-    [self.selectedIDs addObject:aid];
-    [self updateButtons];
-    [collectionView reloadItemsAtIndexPaths:@[indexPath]];
-}
+- (CGSize)collectionView:(UICollectionView *)collectionView
+                  layout:(UICollectionViewLayout *)layout
+  sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
 
-- (void)collectionView:(UICollectionView *)collectionView didDeselectItemAtIndexPath:(NSIndexPath *)indexPath {
-    NSString *aid = self.archivedIDs[indexPath.item];
-    [self.selectedIDs removeObject:aid];
-    [self updateButtons];
-    [collectionView reloadItemsAtIndexPaths:@[indexPath]];
-}
+    CGFloat availableW = collectionView.bounds.size.width
+        - collectionView.contentInset.left
+        - collectionView.contentInset.right;
 
-- (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    CGFloat w = collectionView.bounds.size.width - collectionView.contentInset.left - collectionView.contentInset.right;
-    CGFloat itemW = (w - 24) / 3.0;
-    return CGSizeMake(itemW, itemW);
+    CGFloat spacing = 5.0;
+    CGFloat maxW = 120.0;
+
+    CGFloat w = floor((availableW - spacing * 2) / 3.0);
+    w = MIN(maxW, w);
+
+    CGFloat h = round(w * (160.0 / 120.0));
+    return CGSizeMake(w, h);
 }
 
 @end
