@@ -157,7 +157,7 @@
         [bar.topAnchor constraintEqualToAnchor:safe.topAnchor],
         [bar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [bar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [bar.heightAnchor constraintEqualToConstant:60],
+        [bar.heightAnchor constraintEqualToConstant:45],
 
         [self.navTitle.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor constant:20],
         [self.navTitle.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],

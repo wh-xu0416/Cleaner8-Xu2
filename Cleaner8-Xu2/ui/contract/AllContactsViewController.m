@@ -253,6 +253,7 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
 @property (nonatomic, strong) UIButton *primaryButton;
 @property (nonatomic, strong) UIButton *leftButton;
 @property (nonatomic, strong) UIButton *rightButton;
+@property (nonatomic, assign) BOOL hasContactsAccess;
 
 @end
 
@@ -280,6 +281,7 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
     [super viewDidLoad];
 
     self.view.backgroundColor = ASACRGB(246, 248, 251);
+    self.hasContactsAccess = (self.mode == AllContactsModeRestore);
 
     self.contactsManager = [ContactsManager shared];
     self.contacts = [NSMutableArray array];
@@ -299,15 +301,30 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
 }
 
 - (void)updateEmptyStateIfNeeded {
-    BOOL empty = (self.contacts.count == 0);
 
-    self.emptyView.hidden = !empty;
-    self.cv.hidden = empty;
+    BOOL noData = (self.contacts.count == 0);
 
-    // Incomplete 才有顶部两行文案
+    // restore 模式不依赖系统通讯录权限（你是读备份）
+    BOOL needContactsPermission = (self.mode != AllContactsModeRestore);
+    BOOL noPermission = (needContactsPermission && !self.hasContactsAccess);
+
+    BOOL showEmpty = (noData || noPermission);
+
+    self.emptyView.hidden = !showEmpty;
+    self.cv.hidden = showEmpty;
+
+    // 文案/图可以按需区分（不要求的话也可以不改）
+    if (noPermission) {
+        self.emptyTitle.text = @"No Permission";
+        self.emptyImage.image = [UIImage imageNamed:@"ic_no_contact"]; // 你要的占位图
+    } else {
+        self.emptyTitle.text = @"No Content";
+        self.emptyImage.image = [UIImage imageNamed:@"ic_no_contact"];
+    }
+
     if (self.mode == AllContactsModeIncomplete) {
-        self.pageTitleLabel.hidden = empty;
-        self.countLabel.hidden = empty;
+        self.pageTitleLabel.hidden = showEmpty;
+        self.countLabel.hidden = showEmpty;
     }
 }
 
@@ -533,8 +550,27 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 
     [self.contactsManager requestContactsAccess:^(NSError * _Nullable error) {
-        if (error) { NSLog(@"通讯录权限失败: %@", error.localizedDescription); return; }
 
+        weakSelf.hasContactsAccess = (error == nil);
+
+        if (error) {
+            NSLog(@"通讯录权限失败: %@", error.localizedDescription);
+
+            // 保证数据为空
+            [weakSelf.contacts removeAllObjects];
+            [weakSelf.selectedContactIds removeAllObjects];
+            [weakSelf rebuildSections];
+            [weakSelf.cv reloadData];
+
+            [weakSelf syncTopSelectState];
+            [weakSelf updateBottomState];
+            if (weakSelf.mode == AllContactsModeIncomplete) {
+                [weakSelf updateIncompleteCountLabel];
+            }
+            [weakSelf updateEmptyStateIfNeeded];
+            return;
+        }
+        
         // 不完整联系人
         if (weakSelf.mode == AllContactsModeIncomplete) {
             [weakSelf.contactsManager fetchIncompleteContacts:^(NSArray<CNContact *> * _Nullable allIncomplete,
@@ -552,6 +588,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                 [weakSelf updateBottomState];
                 [weakSelf updateIncompleteCountLabel];
                 [weakSelf updateEmptyStateIfNeeded];
+                weakSelf.hasContactsAccess = YES;
             }];
             return;
         }
@@ -569,6 +606,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             [weakSelf syncTopSelectState];
             [weakSelf updateBottomState];
             [weakSelf updateEmptyStateIfNeeded];
+            weakSelf.hasContactsAccess = YES;
         }];
     }];
 }

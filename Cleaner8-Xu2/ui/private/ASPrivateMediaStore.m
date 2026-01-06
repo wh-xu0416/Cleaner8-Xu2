@@ -40,8 +40,10 @@
 
 - (NSArray<NSURL *> *)allItems:(ASPrivateMediaType)type {
     NSURL *dir = [self dirForType:type];
-    NSArray *files = [self.fm contentsOfDirectoryAtURL:dir includingPropertiesForKeys:nil options:0 error:nil];
-    // 稳定排序：按文件名
+    NSError *err = nil;
+    NSArray *files = [self.fm contentsOfDirectoryAtURL:dir includingPropertiesForKeys:nil options:0 error:&err];
+    if (![files isKindOfClass:NSArray.class]) files = @[];
+
     return [files sortedArrayUsingComparator:^NSComparisonResult(NSURL *a, NSURL *b) {
         return [a.lastPathComponent compare:b.lastPathComponent];
     }];
@@ -65,91 +67,90 @@
                       onOneDone:(void(^)(NSURL * _Nullable dstURL, BOOL ok))onOneDone
                      completion:(void(^)(BOOL ok))completion {
 
+    fprintf(stderr, "📥 importFromPickerResults count=%lu\n", (unsigned long)results.count);
+
     if (results.count == 0) {
         if (completion) completion(YES);
         return;
     }
 
-    UTType *ut = (type == ASPrivateMediaTypePhoto) ? UTTypeImage : UTTypeMovie;
+    UTType *want = (type == ASPrivateMediaTypePhoto) ? UTTypeImage : UTTypeMovie;
     NSURL *destDir = [self dirForType:type];
 
-    __block NSInteger idx = 0;
+    dispatch_group_t group = dispatch_group_create();
     __block BOOL allOK = YES;
 
-    __weak typeof(self) ws = self;
-
-    void (^step)(void) = ^{
-        if (idx >= results.count) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(allOK);
-            });
-            return;
-        }
-
-        PHPickerResult *r = results[idx++];
+    for (PHPickerResult *r in results) {
         NSItemProvider *p = r.itemProvider;
 
-        // 不符合类型就跳过继续
-        if (![p hasItemConformingToTypeIdentifier:ut.identifier]) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                step();
-            });
-            return;
+        // 选择一个更“具体”的 typeId（不要死用 public.image / public.movie）
+        __block NSString *typeId = nil;
+        for (NSString *tid in p.registeredTypeIdentifiers) {
+            UTType *t = [UTType typeWithIdentifier:tid];
+            if (t && [t conformsToType:want]) { typeId = tid; break; }
         }
 
-        NSString *typeId = ut.identifier;
+        if (!typeId) {
+            fprintf(stderr, "❌ no matching typeId, providerTypes=%s\n",
+                    [[p.registeredTypeIdentifiers description] UTF8String]);
+            allOK = NO;
+            continue;
+        }
+
+        fprintf(stderr, "✅ use typeId=%s\n", typeId.UTF8String);
+
+        dispatch_group_enter(group);
 
         [p loadFileRepresentationForTypeIdentifier:typeId completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
 
-            void (^finishOne)(NSURL *dst, BOOL ok) = ^(NSURL *dst, BOOL ok){
+            void (^finish)(NSURL *dst, BOOL ok) = ^(NSURL *dst, BOOL ok) {
                 if (!ok) allOK = NO;
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (onOneDone) onOneDone(ok ? dst : nil, ok);
-                    step();
                 });
+                dispatch_group_leave(group);
             };
 
-            if (!error && url) {
-                @autoreleasepool {
-                    NSString *ext = url.pathExtension.length ? url.pathExtension : ((type==ASPrivateMediaTypePhoto)?@"jpg":@"mp4");
-                    uint64_t ms = (uint64_t)(NSDate.date.timeIntervalSince1970 * 1000.0);
-                    NSString *name = [NSString stringWithFormat:@"%llu_%@.%@",
-                                      (unsigned long long)ms, NSUUID.UUID.UUIDString, ext];
-                    NSURL *dst = [destDir URLByAppendingPathComponent:name];
+            if (url && !error) {
+                NSString *ext = url.pathExtension.length ? url.pathExtension : ((type==ASPrivateMediaTypePhoto)?@"jpg":@"mp4");
+                uint64_t ms = (uint64_t)(NSDate.date.timeIntervalSince1970 * 1000.0);
+                NSString *name = [NSString stringWithFormat:@"%llu_%@.%@", (unsigned long long)ms, NSUUID.UUID.UUIDString, ext];
+                NSURL *dst = [destDir URLByAppendingPathComponent:name];
 
-                    NSError *copyErr = nil;
-                    [ws.fm copyItemAtURL:url toURL:dst error:&copyErr];
-                    finishOne(dst, copyErr == nil);
-                }
+                NSError *copyErr = nil;
+                BOOL ok = [self.fm copyItemAtURL:url toURL:dst error:&copyErr];
+                fprintf(stderr, "📦 copy ok=%d err=%s\n", ok, (copyErr.localizedDescription ?: @"").UTF8String);
+                finish(dst, ok);
                 return;
             }
 
-            // ✅ fallback：loadDataRepresentation（对受限资源更稳）
+            // fallback：loadDataRepresentation
             [p loadDataRepresentationForTypeIdentifier:typeId completionHandler:^(NSData * _Nullable data, NSError * _Nullable err2) {
-                @autoreleasepool {
-                    if (err2 || data.length == 0) {
-                        finishOne(nil, NO);
-                        return;
-                    }
-
-                    NSString *ext = (type==ASPrivateMediaTypePhoto)?@"jpg":@"mp4";
-                    uint64_t ms = (uint64_t)(NSDate.date.timeIntervalSince1970 * 1000.0);
-                    NSString *name = [NSString stringWithFormat:@"%llu_%@.%@",
-                                      (unsigned long long)ms, NSUUID.UUID.UUIDString, ext];
-                    NSURL *dst = [destDir URLByAppendingPathComponent:name];
-
-                    NSError *werr = nil;
-                    [data writeToURL:dst options:NSDataWritingAtomic error:&werr];
-                    finishOne(dst, werr == nil);
+                if (err2 || data.length == 0) {
+                    fprintf(stderr, "❌ data failed err=%s\n", (err2.localizedDescription ?: @"").UTF8String);
+                    finish(nil, NO);
+                    return;
                 }
+
+                NSString *ext = (type==ASPrivateMediaTypePhoto)?@"jpg":@"mp4";
+                uint64_t ms = (uint64_t)(NSDate.date.timeIntervalSince1970 * 1000.0);
+                NSString *name = [NSString stringWithFormat:@"%llu_%@.%@", (unsigned long long)ms, NSUUID.UUID.UUIDString, ext];
+                NSURL *dst = [destDir URLByAppendingPathComponent:name];
+
+                NSError *werr = nil;
+                BOOL ok = [data writeToURL:dst options:NSDataWritingAtomic error:&werr];
+                fprintf(stderr, "💾 write ok=%d err=%s\n", ok, (werr.localizedDescription ?: @"").UTF8String);
+                finish(dst, ok);
             }];
         }];
-    };
+    }
 
-    dispatch_async(dispatch_get_main_queue(), ^{
-        step();
+    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+        fprintf(stderr, "✅ import done allOK=%d\n", allOK);
+        if (completion) completion(allOK);
     });
 }
+
 
 - (NSString *)idsPlistPath:(ASPrivateMediaType)type {
     NSURL *doc = [self.fm URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;

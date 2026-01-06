@@ -418,6 +418,7 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
 #pragma mark - VC
 
 @interface DuplicateContactsViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
+@property (nonatomic, assign) BOOL hasContactsAccess;
 
 @property (nonatomic, strong) UIImageView *bgTop;
 @property (nonatomic, strong) ASSelectTitleBar *titleBar;
@@ -462,6 +463,7 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
     [super viewDidLoad];
 
     self.view.backgroundColor = ASDCRGB(246, 248, 251);
+    self.hasContactsAccess = NO;
 
     self.contactsManager = [ContactsManager shared];
     self.selectedContactIds = [NSMutableSet set];
@@ -591,16 +593,48 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     __weak typeof(self) weakSelf = self;
 
     [self.contactsManager requestContactsAccess:^(NSError * _Nullable error) {
-        if (error) { return; }
+
+        weakSelf.hasContactsAccess = (error == nil);
+
+        if (error) {
+            // ✅ 无权限也要显示占位
+            weakSelf.allGroups = @[];
+            weakSelf.previewMode = NO;
+            weakSelf.previewGroups = nil;
+            [weakSelf.selectedContactIds removeAllObjects];
+
+            [weakSelf updateTopCountLabel];
+            [weakSelf updateEmptyStateIfNeeded];
+            [weakSelf updateFloatingButtonState];
+            [weakSelf syncTopSelectState];
+
+            [weakSelf.cv reloadData];
+            [weakSelf.view setNeedsLayout];
+            return;
+        }
 
         [weakSelf.contactsManager fetchDuplicateContactsWithMode:CMDuplicateModeAll
                                                      completion:^(NSArray<CMDuplicateGroup *> * _Nullable groups,
                                                                   NSArray<CMDuplicateGroup *> * _Nullable nameGroups,
                                                                   NSArray<CMDuplicateGroup *> * _Nullable phoneGroups,
                                                                   NSError * _Nullable error2) {
-            if (error2) { return; }
+            if (error2) {
+                // ✅ 拉取失败也当空态（至少别白屏）
+                weakSelf.allGroups = @[];
+                weakSelf.previewMode = NO;
+                weakSelf.previewGroups = nil;
+                [weakSelf.selectedContactIds removeAllObjects];
 
-            // 默认显示所有：nameGroups + phoneGroups
+                [weakSelf updateTopCountLabel];
+                [weakSelf updateEmptyStateIfNeeded];
+                [weakSelf updateFloatingButtonState];
+                [weakSelf syncTopSelectState];
+
+                [weakSelf.cv reloadData];
+                [weakSelf.view setNeedsLayout];
+                return;
+            }
+
             NSArray *ng = nameGroups ?: @[];
             NSArray *pg = phoneGroups ?: @[];
             weakSelf.allGroups = [ng arrayByAddingObjectsFromArray:pg];
@@ -925,9 +959,12 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 #pragma mark - Empty State
 
 - (void)updateEmptyStateIfNeeded {
-    BOOL noGroups = ((self.allGroups ?: @[]).count == 0);
 
-    if (!noGroups) {
+    BOOL noPermission = !self.hasContactsAccess;
+    BOOL noGroups = ((self.allGroups ?: @[]).count == 0);
+    BOOL showEmpty = (noPermission || noGroups);
+
+    if (!showEmpty) {
         self.emptyView.hidden = YES;
         self.cv.hidden = NO;
         return;
@@ -936,6 +973,23 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.cv.hidden = YES;
     self.emptyView.hidden = NO;
 
+    // ✅ 无权限：也显示占位图（按你需求：没数据也显示占位图）
+    if (noPermission) {
+        self.pageTitleLabel.hidden = YES;
+        self.countLabel.hidden = YES;
+
+        self.emptyImage.image = [UIImage imageNamed:@"ic_no_contact"];
+        self.emptyTitle.text = @"No Content";
+        self.emptyTitle.font = ASDCFont(24, UIFontWeightMedium);
+
+        self.emptySubTitle.hidden = YES;
+        self.emptyHint.hidden = YES;
+
+        [self.cv reloadData];
+        return;
+    }
+
+    // ===== 原逻辑保持 =====
     if (self.didMergeOnce) {
         self.emptyImage.image = [UIImage imageNamed:@"ic_contact_success"];
         self.emptyTitle.text = @"Done!";
@@ -958,6 +1012,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         self.emptySubTitle.hidden = YES;
         self.emptyHint.hidden = YES;
     }
+
     [self.cv reloadData];
 }
 

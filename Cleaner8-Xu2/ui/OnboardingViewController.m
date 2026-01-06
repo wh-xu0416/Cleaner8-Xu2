@@ -42,7 +42,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
 - (void)buildUI {
 
-    // 背景图全屏
     self.bgImageView = [UIImageView new];
     self.bgImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.bgImageView.contentMode = UIViewContentModeScaleAspectFill;
@@ -50,11 +49,9 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     self.bgImageView.userInteractionEnabled = YES;
     [self.view addSubview:self.bgImageView];
 
-    // 点击图片切换（不滑动）
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(tapToNext)];
     [self.bgImageView addGestureRecognizer:tap];
 
-    // 底部按钮
     self.continueBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.continueBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.continueBtn.backgroundColor = ASRGB(43, 127, 255); // #2B7FFF
@@ -79,14 +76,12 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         [self.continueBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:45],
         [self.continueBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-45],
         [self.continueBtn.heightAnchor constraintEqualToConstant:56],
-        // 距离底部 113（按你的要求用 safeArea）
         [self.continueBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-113],
     ]];
 }
 
 #pragma mark - Actions
 
-// 点击图片：下一张（第三张再点也停在第三张，不自动跳）
 - (void)tapToNext {
     if (self.index < self.images.count - 1) {
         self.index += 1;
@@ -94,7 +89,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     }
 }
 
-// 点击按钮：前两张 -> 下一张；第三张 -> 进入主页面
 - (void)tapContinue {
     if (self.index < self.images.count - 1) {
         self.index += 1;

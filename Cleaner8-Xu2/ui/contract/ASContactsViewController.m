@@ -60,7 +60,8 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [super viewDidLoad];
 
     self.view.backgroundColor = ASRGB(246, 248, 251);
-
+    self.contactStore = [CNContactStore new];
+    
     [self buildBackground];
     [self setupNavBar];
     [self buildCards];

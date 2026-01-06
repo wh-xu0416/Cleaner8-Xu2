@@ -50,4 +50,12 @@
 - (void)checkTap {
     if (self.onTapCheck) self.onTapCheck();
 }
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.representedId = nil;
+    self.thumb.image = nil;
+    [self setSelectedMark:NO];
+}
+
 @end

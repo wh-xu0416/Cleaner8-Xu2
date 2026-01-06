@@ -39,6 +39,7 @@ static inline UIColor *ASHexBlack(void) {
 
 @property (nonatomic, strong) NSCache<NSString*, UIImage*> *thumbCache;
 @property (nonatomic, strong) dispatch_queue_t thumbQueue;
+@property (nonatomic, strong) NSOperationQueue *thumbOpQ;
 
 @end
 
@@ -48,6 +49,10 @@ static inline UIColor *ASHexBlack(void) {
     [super viewDidLoad];
     self.items = [NSMutableArray array];
     self.selectedPaths = [NSMutableSet set];
+
+    self.thumbOpQ = [NSOperationQueue new];
+    self.thumbOpQ.maxConcurrentOperationCount = 2;
+    self.thumbOpQ.qualityOfService = NSQualityOfServiceUserInitiated;
 
     self.thumbCache = [NSCache new];
     self.thumbCache.countLimit = 500;
@@ -303,9 +308,7 @@ static inline UIColor *ASHexBlack(void) {
     self.allSelected = (self.items.count > 0 && self.selectedPaths.count == self.items.count);
 
     [self updateSelectAllUI];
-    [self.cv performBatchUpdates:^{} completion:^(BOOL finished) {
-        [self.cv reloadData];
-    }];
+    [self.cv reloadData];
     [self updateBottomTitle];
     [self updateEmptyStateUI];
 }
@@ -433,31 +436,34 @@ static inline UIColor *ASHexBlack(void) {
         // 1) 先删文件
         [[ASPrivateMediaStore shared] deleteItems:toDelete];
 
-        // 2) 再更新数据源 + 批量删除 cell（不闪）
+        // 2) 计算要删的 index
         NSMutableIndexSet *rm = [NSMutableIndexSet indexSet];
         [self.items enumerateObjectsUsingBlock:^(NSURL *obj, NSUInteger idx, BOOL *stop) {
             if ([self.selectedPaths containsObject:(obj.path ?: @"")]) [rm addIndex:idx];
         }];
+        if (rm.count == 0) return;
 
         NSMutableArray<NSIndexPath *> *ips = [NSMutableArray array];
         [rm enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL *stop) {
             [ips addObject:[NSIndexPath indexPathForItem:idx inSection:0]];
         }];
 
-        [self.items removeObjectsAtIndexes:rm];
-        [self.selectedPaths removeAllObjects];
-        self.allSelected = NO;
-
-        NSString *suffix = (self.mediaType == ASPrivateMediaTypePhoto) ? @"Photos" : @"Videos";
-        self.countLabel.text = [NSString stringWithFormat:@"%lu %@", (unsigned long)self.items.count, suffix];
-
+        // 3) 更新 UI：只在 batchUpdates 里改数据源一次
         [self.cv performBatchUpdates:^{
+            [self.items removeObjectsAtIndexes:rm];
             [self.cv deleteItemsAtIndexPaths:ips];
         } completion:^(BOOL finished) {
+            [self.selectedPaths removeAllObjects];
+            self.allSelected = NO;
+
+            NSString *suffix = (self.mediaType == ASPrivateMediaTypePhoto) ? @"Photos" : @"Videos";
+            self.countLabel.text = [NSString stringWithFormat:@"%lu %@", (unsigned long)self.items.count, suffix];
+
             [self updateSelectAllUI];
             [self updateBottomTitle];
             [self updateEmptyStateUI];
         }];
+
         return;
     }
 
@@ -469,8 +475,11 @@ static inline UIColor *ASHexBlack(void) {
 }
 
 - (void)presentPicker {
+    fprintf(stderr, "🔥 presentPicker called\n");
+
     PHPickerConfiguration *cfg =
     [[PHPickerConfiguration alloc] initWithPhotoLibrary:PHPhotoLibrary.sharedPhotoLibrary];
+    cfg.preferredAssetRepresentationMode = PHPickerConfigurationAssetRepresentationModeCurrent;
     cfg.selectionLimit = 0;
     if (@available(iOS 14, *)) {
         cfg.filter = (self.mediaType == ASPrivateMediaTypePhoto) ? PHPickerFilter.imagesFilter : PHPickerFilter.videosFilter;
@@ -483,42 +492,52 @@ static inline UIColor *ASHexBlack(void) {
 #pragma mark - PHPickerDelegate
 
 - (void)picker:(PHPickerViewController *)picker didFinishPicking:(NSArray<PHPickerResult *> *)results {
-    [picker dismissViewControllerAnimated:YES completion:nil];
-    if (results.count == 0) return;
+    fprintf(stderr, "🔥 didFinishPicking count=%lu\n", (unsigned long)results.count);
 
     __weak typeof(self) ws = self;
 
-    [[ASPrivateMediaStore shared] importFromPickerResults:results
-                                                    type:self.mediaType
-                                               onOneDone:^(NSURL * _Nullable dstURL, BOOL ok) {
-        if (!ok || !dstURL) return;
+    NSArray<PHPickerResult *> *picked = [results copy];
 
-        NSUInteger insertIndex = ws.items.count;
-        [ws.items addObject:dstURL];
+    [picker dismissViewControllerAnimated:YES completion:^{
+        if (picked.count == 0) return;
 
-        NSString *suffix = (ws.mediaType == ASPrivateMediaTypePhoto) ? @"Photos" : @"Videos";
-        ws.countLabel.text = [NSString stringWithFormat:@"%lu %@", (unsigned long)ws.items.count, suffix];
-        [ws updateEmptyStateUI];
+        [[ASPrivateMediaStore shared] importFromPickerResults:picked
+                                                        type:ws.mediaType
+                                                   onOneDone:^(NSURL * _Nullable dstURL, BOOL ok) {
+            if (!ok || !dstURL) return;
 
-        NSIndexPath *ip = [NSIndexPath indexPathForItem:insertIndex inSection:0];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSUInteger insertIndex = ws.items.count;
+                NSIndexPath *ip = [NSIndexPath indexPathForItem:insertIndex inSection:0];
 
-        ws.pendingBatchUpdates += 1;
-        [ws.cv performBatchUpdates:^{
-            [ws.cv insertItemsAtIndexPaths:@[ip]];
-        } completion:^(BOOL finished) {
-            ws.pendingBatchUpdates -= 1;
-            if (ws.importNeedsReload && ws.pendingBatchUpdates == 0) {
-                ws.importNeedsReload = NO;
-                [ws reloadItems];
-            }
+                ws.pendingBatchUpdates += 1;
+                [ws.cv performBatchUpdates:^{
+                    [ws.items addObject:dstURL];
+                    [ws.cv insertItemsAtIndexPaths:@[ip]];
+                } completion:^(BOOL finished) {
+                    ws.pendingBatchUpdates -= 1;
+                    if (ws.importNeedsReload && ws.pendingBatchUpdates == 0) {
+                        ws.importNeedsReload = NO;
+                        [ws reloadItems];
+                    }
+                }];
+
+                NSString *suffix = (ws.mediaType == ASPrivateMediaTypePhoto) ? @"Photos" : @"Videos";
+                ws.countLabel.text = [NSString stringWithFormat:@"%lu %@", (unsigned long)ws.items.count, suffix];
+                [ws updateEmptyStateUI];
+                [ws updateBottomTitle];
+                [ws updateSelectAllUI];
+            });
+
+        } completion:^(BOOL ok) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                ws.importNeedsReload = YES;
+                if (ws.pendingBatchUpdates == 0) {
+                    ws.importNeedsReload = NO;
+                    [ws reloadItems];
+                }
+            });
         }];
-
-    } completion:^(BOOL ok) {
-        ws.importNeedsReload = YES;
-        if (ws.pendingBatchUpdates == 0) {
-            ws.importNeedsReload = NO;
-            [ws reloadItems];
-        }
     }];
 }
 
@@ -558,23 +577,26 @@ static inline UIColor *ASHexBlack(void) {
         return cell;
     }
 
+
     dispatch_async(self.thumbQueue, ^{
-        BOOL isVideo = (ws.mediaType == ASPrivateMediaTypeVideo);
-        UIImage *img = isVideo ? [ws thumbForVideoURL:u maxPixel:maxPixel]
-                               : [ws thumbForImageURL:u maxPixel:maxPixel];
+        NSIndexPath *reqIP = indexPath;
+        NSString *reqId = rid;
 
-        if (!img) return;
-        [ws.thumbCache setObject:img forKey:rid];
+        [self.thumbOpQ addOperationWithBlock:^{
+            BOOL isVideo = (ws.mediaType == ASPrivateMediaTypeVideo);
+            UIImage *img = isVideo ? [ws thumbForVideoURL:u maxPixel:maxPixel]
+                                   : [ws thumbForImageURL:u maxPixel:maxPixel];
+            if (!img) return;
 
-        dispatch_async(dispatch_get_main_queue(), ^{
-            for (PrivateMediaCell *c in ws.cv.visibleCells) {
-                if (![c isKindOfClass:PrivateMediaCell.class]) continue;
-                if ([c.representedId isEqualToString:rid]) {
-                    c.thumb.image = img;
-                    break;
-                }
-            }
-        });
+            [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+                [ws.thumbCache setObject:img forKey:reqId];
+
+                PrivateMediaCell *c = (PrivateMediaCell *)[ws.cv cellForItemAtIndexPath:reqIP];
+                if (![c isKindOfClass:PrivateMediaCell.class]) return;
+                if (![c.representedId isEqualToString:reqId]) return;
+                c.thumb.image = img;
+            }];
+        }];
     });
 
     return cell;

@@ -1,6 +1,7 @@
 #import "LaunchViewController.h"
 #import "OnboardingViewController.h"
 #import "MainTabBarController.h"
+#import <Network/Network.h>
 
 #pragma mark - UI Helpers
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
@@ -13,6 +14,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 
 @interface LaunchViewController ()
+
 @property(nonatomic,strong) UIImageView *bgTop;
 @property(nonatomic,strong) UIImageView *logoView;
 @property(nonatomic,strong) UILabel *nameLab;
@@ -20,6 +22,9 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 @property(nonatomic,strong) NSLayoutConstraint *containerCenterYCons;
 
 @property(nonatomic,assign) BOOL didScheduleJump;
+@property(nonatomic,assign) nw_path_monitor_t pathMonitor;
+@property(nonatomic,assign) BOOL hasNetwork;
+
 @end
 
 @implementation LaunchViewController
@@ -36,9 +41,12 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-
+    
     if (self.didScheduleJump) return;
     self.didScheduleJump = YES;
+    
+    // Start the network monitor when the launch screen appears
+    [self startNetworkMonitor];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
@@ -52,8 +60,37 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
     [self buildUI];
 }
 
-#pragma mark - Jump
+#pragma mark - Network Monitor
+- (void)startNetworkMonitor {
+    if (@available(iOS 12.0, *)) {
+        if (self.pathMonitor) return;
 
+        self.hasNetwork = YES;
+
+        nw_path_monitor_t m = nw_path_monitor_create();
+        self.pathMonitor = m;
+
+        dispatch_queue_t q = dispatch_queue_create("as.net.monitor", DISPATCH_QUEUE_SERIAL);
+        nw_path_monitor_set_queue(m, q);
+
+        __weak typeof(self) weakSelf = self;
+        nw_path_monitor_set_update_handler(m, ^(nw_path_t  _Nonnull path) {
+            BOOL ok = (nw_path_get_status(path) == nw_path_status_satisfied);
+            weakSelf.hasNetwork = ok;
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (!weakSelf) return;
+                if (!ok) {
+                    // Handle no network case (show alert or perform other actions)
+                }
+            });
+        });
+
+        nw_path_monitor_start(m);
+    }
+}
+
+#pragma mark - Jump
 - (void)jumpNext {
     BOOL done = [[NSUserDefaults standardUserDefaults] boolForKey:kHasCompletedOnboardingKey];
 
@@ -82,9 +119,7 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 }
 
 #pragma mark - UI
-
 - (void)buildUI {
-
     self.bgTop = [UIImageView new];
     self.bgTop.translatesAutoresizingMaskIntoConstraints = NO;
     self.bgTop.image = [UIImage imageNamed:@"ic_home_bg"];

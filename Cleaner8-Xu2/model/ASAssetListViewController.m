@@ -3,6 +3,7 @@
 #import "ASPhotoScanManager.h"
 #import "ASCustomNavBar.h"
 #import "ASMediaPreviewViewController.h"
+#import "ResultViewController.h"
 
 #pragma mark - UI helpers
 typedef NS_ENUM(NSInteger, ASAssetSortMode) {
@@ -2072,18 +2073,27 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!success) return;
+            
+            if (success) {
+                NSUInteger deletedCount = toDelete.count;
+                uint64_t freedBytes = weakSelf.selectedBytes;
 
-            [weakSelf.selectedIds removeAllObjects];
+                ResultViewController *r =
+                [[ResultViewController alloc] initWithDeletedCount:deletedCount
+                                                         freedBytes:freedBytes];
+                [weakSelf.navigationController pushViewController:r animated:YES];
 
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                [weakSelf rebuildDataFromManager];
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [weakSelf applyDefaultSelectionRule];
-                    [weakSelf.cv reloadData];
-                    [weakSelf recomputeBytesAndRefreshUI];
-                    [weakSelf syncNavSelectAllState];
+                [weakSelf.selectedIds removeAllObjects];
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    [weakSelf rebuildDataFromManager];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [weakSelf applyDefaultSelectionRule];
+                        [weakSelf.cv reloadData];
+                        [weakSelf recomputeBytesAndRefreshUI];
+                        [weakSelf syncNavSelectAllState];
+                    });
                 });
-            });
+            }
         });
     }];
 }

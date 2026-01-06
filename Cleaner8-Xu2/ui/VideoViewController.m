@@ -5,7 +5,6 @@
 #import "ASMyStudioViewController.h"
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
-#import <Network/Network.h>
 
 #pragma mark - UI Helpers
 static NSString * const kASLastPhotoAuthStatusKey = @"as_last_photo_auth_status_v1";
@@ -54,7 +53,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
 @property(nonatomic,assign) BOOL hasShownNoNetworkAlertThisAppear;
 
-@property(nonatomic,assign) nw_path_monitor_t pathMonitor;
 @property(nonatomic,assign) BOOL hasNetwork;
 
 @end
@@ -75,7 +73,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [super viewDidLoad];
     self.view.backgroundColor = ASRGB(246, 248, 251);
     [self buildUI];
-    [self startNetworkMonitor];
+    [self applyPhotoAuthStatusIfDetermined];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -88,55 +86,24 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
     self.hasShownNoNetworkAlertThisAppear = NO;
 
-    [self requestAndApplyPhotoPermission];
-    [self checkNetworkAndMaybeAlert];
+     PHAuthorizationStatus status = [self currentPhotoAuthStatus];
+     if (status == PHAuthorizationStatusNotDetermined) {
+         [self requestAndApplyPhotoPermission];
+     }
 }
 
-- (void)startNetworkMonitor {
-    if (@available(iOS 12.0, *)) {
-        if (self.pathMonitor) return;
-
-        self.hasNetwork = YES;
-
-        nw_path_monitor_t m = nw_path_monitor_create();
-        self.pathMonitor = m;
-
-        dispatch_queue_t q = dispatch_queue_create("as.net.monitor", DISPATCH_QUEUE_SERIAL);
-        nw_path_monitor_set_queue(m, q);
-
-        __weak typeof(self) weakSelf = self;
-        nw_path_monitor_set_update_handler(m, ^(nw_path_t  _Nonnull path) {
-            BOOL ok = (nw_path_get_status(path) == nw_path_status_satisfied);
-            weakSelf.hasNetwork = ok;
-
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (!weakSelf) return;
-                if (!ok) {
-                    [weakSelf checkNetworkAndMaybeAlert];
-                }
-            });
-        });
-
-        nw_path_monitor_start(m);
+- (PHAuthorizationStatus)currentPhotoAuthStatus {
+    if (@available(iOS 14, *)) {
+        return [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+    } else {
+        return [PHPhotoLibrary authorizationStatus];
     }
 }
 
-- (void)checkNetworkAndMaybeAlert {
-    if (!self.isViewLoaded || self.view.window == nil) return;
-    if (self.hasShownNoNetworkAlertThisAppear) return;
-
-    if (!self.hasNetwork) {
-        self.hasShownNoNetworkAlertThisAppear = YES;
-        // [self showNoNetworkAlert];
-    }
-}
-
-- (void)dealloc {
-    if (@available(iOS 12.0, *)) {
-        if (self.pathMonitor) {
-            nw_path_monitor_cancel(self.pathMonitor);
-            self.pathMonitor = nil;
-        }
+- (void)applyPhotoAuthStatusIfDetermined {
+    PHAuthorizationStatus status = [self currentPhotoAuthStatus];
+    if (status != PHAuthorizationStatusNotDetermined) {
+        [self applyPhotoAuthStatus:status];
     }
 }
 
@@ -457,7 +424,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
     btn.translatesAutoresizingMaskIntoConstraints = NO;
     btn.backgroundColor = ASBlue(); // #024DFFFF
-    btn.layer.cornerRadius = 20;
+    btn.layer.cornerRadius = 35;
     btn.layer.masksToBounds = YES;
     [btn setTitle:@"Go to Settings" forState:UIControlStateNormal];
     [btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
@@ -485,7 +452,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         [t2.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:45],
         [t2.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-45],
 
-        [btn.topAnchor constraintEqualToAnchor:t2.bottomAnchor constant:86],
+        [btn.topAnchor constraintEqualToAnchor:t2.bottomAnchor constant:60],
         [btn.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:45],
         [btn.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-45],
 

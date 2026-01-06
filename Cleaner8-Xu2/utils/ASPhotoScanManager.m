@@ -1220,7 +1220,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
                 }
             }
 
-            // ✅ 先把 running 置回 NO，再回主线程回调（避免 completion 里立刻触发新 scan 还被 busy 拦住）
             self.fullScanRunning = NO;
 
             dispatch_async(dispatch_get_main_queue(), ^{

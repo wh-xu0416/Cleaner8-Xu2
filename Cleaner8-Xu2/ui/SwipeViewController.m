@@ -5,10 +5,23 @@
 #import "SwipeManager.h"
 #import "SwipeAlbumViewController.h"
 #import "ASArchivedFilesViewController.h"
+#import <PhotosUI/PhotosUI.h>
+#import "ASPrivatePermissionBanner.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 #pragma mark - Helpers
+static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
+    return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
+}
+
+static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:size weight:weight];
+}
+
+static inline UIColor *ASBlue(void) {
+    return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; // #024DFFFF
+}
 static inline NSString *SWMonthKeyFromModule(SwipeModule *m) {
     if ([m.moduleID hasPrefix:@"month_"] && m.moduleID.length >= 6) {
         return [m.moduleID substringFromIndex:6]; // "YYYY-MM"
@@ -78,7 +91,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     NSDate *date = [cal dateFromComponents:c];
     if (!date) return ymd ?: @"";
 
-    // 只按“天”比较，避免时区/时间点影响
     NSDate *today = [NSDate date];
     NSDateComponents *diff = [cal components:NSCalendarUnitDay
                                     fromDate:[cal startOfDayForDate:date]
@@ -88,12 +100,10 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     if (diff.day == 0) return @"Today";
     if (diff.day == 1) return @"Yesterday";
 
-    // 其它显示星期几
     static NSDateFormatter *fmt = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         fmt = [NSDateFormatter new];
-        // 固定英文星期：Monday/Tuesday...
         fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
         fmt.dateFormat = @"EEEE";
     });
@@ -142,6 +152,85 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 - (void)cancelRequestWithManager:(PHCachingImageManager *)mgr;
 - (void)setCompletedUI:(BOOL)completed;
 - (void)setBottomGradientVisible:(BOOL)visible height:(CGFloat)h;
+@end
+
+#pragma mark - No Auth Cell
+
+@interface ASSwipeNoAuthCell : UICollectionViewCell
+@property (nonatomic, strong) UIImageView *iconView;
+@property (nonatomic, strong) UILabel *t1;
+@property (nonatomic, strong) UILabel *t2;
+@property (nonatomic, strong) UIButton *btn;
+@property (nonatomic, copy) void (^onTap)(void);
+@end
+
+@implementation ASSwipeNoAuthCell
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self = [super initWithFrame:frame]) {
+        self.backgroundColor = UIColor.clearColor;
+
+        _iconView = [UIImageView new];
+        _iconView.contentMode = UIViewContentModeScaleAspectFit;
+        _iconView.image = [UIImage imageNamed:@"ic_photo_permission_not"];
+        [self.contentView addSubview:_iconView];
+
+        _t1 = [UILabel new];
+        _t1.text = @"Allow Photo Access";
+        _t1.textColor = UIColor.blackColor;
+        _t1.font = ASFont(20, UIFontWeightMedium);
+        _t1.textAlignment = NSTextAlignmentCenter;
+        [self.contentView addSubview:_t1];
+
+        _t2 = [UILabel new];
+        _t2.text = @"To compress photos, videos, and LivePhotos. please allow access to your photo library.";
+        _t2.textColor = ASRGB(102, 102, 102);
+        _t2.font = ASFont(13, UIFontWeightRegular);
+        _t2.numberOfLines = 3;
+        _t2.textAlignment = NSTextAlignmentCenter;
+        [self.contentView addSubview:_t2];
+
+        _btn = [UIButton buttonWithType:UIButtonTypeCustom];
+        _btn.backgroundColor = ASBlue();
+        _btn.layer.cornerRadius = 35;
+        _btn.clipsToBounds = YES;
+        [_btn setTitle:@"Go to Settings" forState:UIControlStateNormal];
+        [_btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        _btn.titleLabel.font = ASFont(20, UIFontWeightRegular);
+        _btn.contentEdgeInsets = UIEdgeInsetsMake(18, 0, 18, 0);
+        [_btn addTarget:self action:@selector(onBtn) forControlEvents:UIControlEventTouchUpInside];
+        [self.contentView addSubview:_btn];
+    }
+    return self;
+}
+
+- (void)onBtn {
+    if (self.onTap) self.onTap();
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+
+    CGFloat w = self.contentView.bounds.size.width;
+    CGFloat top = 60;
+
+    self.iconView.frame = CGRectMake((w - 96)/2.0, top, 96, 96);
+    self.t1.frame = CGRectMake(30, CGRectGetMaxY(self.iconView.frame) + 20, w - 60, 24);
+    CGFloat t2W = w - 90;
+
+    CGSize t2Size = [self.t2 sizeThatFits:CGSizeMake(t2W, CGFLOAT_MAX)];
+    CGFloat lineH = self.t2.font.lineHeight;
+
+    CGFloat t2H = MIN(t2Size.height, ceil(lineH * 3.0));
+
+    self.t2.frame = CGRectMake(45, CGRectGetMaxY(self.t1.frame) + 10, t2W, t2H);
+    CGFloat btnW = w - 90;
+    self.btn.frame = CGRectMake((w - btnW)/2.0,
+                                CGRectGetMaxY(self.t2.frame) + 50,
+                                btnW,
+                                70);
+}
+
 @end
 
 @implementation SWCoverCellBase
@@ -391,6 +480,14 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 #pragma mark - SwipeViewController
 
 @interface SwipeViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UIScrollViewDelegate>
+@property (nonatomic, assign) BOOL sw_hasPhotoAccess;
+@property (nonatomic, assign) BOOL sw_isLimitedAuth;
+
+@property (nonatomic, strong) ASPrivatePermissionBanner *permissionBanner;
+@property (nonatomic, strong) NSLayoutConstraint *permissionBannerHeightC;
+
+@property (nonatomic, strong) UIView *noAuthPlaceholder;
+
 @property (nonatomic, assign) BOOL sw_needsReloadOnAppear;
 @property (nonatomic, assign) BOOL sw_reloadScheduled;
 
@@ -456,7 +553,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [super viewWillAppear:animated];
     self.navigationController.navigationBarHidden = YES;
 
-    // ✅ 返回先快刷（尽量不要做全量 reload）
+    [self sw_updatePermissionUI];
     [self sw_refreshTopCardsFast];
 
     if (self.sw_needsReloadOnAppear) {
@@ -476,6 +573,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.imageMgr = [PHCachingImageManager new];
 
     [self buildUI];
+    [self sw_updatePermissionUI];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(onManagerUpdate)
@@ -484,15 +582,33 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
     __weak typeof(self) ws = self;
     [[SwipeManager shared] requestAuthorizationAndLoadIfNeeded:^(BOOL granted) {
-        if (!granted) return;
-        __strong typeof(ws) self = ws;
-        if (!self) return;
-        [self reloadAllFromManager];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(ws) self = ws;
+            if (!self) return;
+            [self sw_updatePermissionUI];
+            if (granted) [self reloadAllFromManager];
+        });
     }];
 }
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+
+- (PHAuthorizationStatus)sw_currentPHAuthStatus {
+    if (@available(iOS 14.0, *)) {
+        return [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+    } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        return [PHPhotoLibrary authorizationStatus];
+#pragma clang diagnostic pop
+    }
+}
+
+- (BOOL)sw_hasAccessForStatus:(PHAuthorizationStatus)st {
+    return (st == PHAuthorizationStatusAuthorized || st == PHAuthorizationStatusLimited);
 }
 
 #pragma mark - Data
@@ -695,6 +811,46 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         ratio
     ]];
 
+    self.permissionBanner = [[ASPrivatePermissionBanner alloc] initWithFrame:CGRectZero];
+    self.permissionBanner.translatesAutoresizingMaskIntoConstraints = NO;
+    self.permissionBanner.hidden = YES;
+    [self.contentView addSubview:self.permissionBanner];
+
+    self.permissionBannerHeightC = [self.permissionBanner.heightAnchor constraintEqualToConstant:150];
+    self.permissionBannerHeightC.priority = UILayoutPriorityRequired;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.permissionBanner.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:15],
+        [self.permissionBanner.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-15],
+        [self.permissionBanner.topAnchor constraintEqualToAnchor:self.cardsContainer.bottomAnchor constant:12],
+        self.permissionBannerHeightC,
+    ]];
+
+    // ===== No Auth Placeholder (reuse ASSwipeNoAuthCell) =====
+    ASSwipeNoAuthCell *noAuth = [ASSwipeNoAuthCell new];
+    noAuth.translatesAutoresizingMaskIntoConstraints = NO;
+    noAuth.hidden = YES;
+    __weak typeof(self) ws = self;
+    noAuth.onTap = ^{
+        __strong typeof(ws) self = ws;
+        if (!self) return;
+        [self sw_onTapPermissionGate];
+    };
+    [self.contentView addSubview:noAuth];
+    self.noAuthPlaceholder = noAuth;
+
+    // 关键：不要跟 othersCV 的 bottom 约束抢（othersCV 已经锚到 contentView.bottom 了）
+    // 用 top + leading/trailing + 固定高度（或 >=）即可
+    NSLayoutConstraint *noAuthH = [noAuth.heightAnchor constraintGreaterThanOrEqualToConstant:520];
+    noAuthH.priority = UILayoutPriorityRequired;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [noAuth.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
+        [noAuth.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+        [noAuth.topAnchor constraintEqualToAnchor:self.permissionBanner.bottomAnchor constant:0],
+        noAuthH,
+    ]];
+
     // ===== categorized card content =====
     self.categorizedIcon = [UIImageView new];
     self.categorizedIcon.translatesAutoresizingMaskIntoConstraints = NO;
@@ -827,7 +983,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [NSLayoutConstraint activateConstraints:@[
         [self.recentTitleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:15],
         [self.recentTitleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-15],
-        [self.recentTitleLabel.topAnchor constraintEqualToAnchor:self.cardsContainer.bottomAnchor constant:30],
+        [self.recentTitleLabel.topAnchor constraintEqualToAnchor:self.permissionBanner.bottomAnchor constant:18],
 
         [self.recentCV.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
         [self.recentCV.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
@@ -937,6 +1093,77 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         self.contentBottomC.constant = -(safeBottom + 100.0);
 
         self.scrollView.scrollIndicatorInsets = UIEdgeInsetsMake(safeTop, 0, safeBottom, 0);
+    }
+}
+
+- (void)sw_updatePermissionUI {
+    PHAuthorizationStatus st = [self sw_currentPHAuthStatus];
+
+    self.sw_hasPhotoAccess = [self sw_hasAccessForStatus:st];
+    self.sw_isLimitedAuth = (@available(iOS 14.0, *) && st == PHAuthorizationStatusLimited);
+
+    self.permissionBanner.hidden = !self.sw_isLimitedAuth;
+
+    __weak typeof(self) ws = self;
+    self.permissionBanner.onGoSettings = ^{
+        __strong typeof(ws) self = ws;
+        if (!self) return;
+        [self sw_onTapPermissionGate];
+    };
+
+    BOOL showNoAuth = !self.sw_hasPhotoAccess;
+    self.noAuthPlaceholder.hidden = !showNoAuth;
+
+    BOOL showSections = self.sw_hasPhotoAccess;
+
+    self.recentTitleLabel.hidden = !showSections;
+    self.recentCV.hidden = !showSections;
+
+    self.yearTitleLabel.hidden = !showSections;
+    self.yearMoreBtn.hidden = !showSections;
+    self.monthCV.hidden = !showSections;
+
+    self.othersTitleLabel.hidden = !showSections;
+    self.othersMoreBtn.hidden = !showSections;
+    self.othersCV.hidden = !showSections;
+
+    self.permissionBannerHeightC.constant = self.sw_isLimitedAuth ? 150.0 : 0.0;
+
+    if (showSections) {
+        [self.recentCV reloadData];
+        [self.monthCV reloadData];
+        [self.othersCV reloadData];
+    }
+}
+
+- (void)sw_onTapPermissionGate {
+    PHAuthorizationStatus st = [self sw_currentPHAuthStatus];
+
+    if (st == PHAuthorizationStatusNotDetermined) {
+        // 交给 SwipeManager 去弹系统授权
+        __weak typeof(self) ws = self;
+        [[SwipeManager shared] requestAuthorizationAndLoadIfNeeded:^(BOOL granted) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(ws) self = ws;
+                if (!self) return;
+                [self sw_updatePermissionUI];
+                if (granted) [self reloadAllFromManager];
+            });
+        }];
+        return;
+    }
+
+    if (@available(iOS 14.0, *)) {
+        if (st == PHAuthorizationStatusLimited) {
+            [PHPhotoLibrary.sharedPhotoLibrary presentLimitedLibraryPickerFromViewController:self];
+            return;
+        }
+    }
+
+    // denied / restricted
+    NSURL *url = [NSURL URLWithString:UIApplicationOpenSettingsURLString];
+    if ([[UIApplication sharedApplication] canOpenURL:url]) {
+        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
     }
 }
 
@@ -1108,7 +1335,11 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-
+    if (!self.sw_hasPhotoAccess) {
+        [self sw_onTapPermissionGate];
+        return;
+    }
+   
     SwipeModule *m = nil;
     if (collectionView == self.recentCV) m = self.recentModules[indexPath.item];
     else if (collectionView == self.monthCV) m = self.monthModules[indexPath.item];

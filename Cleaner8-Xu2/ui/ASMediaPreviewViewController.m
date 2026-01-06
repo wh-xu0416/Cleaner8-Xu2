@@ -879,6 +879,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 }
 
 - (void)as_updateThumbCurrentFrom:(NSInteger)oldIdx to:(NSInteger)newIdx {
+    if (self.usingFiles) return;
     if (self.thumbs.hidden) return;
 
     [UIView performWithoutAnimation:^{
@@ -1214,62 +1215,82 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     return [self itemCount];
 }
 
-- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView
+                          cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+
     NSInteger count = [self itemCount];
-    if (indexPath.item >= count) return [collectionView dequeueReusableCellWithReuseIdentifier:@"photo" forIndexPath:indexPath];
+    if (indexPath.item >= count) {
+        // 防御：返回一个空 cell
+        return [collectionView dequeueReusableCellWithReuseIdentifier:@"photo" forIndexPath:indexPath];
+    }
 
-    PHAsset *a = self.assets[indexPath.item];
-    BOOL isLive = (a.mediaType == PHAssetMediaTypeImage) && ((a.mediaSubtypes & PHAssetMediaSubtypePhotoLive) != 0);
+    // ====== 1) usingFiles 模式（从沙盒文件预览） ======
+    if (self.usingFiles) {
 
-    if (collectionView == self.pager) {
-        if (self.usingFiles) {
+        if (collectionView == self.pager) {
             NSURL *u = self.fileURLs[indexPath.item];
             NSString *ext = u.pathExtension.lowercaseString;
             BOOL isVideo = [@[@"mp4",@"mov",@"m4v"] containsObject:ext];
 
             if (isVideo) {
-                ASPreviewVideoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"video" forIndexPath:indexPath];
+                ASPreviewVideoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"video"
+                                                                                    forIndexPath:indexPath];
                 cell.fileURL = u;
                 cell.asset = nil;
                 cell.hostVC = self;
                 [cell prepareForDisplay];
                 return cell;
             } else {
-                ASPreviewPhotoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"photo" forIndexPath:indexPath];
+                ASPreviewPhotoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"photo"
+                                                                                    forIndexPath:indexPath];
                 cell.fileURL = u;
                 cell.asset = nil;
                 [cell prepareForDisplay];
                 return cell;
             }
         }
-        
+
+        return [collectionView dequeueReusableCellWithReuseIdentifier:@"thumb" forIndexPath:indexPath];
+    }
+    
+    PHAsset *a = self.assets[indexPath.item];
+    BOOL isLive = (a.mediaType == PHAssetMediaTypeImage) && ((a.mediaSubtypes & PHAssetMediaSubtypePhotoLive) != 0);
+    
+    if (collectionView == self.pager) {
         if (a.mediaType == PHAssetMediaTypeVideo) {
-            ASPreviewVideoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"video" forIndexPath:indexPath];
+            ASPreviewVideoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"video"
+                                                                                forIndexPath:indexPath];
             cell.asset = a;
+            cell.fileURL = nil;
             cell.hostVC = self;
             __weak typeof(self) weakSelf = self;
             cell.onPlayerReady = ^(AVPlayer *player) {
                 if (weakSelf.currentIndex == indexPath.item) [player play];
             };
             return cell;
+
         } else if (isLive) {
-            ASPreviewLiveCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"live" forIndexPath:indexPath];
+            ASPreviewLiveCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"live"
+                                                                               forIndexPath:indexPath];
             cell.asset = a;
             [cell prepareForDisplay];
             return cell;
+
         } else {
-            ASPreviewPhotoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"photo" forIndexPath:indexPath];
+            ASPreviewPhotoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"photo"
+                                                                                forIndexPath:indexPath];
             cell.asset = a;
+            cell.fileURL = nil;
             [cell prepareForDisplay];
             return cell;
         }
     }
 
+    // thumbs（assets 模式）
     ASPreviewThumbCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"thumb" forIndexPath:indexPath];
 
     BOOL checked = [self.selected containsIndex:indexPath.item];
     [cell applyChecked:checked];
-
     [cell applyCurrent:(indexPath.item == self.currentIndex)];
 
     BOOL multi = (self.assets.count > 1);
@@ -1293,6 +1314,8 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     CGSize target = CGSizeMake(px, px);
 
     __weak typeof(cell) weakCell = cell;
+    if (cell.rid != PHInvalidImageRequestID) [self.mgr cancelImageRequest:cell.rid];
+
     cell.rid = [self.mgr requestImageForAsset:a
                                    targetSize:target
                                   contentMode:PHImageContentModeAspectFill
@@ -1309,6 +1332,8 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 }
 
 - (void)onThumbCheckTap:(UIButton *)btn {
+    if (self.usingFiles) return;
+
     NSInteger idx = btn.tag;
     if (idx < 0 || idx >= self.assets.count) return;
 
