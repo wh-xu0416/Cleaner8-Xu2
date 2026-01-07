@@ -533,6 +533,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 @property (nonatomic, strong) PHCachingImageManager *imageMgr;
 @property (nonatomic, assign) uint64_t cachedArchivedBytes;
 @property (nonatomic, assign) CGFloat cachedCategorizedProgress;
+@property (nonatomic, strong) CAGradientLayer *topGradient;
 
 @end
 
@@ -746,6 +747,17 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 }
 
 - (void)buildUI {
+    self.view.backgroundColor = [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0];
+
+    self.topGradient = [CAGradientLayer layer];
+    self.topGradient.startPoint = CGPointMake(0.5, 0.0);
+    self.topGradient.endPoint   = CGPointMake(0.5, 1.0);
+
+    UIColor *c1 = [UIColor colorWithRed:224/255.0 green:224/255.0 blue:224/255.0 alpha:1.0];
+    UIColor *c2 = [UIColor colorWithRed:0/255.0   green:141/255.0 blue:255/255.0 alpha:0.0];
+
+    self.topGradient.colors = @[ (id)c1.CGColor, (id)c2.CGColor ];
+    [self.view.layer insertSublayer:self.topGradient atIndex:0];
 
     // Scroll
     self.scrollView = [UIScrollView new];
@@ -1080,6 +1092,13 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+
+    CGFloat w = self.view.bounds.size.width;
+    CGFloat safeTop = 0;
+    if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
+
+    CGFloat gradientH = safeTop + 402.0;
+    self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     [self applyCategorizedProgress:self.cachedCategorizedProgress];
 

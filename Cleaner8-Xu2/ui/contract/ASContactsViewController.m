@@ -34,7 +34,7 @@ static inline UIColor *ASAccent(void) {
 @property (nonatomic, assign) BOOL refreshScheduled;
 @property (nonatomic, assign) BOOL isRefreshing;
 
-@property (nonatomic, strong) UIImageView *bgTop;
+@property (nonatomic, strong) CAGradientLayer *topGradient;
 @property (nonatomic, strong) ASCustomNavBar *navBar;
 
 // cards
@@ -79,10 +79,19 @@ static inline UIColor *ASAccent(void) {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = ASRGB(246, 248, 251);
+    self.view.backgroundColor = [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0];
+    self.topGradient = [CAGradientLayer layer];
+    self.topGradient.startPoint = CGPointMake(0.5, 0.0);
+    self.topGradient.endPoint   = CGPointMake(0.5, 1.0);
+
+    UIColor *c1 = [UIColor colorWithRed:224/255.0 green:224/255.0 blue:224/255.0 alpha:1.0];
+    UIColor *c2 = [UIColor colorWithRed:0/255.0   green:141/255.0 blue:255/255.0 alpha:0.0];
+
+    self.topGradient.colors = @[ (id)c1.CGColor, (id)c2.CGColor ];
+    [self.view.layer insertSublayer:self.topGradient atIndex:0];
+
     self.contactStore = [CNContactStore new];
 
-    [self buildBackground];
     [self setupNavBar];
     [self buildCards];
     [self buildNoAuthPlaceholder];
@@ -212,25 +221,6 @@ static inline UIColor *ASAccent(void) {
     }
 }
 
-#pragma mark - Background
-
-- (void)buildBackground {
-    self.bgTop = [UIImageView new];
-    self.bgTop.translatesAutoresizingMaskIntoConstraints = NO;
-    self.bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
-    self.bgTop.contentMode = UIViewContentModeScaleAspectFill;
-    self.bgTop.clipsToBounds = YES;
-    self.bgTop.userInteractionEnabled = NO;
-    [self.view addSubview:self.bgTop];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.bgTop.heightAnchor constraintEqualToConstant:360],
-    ]];
-}
-
 #pragma mark - Nav
 
 - (void)setupNavBar {
@@ -247,6 +237,13 @@ static inline UIColor *ASAccent(void) {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    CGFloat w = self.view.bounds.size.width;
+    CGFloat safeTop = 0;
+    if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
+
+    CGFloat gradientH = safeTop + 402.0;
+    self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
+
     CGFloat navH = 44 + self.view.safeAreaInsets.top;
     self.navBar.frame = CGRectMake(0, 0, self.view.bounds.size.width, navH);
     [self.view bringSubviewToFront:self.navBar];

@@ -1060,7 +1060,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
 @interface ASAssetListViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
 @property (nonatomic) ASAssetSortMode sortMode;
-@property (nonatomic, strong) UIImageView *homeBgImageView;
+@property (nonatomic, strong) CAGradientLayer *topGradient;
 @property (nonatomic, strong) UIView *listBgView;
 @property (nonatomic, strong) UILabel *topSummaryLabel;
 @property (nonatomic, strong) UIButton *topSelectAllBtn;
@@ -1177,25 +1177,16 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.view.backgroundColor = [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0];
+    self.topGradient = [CAGradientLayer layer];
+    self.topGradient.startPoint = CGPointMake(0.5, 0.0);
+    self.topGradient.endPoint   = CGPointMake(0.5, 1.0);
 
-    self.view.backgroundColor = ASBgColor();
+    UIColor *c1 = [UIColor colorWithRed:224/255.0 green:224/255.0 blue:224/255.0 alpha:1.0];
+    UIColor *c2 = [UIColor colorWithRed:0/255.0   green:141/255.0 blue:255/255.0 alpha:0.0];
 
-    UIImageView *bgTop = [UIImageView new];
-    bgTop.translatesAutoresizingMaskIntoConstraints = NO;
-    bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
-    bgTop.contentMode = UIViewContentModeScaleAspectFill;
-    bgTop.clipsToBounds = YES;
-    bgTop.userInteractionEnabled = NO;
-    [self.view addSubview:bgTop];
-    [self.view sendSubviewToBack:bgTop];
-    self.homeBgImageView = bgTop;
-
-    [NSLayoutConstraint activateConstraints:@[
-        [bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [bgTop.heightAnchor constraintEqualToConstant:236],
-    ]];
+    self.topGradient.colors = @[ (id)c1.CGColor, (id)c2.CGColor ];
+    [self.view.layer insertSublayer:self.topGradient atIndex:0];
 
     self.navigationController.navigationBarHidden = YES;
 
@@ -1229,11 +1220,13 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     });
 }
 
-
 #pragma mark - 自定义布局调整
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    CGFloat w = self.view.bounds.size.width;
+    CGFloat gradientH = 0 + 402.0;
+    self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     CGFloat topSafe = self.view.safeAreaInsets.top;
     CGFloat bottomSafe = self.view.safeAreaInsets.bottom;

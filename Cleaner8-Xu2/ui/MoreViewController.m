@@ -16,7 +16,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
 @interface MoreViewController ()
 
-@property(nonatomic,strong) UIImageView *bgTop;
+@property (nonatomic, strong) CAGradientLayer *topGradient;
 @property(nonatomic,strong) UILabel *titleLab;
 
 @property(nonatomic,strong) UIControl *contactCard;
@@ -43,16 +43,29 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [self buildUI];
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    CGFloat w = self.view.bounds.size.width;
+    CGFloat safeTop = 0;
+    if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
+
+    CGFloat gradientH = safeTop + 402.0;
+    self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
+}
+
 #pragma mark - UI
 
 - (void)buildUI {
+    self.view.backgroundColor = [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0];
+    self.topGradient = [CAGradientLayer layer];
+    self.topGradient.startPoint = CGPointMake(0.5, 0.0);
+    self.topGradient.endPoint   = CGPointMake(0.5, 1.0);
 
-    self.bgTop = [UIImageView new];
-    self.bgTop.translatesAutoresizingMaskIntoConstraints = NO;
-    self.bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
-    self.bgTop.contentMode = UIViewContentModeScaleAspectFill;
-    self.bgTop.clipsToBounds = YES;
-    [self.view addSubview:self.bgTop];
+    UIColor *c1 = [UIColor colorWithRed:224/255.0 green:224/255.0 blue:224/255.0 alpha:1.0];
+    UIColor *c2 = [UIColor colorWithRed:0/255.0   green:141/255.0 blue:255/255.0 alpha:0.0];
+
+    self.topGradient.colors = @[ (id)c1.CGColor, (id)c2.CGColor ];
+    [self.view.layer insertSublayer:self.topGradient atIndex:0];
 
     self.titleLab = [UILabel new];
     self.titleLab.translatesAutoresizingMaskIntoConstraints = NO;
@@ -85,12 +98,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [self.view addSubview:self.settingCard];
 
     [NSLayoutConstraint activateConstraints:@[
-        // 背景
-        [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.bgTop.heightAnchor constraintEqualToConstant:360],
-
         [self.titleLab.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:13],
         [self.titleLab.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
 

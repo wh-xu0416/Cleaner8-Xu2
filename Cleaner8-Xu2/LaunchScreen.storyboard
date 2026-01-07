@@ -16,15 +16,20 @@
                         <rect key="frame" x="0.0" y="0.0" width="440" height="956"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" misplaced="YES" image="launch_icon" translatesAutoresizingMaskIntoConstraints="NO" id="p5a-yd-cIH">
-                                <rect key="frame" x="145" y="235" width="150" height="150"/>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="launch_icon" translatesAutoresizingMaskIntoConstraints="NO" id="p5a-yd-cIH">
+                                <rect key="frame" x="145" y="303" width="150" height="150"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="150" id="VvF-dG-vhf"/>
+                                    <constraint firstAttribute="height" constant="150" id="b93-0J-1dX"/>
+                                    <constraint firstAttribute="width" secondItem="p5a-yd-cIH" secondAttribute="height" multiplier="1:1" id="vKb-Gp-qr6"/>
+                                </constraints>
                             </imageView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
                         <color key="backgroundColor" red="0.96470588450000005" green="0.96470588450000005" blue="0.96470588450000005" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
                         <constraints>
-                            <constraint firstItem="p5a-yd-cIH" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="BPR-P5-HwG"/>
-                            <constraint firstItem="p5a-yd-cIH" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="E0y-pf-FyB"/>
+                            <constraint firstItem="p5a-yd-cIH" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" constant="-100" id="NQf-r9-qUN"/>
+                            <constraint firstItem="p5a-yd-cIH" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="cmf-Eb-KQ0"/>
                         </constraints>
                     </view>
                 </viewController>

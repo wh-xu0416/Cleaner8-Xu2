@@ -984,7 +984,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 @property (nonatomic, strong) ASPrivatePermissionBanner *limBanner;
 
-@property (nonatomic, strong) UIImageView *topBgView;
+@property (nonatomic, strong) CAGradientLayer *topGradient;
 @property (nonatomic, strong) UICollectionView *cv;
 @property (nonatomic, strong) NSArray<ASHomeModuleVM *> *modules;
 
@@ -1300,7 +1300,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     [self applyLayoutForCurrentAuth];
     [self invalidateHeaderLayoutIfNeeded];
 
-    // ✅ 只有权限/limited 真变化才 reload
+    // 只有权限/limited 真变化才 reload
     if (authChanged) {
         [self.cv reloadData];
     } else {
@@ -1343,12 +1343,17 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 #pragma mark - UI
 
 - (void)setupUI {
-    self.topBgView = [UIImageView new];
-    self.topBgView.image = [UIImage imageNamed:@"ic_home_bg"];
-    self.topBgView.contentMode = UIViewContentModeScaleAspectFill;
-    self.topBgView.clipsToBounds = YES;
-    self.topBgView.userInteractionEnabled = NO;
-    [self.view addSubview:self.topBgView];
+    self.view.backgroundColor = [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0];
+
+    self.topGradient = [CAGradientLayer layer];
+    self.topGradient.startPoint = CGPointMake(0.5, 0.0);
+    self.topGradient.endPoint   = CGPointMake(0.5, 1.0);
+
+    UIColor *c1 = [UIColor colorWithRed:224/255.0 green:224/255.0 blue:224/255.0 alpha:1.0]; // #E0E0E0FF
+    UIColor *c2 = [UIColor colorWithRed:0/255.0   green:141/255.0 blue:255/255.0 alpha:0.0]; // #008DFF00 (透明)
+
+    self.topGradient.colors = @[ (id)c1.CGColor, (id)c2.CGColor ];
+    [self.view.layer insertSublayer:self.topGradient atIndex:0];
 
     ASWaterfallLayout *layout = [ASWaterfallLayout new];
     layout.delegate = (id)self;
@@ -1412,13 +1417,13 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
         [wf invalidateLayout];
     }
-  
+
     CGFloat w = self.view.bounds.size.width;
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
 
-    CGFloat bgH = ASHomeBgHeightForWidth(w);
-    self.topBgView.frame = CGRectMake(0, 0, w, bgH + safeTop);
+    CGFloat gradientH = safeTop + 402.0;
+    self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     UIEdgeInsets safe = self.view.safeAreaInsets;
     self.cv.contentInset = UIEdgeInsetsMake(20, 0, safe.bottom + 70, 0);
@@ -1724,9 +1729,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 }
 
 - (void)updateHeaderDuringScanning {
-    // 更新磁盘信息（free 会变）
-//    [self computeDiskSpace];
-
     ASHomeHeaderView *hv = (ASHomeHeaderView *)[self.cv supplementaryViewForElementKind:UICollectionElementKindSectionHeader
                                                                             atIndexPath:[NSIndexPath indexPathForItem:0 inSection:0]];
     if (![hv isKindOfClass:ASHomeHeaderView.class]) return;

@@ -136,7 +136,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
         _titleLabel = [UILabel new];
         _titleLabel.numberOfLines = 1;
-        _titleLabel.lineBreakMode = NSLineBreakByClipping; 
+        _titleLabel.lineBreakMode = NSLineBreakByClipping;
         _titleLabel.adjustsFontSizeToFitWidth = YES;
         _titleLabel.minimumScaleFactor = 0.75;
         _titleLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
@@ -312,11 +312,11 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 #pragma mark - VideoSubPageViewController
 
 @interface VideoSubPageViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout>
+@property (nonatomic, strong) CAGradientLayer *topGradient;
 
 @property (nonatomic, strong) UILabel *summaryLine1;
 @property (nonatomic, strong) UILabel *summaryLine2;
 
-@property (nonatomic, strong) UIImageView *homeBgImageView;
 @property (nonatomic, strong) ASCustomNavBar *navBar;
 @property (nonatomic, strong) UICollectionView *cv;
 
@@ -361,9 +361,17 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = ASBgColor();
+    self.view.backgroundColor = [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0];
+    self.topGradient = [CAGradientLayer layer];
+    self.topGradient.startPoint = CGPointMake(0.5, 0.0);
+    self.topGradient.endPoint   = CGPointMake(0.5, 1.0);
 
-    [self buildBackground];
+    UIColor *c1 = [UIColor colorWithRed:224/255.0 green:224/255.0 blue:224/255.0 alpha:1.0]; 
+    UIColor *c2 = [UIColor colorWithRed:0/255.0   green:141/255.0 blue:255/255.0 alpha:0.0];
+
+    self.topGradient.colors = @[ (id)c1.CGColor, (id)c2.CGColor ];
+    [self.view.layer insertSublayer:self.topGradient atIndex:0];
+
     [self buildNavBar];
     [self buildSummary];
     [self buildCards];
@@ -444,26 +452,6 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     self.summaryLine2 = l2;
 }
 
-- (void)buildBackground {
-    UIImageView *bgTop = [UIImageView new];
-    bgTop.translatesAutoresizingMaskIntoConstraints = NO;
-    bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
-    bgTop.contentMode = UIViewContentModeScaleAspectFill;
-    bgTop.clipsToBounds = YES;
-    bgTop.userInteractionEnabled = NO;
-
-    [self.view addSubview:bgTop];
-    [self.view sendSubviewToBack:bgTop];
-    self.homeBgImageView = bgTop;
-
-    [NSLayoutConstraint activateConstraints:@[
-        [bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [bgTop.heightAnchor constraintEqualToConstant:236],
-    ]];
-}
-
 - (void)buildNavBar {
     NSString *title = self.pageTitle ?: @"";
     self.navBar = [[ASCustomNavBar alloc] initWithTitle:title];
@@ -500,10 +488,13 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    CGFloat w = self.view.bounds.size.width;
+
+    CGFloat gradientH = 0 + 402.0;
+    self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     CGFloat topSafe = self.view.safeAreaInsets.top;
     CGFloat navH = 44 + topSafe;
-    CGFloat w = self.view.bounds.size.width;
     CGFloat h = self.view.bounds.size.height;
 
     self.navBar.frame = CGRectMake(0, 0, w, navH);
@@ -761,7 +752,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     NSArray<ASVideoSubCardVM *> *newMods = @[
         makeVM(ASVideoSubCardTypeSimilar,    NSLocalizedString(@"Similar Videos", nil),    simThumbs, simVid.count, simBytes),
         makeVM(ASVideoSubCardTypeDuplicate,  NSLocalizedString(@"Duplicate Videos", nil),  dupThumbs, dupVid.count, dupBytes),
-        makeVM(ASVideoSubCardTypeRecordings, NSLocalizedString(@"Screen Recordings", nil), recThumbs, recs.count,   recBytes),
+        makeVM(ASVideoSubCardTypeRecordings, NSLocalizedString(@"Screen Recording", nil), recThumbs, recs.count,   recBytes),
         makeVM(ASVideoSubCardTypeBig,        NSLocalizedString(@"Big Videos", nil),        bigThumbs, bigs.count,   bigBytes),
         cvm,
     ];

@@ -241,7 +241,7 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
 
 @property (nonatomic, strong) ContactsManager *contactsManager;
 
-@property (nonatomic, strong) UIImageView *bgTop;
+@property (nonatomic, strong) CAGradientLayer *topGradient;
 
 @property (nonatomic, strong) ASSelectTitleBar *titleBar;
 
@@ -279,7 +279,18 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = ASACRGB(246, 248, 251);
+    self.view.backgroundColor = [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0];
+    
+    self.topGradient = [CAGradientLayer layer];
+    self.topGradient.startPoint = CGPointMake(0.5, 0.0);
+    self.topGradient.endPoint   = CGPointMake(0.5, 1.0);
+
+    UIColor *c1 = [UIColor colorWithRed:224/255.0 green:224/255.0 blue:224/255.0 alpha:1.0];
+    UIColor *c2 = [UIColor colorWithRed:0/255.0   green:141/255.0 blue:255/255.0 alpha:0.0];
+
+    self.topGradient.colors = @[ (id)c1.CGColor, (id)c2.CGColor ];
+    [self.view.layer insertSublayer:self.topGradient atIndex:0];
+
     self.hasContactsAccess = (self.mode == AllContactsModeRestore);
 
     self.contactsManager = [ContactsManager shared];
@@ -291,7 +302,6 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
 
     [self setupIncompleteTopTextsIfNeeded];
 
-    [self buildBackground];
     [self setupTitleBar];
     [self setupCollectionView];
     [self setupBottomButtons];
@@ -323,25 +333,6 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
         self.pageTitleLabel.hidden = showEmpty;
         self.countLabel.hidden = showEmpty;
     }
-}
-
-#pragma mark - Background
-
-- (void)buildBackground {
-    self.bgTop = [UIImageView new];
-    self.bgTop.translatesAutoresizingMaskIntoConstraints = NO;
-    self.bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
-    self.bgTop.contentMode = UIViewContentModeScaleAspectFill;
-    self.bgTop.clipsToBounds = YES;
-    self.bgTop.userInteractionEnabled = NO;
-    [self.view insertSubview:self.bgTop atIndex:0];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.bgTop.heightAnchor constraintEqualToConstant:360],
-    ]];
 }
 
 #pragma mark - Title Bar
@@ -1345,6 +1336,10 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    CGFloat w = self.view.bounds.size.width;
+
+    CGFloat gradientH = 0 + 402.0;
+    self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     CGFloat W = self.view.bounds.size.width;
     CGFloat H = self.view.bounds.size.height;
