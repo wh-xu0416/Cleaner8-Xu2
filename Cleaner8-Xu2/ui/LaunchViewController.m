@@ -11,11 +11,42 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     return [UIFont systemFontOfSize:size weight:weight];
 }
 
+static inline UIColor *ASHexRGBA(uint32_t hex) {
+    CGFloat r = ((hex >> 24) & 0xFF) / 255.0;
+    CGFloat g = ((hex >> 16) & 0xFF) / 255.0;
+    CGFloat b = ((hex >> 8)  & 0xFF) / 255.0;
+    CGFloat a = ( hex        & 0xFF) / 255.0;
+    return [UIColor colorWithRed:r green:g blue:b alpha:a];
+}
+
+@interface ASTopGradientView : UIView
+@end
+
+@implementation ASTopGradientView
++ (Class)layerClass { return [CAGradientLayer class]; }
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self = [super initWithFrame:frame]) {
+        self.userInteractionEnabled = NO;
+
+        CAGradientLayer *g = (CAGradientLayer *)self.layer;
+        g.startPoint = CGPointMake(0.5, 0.0);
+        g.endPoint   = CGPointMake(0.5, 1.0);
+
+        g.colors = @[
+            (id)ASHexRGBA(0xE0E0E0FF).CGColor,
+            (id)ASHexRGBA(0x008DFF00).CGColor,
+        ];
+    }
+    return self;
+}
+@end
+
 static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 
 @interface LaunchViewController ()
+@property(nonatomic,strong) ASTopGradientView *topGradientView;
 
-@property(nonatomic,strong) UIImageView *bgTop;
 @property(nonatomic,strong) UIImageView *logoView;
 @property(nonatomic,strong) UILabel *nameLab;
 @property(nonatomic,strong) UIView *centerContainer;
@@ -56,7 +87,7 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = ASRGB(246, 248, 251);
+    self.view.backgroundColor = ASHexRGBA(0xF6F6F6FF);
     [self buildUI];
 }
 
@@ -119,14 +150,24 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 }
 
 #pragma mark - UI
-- (void)buildUI {
-    self.bgTop = [UIImageView new];
-    self.bgTop.translatesAutoresizingMaskIntoConstraints = NO;
-    self.bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
-    self.bgTop.contentMode = UIViewContentModeScaleAspectFill;
-    self.bgTop.clipsToBounds = YES;
-    [self.view addSubview:self.bgTop];
 
+- (void)buildUI {
+    self.topGradientView = [ASTopGradientView new];
+    self.topGradientView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.topGradientView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.topGradientView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.topGradientView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.topGradientView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.topGradientView.heightAnchor constraintEqualToConstant:402.0],
+    ]];
+
+    self.centerContainer = [UIView new];
+    self.centerContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.centerContainer.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.centerContainer];
+    
     self.centerContainer = [UIView new];
     self.centerContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.centerContainer.backgroundColor = UIColor.clearColor;
@@ -150,11 +191,6 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
         [self.centerContainer.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-100];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.bgTop.heightAnchor constraintEqualToConstant:236],
-
         [self.centerContainer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         self.containerCenterYCons,
 
