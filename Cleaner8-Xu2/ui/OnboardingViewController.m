@@ -1,8 +1,11 @@
 #import "OnboardingViewController.h"
 #import "MainTabBarController.h"
 #import "Common.h"
+#import <AppTrackingTransparency/AppTrackingTransparency.h>
+#import <AdSupport/AdSupport.h>
 
 static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
+static NSString * const kHasRequestedATTKey = @"hasRequestedATT";
 
 #pragma mark - UI Helpers
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
@@ -25,6 +28,11 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     self.navigationController.navigationBarHidden = YES;
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    [self requestATTIfNeededOnFirstPage];
 }
 
 - (void)viewDidLoad {
@@ -114,6 +122,26 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
                     animations:^{
         self.bgImageView.image = img;
     } completion:nil];
+}
+
+- (void)requestATTIfNeededOnFirstPage {
+    if (self.index != 0) return;
+
+    if (@available(iOS 14, *)) {
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:kHasRequestedATTKey]) return;
+
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kHasRequestedATTKey];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+
+        ATTrackingManagerAuthorizationStatus status = ATTrackingManager.trackingAuthorizationStatus;
+        if (status != ATTrackingManagerAuthorizationStatusNotDetermined) return;
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [ATTrackingManager requestTrackingAuthorizationWithCompletionHandler:^(ATTrackingManagerAuthorizationStatus status) {
+                // status: Authorized / Denied / Restricted / NotDetermined
+            }];
+        });
+    }
 }
 
 #pragma mark - Enter Main

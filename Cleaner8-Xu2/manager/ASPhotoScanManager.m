@@ -3407,4 +3407,7 @@ static vDSP_DFT_Setup ASDCTSetup64(void) {
     }
 }
 
+- (void)applyDeletedLocalIds:(nonnull NSSet<NSString *> *)deletedIds {
+}
+
 @end

@@ -132,7 +132,7 @@ typedef void (^ASScanProgressBlock)(ASScanSnapshot * _Nullable snapshot);
 - (void)loadCacheAndCheckIncremental;
 - (BOOL)loadCacheIfExists;
 
-- (void)startupForHomeWithProgress:(ASScanProgressBlock)progress
+- (nullable NSUUID *)startupForHomeWithProgress:(ASScanProgressBlock)progress
                         completion:(ASScanCompletionBlock)completion
          showPermissionPlaceholder:(dispatch_block_t)showPermissionPlaceholder;
 
@@ -141,7 +141,7 @@ typedef void (^ASScanProgressBlock)(ASScanSnapshot * _Nullable snapshot);
 
 // 停止扫描（中断）
 - (void)cancel;
-- (void)subscribeProgress:(ASScanProgressBlock)progress;
+- (NSUUID *)subscribeProgress:(ASScanProgressBlock)progress;
 
 // 选择相关：只提供“可清理全选/反选”，其他类别是真全选
 - (NSArray<ASAssetModel *> *)allCleanableAssets;     // 相似/重复每组除第一个
