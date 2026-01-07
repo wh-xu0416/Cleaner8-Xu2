@@ -85,10 +85,21 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
     ];
 }
 
+- (BOOL)_canReadContactsStatus:(CNAuthorizationStatus)st {
+    if (st == CNAuthorizationStatusAuthorized) return YES;
+
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 180000
+    if (@available(iOS 18.0, *)) {
+        if (st == CNAuthorizationStatusLimited) return YES;
+    }
+#endif
+
+    return NO;
+}
+
 - (void)fetchDashboardCounts:(CMDashboardCountsBlock)completion {
 
     dispatch_async(self.workQueue, ^{
-        // 1) backupsCount：不依赖联系人权限，先算出来
         NSUInteger backupCount = 0;
         NSDictionary *idx = [self _readBackupIndex];
         NSArray *items = [idx[@"backups"] isKindOfClass:[NSArray class]] ? idx[@"backups"] : @[];
@@ -98,19 +109,17 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
             backupCount = [self _scanBackupsFromDisk].count;
         }
 
-        // 2) 联系人权限检查（不弹框）
         CNAuthorizationStatus st = [CNContactStore authorizationStatusForEntityType:CNEntityTypeContacts];
-        if (st != CNAuthorizationStatusAuthorized) {
+        if (![self _canReadContactsStatus:st]) {
             NSError *e = [NSError errorWithDomain:@"ContactsManager"
                                              code:990
-                                         userInfo:@{NSLocalizedDescriptionKey:@"Contacts not authorized"}];
+                                         userInfo:@{NSLocalizedDescriptionKey:@"Contacts not readable"}];
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (completion) completion(0, 0, 0, backupCount, e);
             });
             return;
         }
 
-        // 3) 枚举联系人一次，算 all / incomplete / duplicate
         NSError *error = nil;
         __block NSUInteger allCount = 0;
         __block NSUInteger incompleteCount = 0;

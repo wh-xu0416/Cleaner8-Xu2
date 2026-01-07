@@ -195,11 +195,15 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     if ((self = [super initWithFrame:frame])) {
         self.layer.cornerRadius = 18;
         self.layer.masksToBounds = YES;
-        self.backgroundColor = UIColor.whiteColor;
+
+        self.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
 
         _imageView = [[UIImageView alloc] initWithFrame:CGRectZero];
-        _imageView.contentMode = UIViewContentModeScaleAspectFill;
+        _imageView.contentMode = UIViewContentModeScaleAspectFit;
         _imageView.clipsToBounds = YES;
+
+        _imageView.backgroundColor = UIColor.clearColor;
+
         [self addSubview:_imageView];
 
         _hintLabel = [[UILabel alloc] initWithFrame:CGRectZero];
@@ -210,12 +214,14 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     }
     return self;
 }
+
 - (void)layoutSubviews {
     [super layoutSubviews];
     _imageView.frame = self.bounds;
     _hintLabel.frame = CGRectMake(16, 16, self.bounds.size.width - 32, 30);
 }
 @end
+
 
 #pragma mark - SwipeAlbumViewController
 

@@ -1,4 +1,5 @@
 #import "ResultViewController.h"
+#import "LearnPageViewController.h"
 
 static inline UIColor *ASColorHex(uint32_t rgb, CGFloat a) {
     return [UIColor colorWithRed:((rgb >> 16) & 0xFF)/255.0
@@ -82,7 +83,7 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
     self.learnMoreBtn.layer.cornerRadius = 22;
     self.learnMoreBtn.clipsToBounds = YES;
 
-    UIImage *moreImg = [[UIImage imageNamed:@"ic_more"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    UIImage *moreImg = [[UIImage imageNamed:@"ic_learn"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.learnMoreBtn setImage:moreImg forState:UIControlStateNormal];
     [self.learnMoreBtn setTitle:@"Learn More" forState:UIControlStateNormal];
     [self.learnMoreBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
@@ -185,8 +186,9 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
 #pragma mark - Actions
 
 - (void)onTapLearnMore {
-    // 你可以在这里 push 一个 webview / 详情页
-    // 现在先留空，避免影响主流程
+    LearnPageViewController *learnPageVC = [[LearnPageViewController alloc] init];
+    
+    [self.navigationController pushViewController:learnPageVC animated:YES];
 }
 
 - (void)onTapContinue {

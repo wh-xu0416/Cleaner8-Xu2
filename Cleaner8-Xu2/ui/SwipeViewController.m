@@ -349,7 +349,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         _tagLabel.textColor = UIColor.whiteColor;
         _tagLabel.font = SWFont(13, UIFontWeightMedium);
 
-        // ✅ 放到 coverView（在图上）
         [self.coverView addSubview:_tagLabel];
 
         [NSLayoutConstraint activateConstraints:@[
@@ -363,10 +362,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 - (void)configTitle:(NSString *)title completed:(BOOL)completed {
     self.tagLabel.text = title ?: @"";
 
-    // ✅ Recent 底部渐变：浮在图片上，在文字下面，并适配下圆角
     [self setBottomGradientVisible:YES height:52];
 
-    // ✅ 完成态
     [self setCompletedUI:completed];
 }
 
@@ -395,7 +392,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         _sizeLabel.textColor = UIColor.whiteColor;
         _sizeLabel.font = SWFont(12, UIFontWeightRegular);
 
-        // ✅ 放到 coverView
         [self.coverView addSubview:_monthLabel];
         [self.coverView addSubview:_sizeLabel];
 
@@ -414,10 +410,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.monthLabel.text = month ?: @"";
     self.sizeLabel.text = size ?: @"";
 
-    // ✅ Month 底部渐变
     [self setBottomGradientVisible:YES height:58];
 
-    // ✅ 完成态
     [self setCompletedUI:completed];
 }
 
@@ -499,7 +493,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIView *contentView;
 
-#pragma mark Top Cards
 @property (nonatomic, strong) UIView *cardsContainer;
 @property (nonatomic, strong) UIView *categorizedCard;
 @property (nonatomic, strong) UIView *archiveCard;
@@ -519,7 +512,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 @property (nonatomic, strong) UILabel *archiveTitleLabel;
 @property (nonatomic, strong) UILabel *archiveDetailLabel;
 
-#pragma mark Sections
 @property (nonatomic, strong) UILabel *recentTitleLabel;
 @property (nonatomic, strong) UICollectionView *recentCV;
 
@@ -534,8 +526,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 @property (nonatomic, strong) NSArray<SwipeModule *> *recentModules;
 @property (nonatomic, strong) NSArray<SwipeModule *> *monthModules;
 @property (nonatomic, strong) NSArray<SwipeModule *> *otherModules;
+@property (nonatomic, assign) BOOL sw_didFirstRender;
 
-#pragma mark Image
 @property (nonatomic, strong) PHCachingImageManager *imageMgr;
 @property (nonatomic, assign) uint64_t cachedArchivedBytes;
 @property (nonatomic, assign) CGFloat cachedCategorizedProgress;
@@ -614,7 +606,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 #pragma mark - Data
 
 - (void)onManagerUpdate {
-    // 页面不在屏幕上：不要刷 UI（否则 pop / push 时更卡）
     if (!self.isViewLoaded || self.view.window == nil) {
         self.sw_needsReloadOnAppear = YES;
         return;
@@ -626,8 +617,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     if (self.sw_reloadScheduled) return;
     self.sw_reloadScheduled = YES;
 
-    // 合并多次通知：延迟一小段时间统一 reload
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)),
+    NSTimeInterval delay = self.sw_didFirstRender ? 0.0 : 0.0;
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         self.sw_reloadScheduled = NO;
         if (!self.isViewLoaded || self.view.window == nil) {
@@ -635,9 +627,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
             return;
         }
         [self reloadAllFromManager];
+        self.sw_didFirstRender = YES;
     });
 }
-
 
 - (void)sw_refreshTopCardsFast {
     SwipeManager *mgr = [SwipeManager shared];
@@ -682,7 +674,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 - (void)reloadAllFromManager {
     SwipeManager *mgr = [SwipeManager shared];
 
-    // 1) 顶部
     [self sw_refreshTopCardsFast];
 
     // 2) 列表：按模块类型切分（逻辑不变）
@@ -699,7 +690,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.recentModules = recent.copy;
     self.monthModules  = months.copy;
 
-    // Others 固定顺序：Random -> Selfies
     SwipeModule *rand = nil, *selfie = nil;
     for (SwipeModule *m in others) {
         if (m.type == SwipeModuleTypeRandom20) rand = m;
@@ -710,7 +700,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     if (selfie) [orderedOthers addObject:selfie];
     self.otherModules = orderedOthers.copy;
 
-    // 年标题初始化
     if (self.monthModules.count > 0) {
         SwipeModule *first = self.monthModules.firstObject;
         NSInteger y = 0, mm = 0;
@@ -768,7 +757,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.contentView.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
     ]];
 
-    // ===== Top Cards Container =====
     self.cardsContainer = [UIView new];
     self.cardsContainer.translatesAutoresizingMaskIntoConstraints = NO;
     [self.contentView addSubview:self.cardsContainer];
@@ -826,7 +814,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         self.permissionBannerHeightC,
     ]];
 
-    // ===== No Auth Placeholder (reuse ASSwipeNoAuthCell) =====
     ASSwipeNoAuthCell *noAuth = [ASSwipeNoAuthCell new];
     noAuth.translatesAutoresizingMaskIntoConstraints = NO;
     noAuth.hidden = YES;
@@ -839,8 +826,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [self.contentView addSubview:noAuth];
     self.noAuthPlaceholder = noAuth;
 
-    // 关键：不要跟 othersCV 的 bottom 约束抢（othersCV 已经锚到 contentView.bottom 了）
-    // 用 top + leading/trailing + 固定高度（或 >=）即可
     NSLayoutConstraint *noAuthH = [noAuth.heightAnchor constraintGreaterThanOrEqualToConstant:520];
     noAuthH.priority = UILayoutPriorityRequired;
 
@@ -851,7 +836,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         noAuthH,
     ]];
 
-    // ===== categorized card content =====
     self.categorizedIcon = [UIImageView new];
     self.categorizedIcon.translatesAutoresizingMaskIntoConstraints = NO;
     self.categorizedIcon.contentMode = UIViewContentModeScaleAspectFit;
@@ -921,7 +905,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.speedCenterXC.priority = UILayoutPriorityRequired;
     self.speedCenterXC.active = YES;
 
-    // ===== archive card content =====
     self.archiveIcon = [UIImageView new];
     self.archiveIcon.translatesAutoresizingMaskIntoConstraints = NO;
     self.archiveIcon.contentMode = UIViewContentModeScaleAspectFit;
@@ -957,7 +940,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.archiveDetailLabel.topAnchor constraintEqualToAnchor:self.archiveTitleLabel.bottomAnchor constant:5],
     ]];
 
-    // ===== Recent =====
     self.recentTitleLabel = [UILabel new];
     self.recentTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.recentTitleLabel.textColor = SWHexRGBA(0x000000FF);
@@ -991,7 +973,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.recentCV.heightAnchor constraintEqualToConstant:144],
     ]];
 
-    // ===== Months =====
     self.yearTitleLabel = [UILabel new];
     self.yearTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.yearTitleLabel.textColor = SWHexRGBA(0x000000FF);
@@ -1034,7 +1015,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.monthCV.heightAnchor constraintEqualToConstant:144],
     ]];
 
-    // ===== Others =====
     self.othersTitleLabel = [UILabel new];
     self.othersTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.othersTitleLabel.textColor = SWHexRGBA(0x000000FF);
@@ -1140,7 +1120,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     PHAuthorizationStatus st = [self sw_currentPHAuthStatus];
 
     if (st == PHAuthorizationStatusNotDetermined) {
-        // 交给 SwipeManager 去弹系统授权
         __weak typeof(self) ws = self;
         [[SwipeManager shared] requestAuthorizationAndLoadIfNeeded:^(BOOL granted) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -1160,7 +1139,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         }
     }
 
-    // denied / restricted
     NSURL *url = [NSURL URLWithString:UIApplicationOpenSettingsURLString];
     if ([[UIApplication sharedApplication] canOpenURL:url]) {
         [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
@@ -1202,7 +1180,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
 - (NSString *)latestAssetIDForModule:(SwipeModule *)m {
     if (m.assetIDs.count == 0) return @"";
-    // “封面始终最新一张”：降序用 first，升序用 last
     return m.sortAscending ? (m.assetIDs.lastObject ?: @"") : (m.assetIDs.firstObject ?: @"");
 }
 
@@ -1248,15 +1225,12 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         __strong typeof(wcell) scell = wcell;
         if (!scell) return;
 
-        // 1) 这个回调可能是取消/错误回调，直接丢弃
         BOOL cancelled = [info[PHImageCancelledKey] boolValue];
         NSError *err = info[PHImageErrorKey];
         if (cancelled || err) return;
 
-        // 2) cell 已经复用给别的 asset 了，丢弃
         if (![scell.representedAssetId isEqualToString:assetId]) return;
 
-        // 3) 直接设置（Photos 很多情况下就在主线程回调；如果不在主线程也安全补一下）
         void (^apply)(void) = ^{
             if (![scell.representedAssetId isEqualToString:assetId]) return;
             scell.imgView.image = result ?: [UIImage imageNamed:@"placeholder"];

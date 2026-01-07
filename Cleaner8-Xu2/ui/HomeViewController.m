@@ -981,7 +981,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 @interface HomeViewController () <UICollectionViewDataSource, UICollectionViewDelegate, ASWaterfallLayoutDelegate>
 @property (nonatomic) BOOL didInitialBuild;
 
-@property (nonatomic, strong) ASPrivatePermissionBanner *limBanner; // limited banner
+@property (nonatomic, strong) ASPrivatePermissionBanner *limBanner;
 
 @property (nonatomic, strong) UIImageView *topBgView;
 @property (nonatomic, strong) UICollectionView *cv;
@@ -990,18 +990,15 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 @property (nonatomic, strong) PHCachingImageManager *imgMgr;
 @property (nonatomic, strong) ASPhotoScanManager *scanMgr;
 
-// Header space
 @property (nonatomic) uint64_t diskTotalBytes;
 @property (nonatomic) uint64_t diskFreeBytes;
 @property (nonatomic) uint64_t clutterBytes;
 @property (nonatomic) uint64_t appDataBytes;
 
-// 合并扫描进度高频 UI 刷新
 @property (nonatomic, strong) NSTimer *scanUITimer;
 @property (nonatomic) BOOL pendingScanUIUpdate;
 @property (nonatomic) CFTimeInterval lastScanUIFire;
 
-// 去重集合
 @property (nonatomic, strong) NSSet<NSString *> *allCleanableIds;
 @property (nonatomic) uint64_t allCleanableBytes;
 
@@ -1064,10 +1061,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    if (self.didInitialBuild) return;
-    self.didInitialBuild = YES;
-
-    [self bootstrapScanFlow];
+    [self resumeVisibleVideoCovers];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -1079,6 +1073,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    [self pauseVisibleVideoCovers];
 }
 
 - (void)viewDidLoad {
@@ -1101,8 +1096,26 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
             }
         });
     }];
-
+    [self bootstrapScanFlow];
     [self rebuildModulesAndReloadAsyncFinal:NO];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(onAppWillResignActive:)
+                                                 name:UIApplicationWillResignActiveNotification
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(onAppDidBecomeActive:)
+                                                 name:UIApplicationDidBecomeActiveNotification
+                                               object:nil];
+     
+}
+
+- (void)onAppWillResignActive:(NSNotification *)n {
+    [self pauseVisibleVideoCovers];
+}
+
+- (void)onAppDidBecomeActive:(NSNotification *)n {
+    [self resumeVisibleVideoCovers];
 }
 
 - (void)rebuildModulesAndReloadAsyncFinal:(BOOL)isFinal {
@@ -1686,6 +1699,17 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     NSString *coverKey = [self coverKeyForVM:vm];
     BOOL sameKey = (cell.appliedCoverKey && [cell.appliedCoverKey isEqualToString:coverKey]);
 
+    if (sameKey && vm.isVideoCover) {
+        // 同一个 coverKey：如果 player 丢了（前后台/复用/系统回收），要重建
+        if (!cell.player || !cell.playerLayer) {
+            // 走下面正常流程，会 loadVideoPreviewForVM
+        } else {
+            // player 还在：确保恢复播放
+            [cell.player play];
+            return;
+        }
+    }
+    
     if (sameKey) {
         BOOL inFlight = (cell.reqId1 != PHInvalidImageRequestID) ||
                         (cell.reqId2 != PHInvalidImageRequestID) ||
@@ -2504,9 +2528,7 @@ referenceSizeForHeaderInSection:(NSInteger)section {
     ASHomeModuleVM *vm = self.modules[indexPath.item];
     if (vm.thumbLocalIds.count == 0) return;
 
-    // ✅ 延迟到下一帧，让首屏先完成 layout / display
     dispatch_async(dispatch_get_main_queue(), ^{
-        // cell 可能已经复用/消失，做一次校验
         HomeModuleCell *now = (HomeModuleCell *)[collectionView cellForItemAtIndexPath:indexPath];
         if (now != c) return;
         [self requestCoverIfNeededForCell:now vm:vm indexPath:indexPath];
@@ -2644,6 +2666,7 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
                                             contentMode:PHImageContentModeAspectFill
                                                 options:opt
                                           resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+         
             if (result) setImg(0, result, info ?: @{});
         }];
     }
@@ -2654,6 +2677,7 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
                                             contentMode:PHImageContentModeAspectFill
                                                 options:opt
                                           resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+           
             if (result) setImg(1, result, info ?: @{});
         }];
     } else {
@@ -2756,6 +2780,7 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
 
             AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:avAsset];
             AVQueuePlayer *player = [AVQueuePlayer queuePlayerWithItems:@[item]];
+            player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
             player.muted = YES;
 
             AVPlayerLayer *layer = [AVPlayerLayer playerLayerWithPlayer:player];
@@ -2777,6 +2802,46 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
             [player play];
         });
     }];
+}
+
+
+- (void)pauseVisibleVideoCovers {
+    if (!self.isViewLoaded) return;
+
+    for (NSIndexPath *ip in self.cv.indexPathsForVisibleItems) {
+        if (ip.item >= self.modules.count) continue;
+
+        ASHomeModuleVM *vm = self.modules[ip.item];
+        if (!vm.isVideoCover) continue;
+
+        HomeModuleCell *cell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:ip];
+        if (![cell isKindOfClass:HomeModuleCell.class]) continue;
+
+        if (cell.player) [cell.player pause];
+    }
+}
+
+- (void)resumeVisibleVideoCovers {
+    if (!self.isViewLoaded || self.view.window == nil) return;
+    if (![self hasPhotoAccess]) return;
+
+    for (NSIndexPath *ip in self.cv.indexPathsForVisibleItems) {
+        if (ip.item >= self.modules.count) continue;
+
+        ASHomeModuleVM *vm = self.modules[ip.item];
+        if (!vm.isVideoCover) continue;
+        if (vm.thumbLocalIds.count == 0) continue;
+
+        HomeModuleCell *cell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:ip];
+        if (![cell isKindOfClass:HomeModuleCell.class]) continue;
+
+        if (cell.player && cell.playerLayer) {
+            [cell.player play];
+            continue;
+        }
+
+        [self requestCoverIfNeededForCell:cell vm:vm indexPath:ip];
+    }
 }
 
 @end

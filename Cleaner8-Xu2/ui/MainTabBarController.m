@@ -33,10 +33,10 @@ UIGestureRecognizerDelegate
 
     self.viewControllers = @[
         [self navWithVC:[HomeViewController new]   title:@"Cleaner" image:@""],
-        [self navWithVC:[VideoViewController new]    title:@"Compress" image:@""],
-        [self navWithVC:[SwipeViewController new]    title:@"Swipe" image:@""],
-        [self navWithVC:[PrivateViewController new] title:@"Private" image:@""],
-        [self navWithVC:[MoreViewController new]    title:@"More" image:@""],
+        [self navWithVC:[VideoViewController new]  title:@"Compress" image:@""],
+        [self navWithVC:[SwipeViewController new]  title:@"Swipe" image:@""],
+        [self navWithVC:[PrivateViewController new]title:@"Private" image:@""],
+        [self navWithVC:[MoreViewController new]   title:@"More" image:@""],
     ];
 
     self.tabBar.hidden = YES;
@@ -53,20 +53,19 @@ UIGestureRecognizerDelegate
     self.floatingTab.onSelect = ^(NSInteger idx) {
         weakSelf.selectedIndex = idx;
     };
+
+    [self.view addSubview:self.floatingTab];
+    [self.view bringSubviewToFront:self.floatingTab];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
 
-    UINavigationController *rootNav =
-           self.navigationController;
-
+    UINavigationController *rootNav = self.navigationController;
     rootNav.interactivePopGestureRecognizer.enabled = YES;
     rootNav.interactivePopGestureRecognizer.delegate = self;
-    
-    if (self.selectedIndex == 0) {
-        [self.view addSubview:self.floatingTab];
-    }
+
+    [self.view bringSubviewToFront:self.floatingTab];
 }
 
 #pragma mark - UIGestureRecognizerDelegate
@@ -101,7 +100,9 @@ UIGestureRecognizerDelegate
 
 - (void)setSelectedIndex:(NSUInteger)selectedIndex {
     [super setSelectedIndex:selectedIndex];
-    [self.view addSubview:self.floatingTab];
+
+    self.floatingTab.hidden = NO;
+    [self.view bringSubviewToFront:self.floatingTab];
 }
 
 - (UINavigationController *)navWithVC:(UIViewController *)vc title:(NSString *)title image:(NSString *)imageName {

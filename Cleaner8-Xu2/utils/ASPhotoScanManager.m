@@ -2066,7 +2066,7 @@ static const NSUInteger kASLocalIdChunk = 3500;
 
     ASIncLog(@"rebuild begin | inserted=%lu removed=%lu oldAnchor=%@",
              (unsigned long)inserted.count,
-             (unsigned long)removedIDs.count,
+             (unsigned long)(removedIDs.count),
              self.cache.anchorDate);
 
     NSDate *newAnchor = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
@@ -2087,6 +2087,9 @@ static const NSUInteger kASLocalIdChunk = 3500;
     // ✅ 重建 blurryBytesRunning
     self.blurryBytesRunning = 0;
     for (ASAssetModel *bm in self.blurryPhotosM) self.blurryBytesRunning += bm.fileSizeBytes;
+
+    // ✅ 保存旧 blur，用于 blur TopK 跨天影响 other
+    NSArray<ASAssetModel *> *oldBlur = [self.blurryPhotosM copy] ?: @[];
 
     // 0) UI scanning
     [self publishSnapshotStateOnMain:ASScanStateScanning];
@@ -2110,7 +2113,27 @@ static const NSUInteger kASLocalIdChunk = 3500;
     }
     [self emitProgress];
 
-    // 2) 删除：剔除 removed IDs
+    // ✅ 2) 计算 affectedDays（inserted new-day + removed old-day + upsert old-day）
+    NSMutableSet<NSDate*> *affectedDayStarts = [NSMutableSet set];
+
+    // inserted：新 day（creation）
+    NSMutableSet<NSString *> *upsertIds = [NSMutableSet set];
+    for (PHAsset *a in inserted) {
+        NSString *lid = a.localIdentifier ?: @"";
+        if (lid.length) [upsertIds addObject:lid];
+
+        NSDate *cd = a.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+        [affectedDayStarts addObject:ASDayStart(cd)];
+    }
+
+    // removed：用缓存模型的 creation day
+    NSSet<NSString*> *removedIdSet = [NSSet setWithArray:(removedIDs ?: @[])];
+    [self as_collectDayStartsForLocalIds:removedIdSet into:affectedDayStarts];
+
+    // upsert old-day：如果 creationDate 被改导致跨天，补上旧 day
+    [self as_collectDayStartsForLocalIds:upsertIds into:affectedDayStarts];
+
+    // 3) 删除：剔除 removed IDs
     NSMutableSet<NSString*> *deletedIDs = [NSMutableSet setWithArray:(removedIDs ?: @[])];
     if (deletedIDs.count) {
         [self removeModelsByIds:deletedIDs];
@@ -2127,15 +2150,6 @@ static const NSUInteger kASLocalIdChunk = 3500;
         for (ASAssetModel *bm in self.blurryPhotosM) self.blurryBytesRunning += bm.fileSizeBytes;
     }
 
-    // 3) affectedDays：只取 inserted 的创建/修改日期
-    NSMutableSet<NSDate*> *affectedDayStarts = [NSMutableSet set];
-    for (PHAsset *a in inserted) {
-        NSDate *cd = a.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
-        NSDate *md = a.modificationDate ?: cd;
-        [affectedDayStarts addObject:ASDayStart(cd)];
-        [affectedDayStarts addObject:ASDayStart(md)];
-    }
-
     // 4) 重建这些天：先删旧，再重建
     if (affectedDayStarts.count) {
         [self removeModelsByDayStarts:affectedDayStarts];
@@ -2150,8 +2164,10 @@ static const NSUInteger kASLocalIdChunk = 3500;
     // ✅ rebuild index
     [self rebuildIndexFromComparablePools];
 
-    // ✅✅ 关键修复：先 rebuild other，再 recompute snapshot（否则 snapshot.otherCount/Bytes 永远是旧的）
-    self.otherPhotosM = [[self buildOtherPhotosFromAllAssetsFetchResult:self.allAssetsFetchResult] mutableCopy];
+    // ✅✅ Other：只刷新 affectedDays + blur TopK 跨天影响的 days（保证与全量一致）
+    NSMutableSet<NSDate*> *otherRefreshDays = [affectedDayStarts mutableCopy];
+    [self as_addBlurChangedDayStartsFromOld:oldBlur toNew:(self.blurryPhotosM ?: @[]) into:otherRefreshDays];
+    [self as_replaceOtherForDayStarts:otherRefreshDays];
 
     // 5) snapshot（包含 other 统计）
     [self recomputeSnapshotFromCurrentContainers];
@@ -2170,15 +2186,18 @@ static const NSUInteger kASLocalIdChunk = 3500;
     self.cache.blurryPhotos = [self.blurryPhotosM copy];
     self.cache.otherPhotos  = [self.otherPhotosM  copy];
 
-    // ✅✅ 关键修复：写回 anchor 时也做“未来时间纠偏”
+    // ✅✅ 写回 anchor 时做“未来时间纠偏”
     self.cache.anchorDate = [self as_safeAnchorDate:newAnchor];
 
     [self saveCache];
+
+    // ✅ baseline（用于 fast skip / diff）
     [self refreshAllAssetsFetchResult];
     NSArray *ids = [self as_currentAllAssetIDsFromFetchResult:self.allAssetsFetchResult];
     [self as_saveBaselineAllAssetIDs:ids];
 
     [self setAllModulesState:ASModuleScanStateFinished];
+
     ASIncLog(@"rebuild done | dup=%lu sim=%lu shot=%lu rec=%lu big=%lu blurry=%lu other=%lu newAnchor=%@",
              (unsigned long)self.dupGroupsM.count,
              (unsigned long)self.simGroupsM.count,
@@ -2204,6 +2223,184 @@ static const NSUInteger kASLocalIdChunk = 3500;
             }
         });
     }];
+}
+
+#pragma mark - Other Incremental (affectedDays only)
+
+// exclude = dup + sim + blurry（与全量 buildOtherPhotos... 一致）
+- (NSMutableSet<NSString *> *)as_buildExcludeIdsForOther {
+    NSMutableSet<NSString *> *ex = [NSMutableSet set];
+
+    for (ASAssetGroup *g in self.dupGroupsM) {
+        for (ASAssetModel *m in g.assets) if (m.localId.length) [ex addObject:m.localId];
+    }
+    for (ASAssetGroup *g in self.simGroupsM) {
+        for (ASAssetModel *m in g.assets) if (m.localId.length) [ex addObject:m.localId];
+    }
+    for (ASAssetModel *m in self.blurryPhotosM) if (m.localId.length) [ex addObject:m.localId];
+
+    return ex;
+}
+
+// comparableImagesM 里包含“所有非 screenshot 图片”（你的逻辑如此），所以 other 可直接复用模型，避免重新取 fileSize
+- (NSMutableDictionary<NSString *, ASAssetModel *> *)as_buildComparableImageMap {
+    NSMutableDictionary<NSString *, ASAssetModel *> *map =
+        [NSMutableDictionary dictionaryWithCapacity:self.comparableImagesM.count];
+
+    for (ASAssetModel *m in self.comparableImagesM) {
+        if (m.localId.length) map[m.localId] = m;
+    }
+    return map;
+}
+
+// 生成某一天的 other 列表：顺序严格按 PhotoKit fetch 顺序（与你全量 buildOtherPhotos... 一致）
+- (NSArray<ASAssetModel *> *)as_buildOtherForDayStart:(NSDate *)dayStart
+                                             exclude:(NSSet<NSString *> *)exclude
+                                         modelByLocal:(NSDictionary<NSString*, ASAssetModel*> *)modelByLocal
+{
+    if (!dayStart) return @[];
+
+    NSCalendar *cal = [NSCalendar currentCalendar];
+    NSDate *dayEnd = [cal dateByAddingUnit:NSCalendarUnitDay value:1 toDate:dayStart options:0];
+
+    PHFetchOptions *opt = [self allImageVideoFetchOptions];
+    opt.predicate = [NSPredicate predicateWithFormat:
+        @"(mediaType == %d) AND NOT ((mediaSubtypes & %d) != 0) AND creationDate >= %@ AND creationDate < %@",
+        PHAssetMediaTypeImage, PHAssetMediaSubtypePhotoScreenshot,
+        dayStart, dayEnd
+    ];
+
+    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithOptions:opt];
+    if (!fr) return @[];
+
+    NSMutableArray<ASAssetModel *> *out = [NSMutableArray arrayWithCapacity:fr.count];
+
+    for (PHAsset *a in fr) {
+        NSString *lid = a.localIdentifier ?: @"";
+        if (!lid.length) continue;
+        if ([exclude containsObject:lid]) continue;
+
+        ASAssetModel *m = modelByLocal[lid];
+        if (m) {
+            [out addObject:m];
+        } else {
+            // 极少见兜底：保证与全量一致（全量会 buildModel computeCompareBits:NO）
+            NSError *err = nil;
+            ASAssetModel *fallback = [self buildModelForAsset:a computeCompareBits:NO error:&err];
+            if (fallback) [out addObject:fallback];
+        }
+    }
+
+    return out;
+}
+
+// 从 otherPhotosM 中移除 dayStarts 的旧段，并按 dayStarts 重新插入新段（保持全局 creationDate desc 顺序）
+- (void)as_replaceOtherForDayStarts:(NSSet<NSDate *> *)dayStarts {
+    if (dayStarts.count == 0) return;
+    if (!self.otherPhotosM) self.otherPhotosM = [NSMutableArray array];
+
+    // 1) 删掉这些天的旧 other
+    NSMutableArray<ASAssetModel *> *kept = [NSMutableArray arrayWithCapacity:self.otherPhotosM.count];
+    for (ASAssetModel *m in self.otherPhotosM) {
+        NSDate *cd = m.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+        NSDate *d0 = ASDayStart(cd);
+        if (![dayStarts containsObject:d0]) [kept addObject:m];
+    }
+    self.otherPhotosM = kept;
+
+    // 2) 生成 exclude + modelMap（基于“重建后”的 dup/sim/blurry/comparable）
+    NSSet<NSString *> *exclude = [self as_buildExcludeIdsForOther];
+    NSDictionary<NSString*, ASAssetModel*> *modelByLocal = [self as_buildComparableImageMap];
+
+    // 3) dayStarts：新到旧插回
+    NSArray<NSDate *> *sortedDays = [[dayStarts allObjects] sortedArrayUsingComparator:^NSComparisonResult(NSDate *a, NSDate *b) {
+        return [b compare:a]; // desc
+    }];
+
+    NSCalendar *cal = [NSCalendar currentCalendar];
+
+    for (NSDate *dayStart in sortedDays) {
+        NSArray<ASAssetModel *> *dayOther =
+            [self as_buildOtherForDayStart:dayStart exclude:exclude modelByLocal:modelByLocal];
+        if (dayOther.count == 0) continue;
+
+        NSDate *dayEnd = [cal dateByAddingUnit:NSCalendarUnitDay value:1 toDate:dayStart options:0];
+
+        // insertion index: 第一个 creationDate < dayEnd 的位置
+        NSUInteger lo = 0, hi = self.otherPhotosM.count;
+        while (lo < hi) {
+            NSUInteger mid = (lo + hi) >> 1;
+            NSDate *md = self.otherPhotosM[mid].creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+
+            if ([md compare:dayEnd] != NSOrderedAscending) {
+                lo = mid + 1; // md >= dayEnd：更“新”，应排在前面
+            } else {
+                hi = mid;
+            }
+        }
+
+        NSIndexSet *idx = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(lo, dayOther.count)];
+        [self.otherPhotosM insertObjects:dayOther atIndexes:idx];
+    }
+}
+
+// 工具：从若干容器里为指定 localId 集合收集 creation dayStart（用于 removed / upsert old-day）
+- (void)as_collectDayStartsForLocalIds:(NSSet<NSString*> *)ids into:(NSMutableSet<NSDate*> *)out {
+    if (ids.count == 0 || !out) return;
+
+    void (^scan)(NSArray<ASAssetModel*> *) = ^(NSArray<ASAssetModel*> *arr) {
+        for (ASAssetModel *m in arr) {
+            if (!m.localId.length) continue;
+            if (![ids containsObject:m.localId]) continue;
+            NSDate *cd = m.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+            [out addObject:ASDayStart(cd)];
+        }
+    };
+
+    scan(self.comparableImagesM);
+    scan(self.screenshotsM);
+    scan(self.blurryPhotosM);
+    scan(self.otherPhotosM);
+}
+
+// blur 变化可能跨天影响 other：把“旧 blur / 新 blur”的 dayStart 加入刷新集合
+- (void)as_addBlurChangedDayStartsFromOld:(NSArray<ASAssetModel*> *)oldBlur
+                                  toNew:(NSArray<ASAssetModel*> *)newBlur
+                                   into:(NSMutableSet<NSDate*> *)dayStarts
+{
+    if (!dayStarts) return;
+
+    NSMutableSet<NSString*> *oldIds = [NSMutableSet set];
+    for (ASAssetModel *m in oldBlur) if (m.localId.length) [oldIds addObject:m.localId];
+
+    NSMutableSet<NSString*> *newIds = [NSMutableSet set];
+    for (ASAssetModel *m in newBlur) if (m.localId.length) [newIds addObject:m.localId];
+
+    // removed = old - new
+    NSMutableSet<NSString*> *removed = [oldIds mutableCopy];
+    [removed minusSet:newIds];
+
+    // added = new - old
+    NSMutableSet<NSString*> *added = [newIds mutableCopy];
+    [added minusSet:oldIds];
+
+    // dayStart 用各自数组的 creationDate（模型已缓存）
+    if (removed.count) {
+        for (ASAssetModel *m in oldBlur) {
+            if ([removed containsObject:m.localId]) {
+                NSDate *cd = m.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+                [dayStarts addObject:ASDayStart(cd)];
+            }
+        }
+    }
+    if (added.count) {
+        for (ASAssetModel *m in newBlur) {
+            if ([added containsObject:m.localId]) {
+                NSDate *cd = m.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+                [dayStarts addObject:ASDayStart(cd)];
+            }
+        }
+    }
 }
 
 
