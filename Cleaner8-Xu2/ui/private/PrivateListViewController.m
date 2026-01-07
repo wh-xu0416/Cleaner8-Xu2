@@ -5,6 +5,7 @@
 #import "ASCustomNavBar.h"
 #import "PrivateMediaCell.h"
 #import "ASPrivateMediaStore.h"
+#import "Common.h"
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
 #import <AVFoundation/AVFoundation.h>
@@ -121,8 +122,7 @@ static inline UIColor *ASHexBlack(void) {
     __weak typeof(self) ws = self;
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
 
-    // ===== Top NavBar (ASCustomNavBar) =====
-    self.navBar = [[ASCustomNavBar alloc] initWithTitle:self.navTitleText ?: @"Secret"];
+    self.navBar = [[ASCustomNavBar alloc] initWithTitle:self.navTitleText ?: NSLocalizedString(@"Secret", nil)];
     self.navBar.translatesAutoresizingMaskIntoConstraints = NO;
 
     self.navBar.onBack = ^{
@@ -131,7 +131,6 @@ static inline UIColor *ASHexBlack(void) {
         [nav popViewControllerAnimated:YES];
     };
 
-    // 右上角如果你要回首页（ic_home），就保留；不需要可设 showRightButton = NO
     self.navBar.showRightButton = YES;
     self.navBar.onRight = ^(BOOL allSelected) {
         UINavigationController *nav = [ws as_rootNav];
@@ -148,14 +147,12 @@ static inline UIColor *ASHexBlack(void) {
         [self.navBar.heightAnchor constraintEqualToConstant:88],
     ]];
 
-    // ===== Count Row (left count, right selectAll) =====
     self.countLabel = [UILabel new];
     self.countLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.countLabel.textColor = UIColor.blackColor;
     self.countLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightRegular];
     [self.view addSubview:self.countLabel];
 
-    // Select All Button (same style as ASSelectTitleBar)
     self.selectAllButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.selectAllButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.selectAllButton.backgroundColor = UIColor.whiteColor;
@@ -251,7 +248,7 @@ static inline UIColor *ASHexBlack(void) {
 
     self.emptyTextLabel = [UILabel new];
     self.emptyTextLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.emptyTextLabel.text = @"No Content";
+    self.emptyTextLabel.text = NSLocalizedString(@"No Content", nil);
     self.emptyTextLabel.textColor = UIColor.blackColor;
     self.emptyTextLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightMedium];
     self.emptyTextLabel.textAlignment = NSTextAlignmentCenter;
@@ -297,7 +294,7 @@ static inline UIColor *ASHexBlack(void) {
     [self.items removeAllObjects];
     [self.items addObjectsFromArray:arr];
 
-    NSString *suffix = (self.mediaType == ASPrivateMediaTypePhoto) ? @"Photos" : @"Videos";
+    NSString *suffix = (self.mediaType == ASPrivateMediaTypePhoto) ? NSLocalizedString(@"Photos", nil) : NSLocalizedString(@"Videos", nil);
     self.countLabel.text = [NSString stringWithFormat:@"%lu %@", (unsigned long)self.items.count, suffix];
 
     // 修正 selected
@@ -330,7 +327,6 @@ static inline UIColor *ASHexBlack(void) {
     [self updateSelectAllUI];
     [self updateBottomTitle];
 
-    // 只更新可见 cell 的勾选，不 reload，避免闪
     for (NSIndexPath *ip in self.cv.indexPathsForVisibleItems) {
         if (ip.item >= self.items.count) continue;
         PrivateMediaCell *cell = (PrivateMediaCell *)[self.cv cellForItemAtIndexPath:ip];
@@ -341,7 +337,7 @@ static inline UIColor *ASHexBlack(void) {
 
 - (void)updateSelectAllUI {
     NSString *iconName = self.allSelected ? @"ic_select_s" : @"ic_select_gray_n";
-    NSString *text     = self.allSelected ? @"Deselect All" : @"Select All";
+    NSString *text     = self.allSelected ? NSLocalizedString(@"Deselect All", nil) : NSLocalizedString(@"Select All", nil);
 
     self.selectIconView.image = [[UIImage imageNamed:iconName] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     self.selectTextLabel.text = text;
@@ -354,9 +350,9 @@ static inline UIColor *ASHexBlack(void) {
 
 - (void)updateBottomTitle {
     if (self.selectedPaths.count > 0) {
-        [self.bottomBtn setTitle:@"Delete" forState:UIControlStateNormal];
+        [self.bottomBtn setTitle:NSLocalizedString(@"Delete", nil) forState:UIControlStateNormal];
     } else {
-        NSString *t = (self.mediaType == ASPrivateMediaTypePhoto) ? @"Add Photos" : @"Add Videos";
+        NSString *t = (self.mediaType == ASPrivateMediaTypePhoto) ? NSLocalizedString(@"Add Photos", nil) : NSLocalizedString(@"Add Videos", nil);
         [self.bottomBtn setTitle:t forState:UIControlStateNormal];
     }
 }
@@ -456,7 +452,7 @@ static inline UIColor *ASHexBlack(void) {
             [self.selectedPaths removeAllObjects];
             self.allSelected = NO;
 
-            NSString *suffix = (self.mediaType == ASPrivateMediaTypePhoto) ? @"Photos" : @"Videos";
+            NSString *suffix = (self.mediaType == ASPrivateMediaTypePhoto) ? NSLocalizedString(@"Photos", nil) : NSLocalizedString(@"Videos", nil);
             self.countLabel.text = [NSString stringWithFormat:@"%lu %@", (unsigned long)self.items.count, suffix];
 
             [self updateSelectAllUI];
@@ -475,7 +471,7 @@ static inline UIColor *ASHexBlack(void) {
 }
 
 - (void)presentPicker {
-    fprintf(stderr, "🔥 presentPicker called\n");
+    fprintf(stderr, " presentPicker called\n");
 
     PHPickerConfiguration *cfg =
     [[PHPickerConfiguration alloc] initWithPhotoLibrary:PHPhotoLibrary.sharedPhotoLibrary];
@@ -492,7 +488,7 @@ static inline UIColor *ASHexBlack(void) {
 #pragma mark - PHPickerDelegate
 
 - (void)picker:(PHPickerViewController *)picker didFinishPicking:(NSArray<PHPickerResult *> *)results {
-    fprintf(stderr, "🔥 didFinishPicking count=%lu\n", (unsigned long)results.count);
+    fprintf(stderr, " didFinishPicking count=%lu\n", (unsigned long)results.count);
 
     __weak typeof(self) ws = self;
 
@@ -522,7 +518,7 @@ static inline UIColor *ASHexBlack(void) {
                     }
                 }];
 
-                NSString *suffix = (ws.mediaType == ASPrivateMediaTypePhoto) ? @"Photos" : @"Videos";
+                NSString *suffix = (ws.mediaType == ASPrivateMediaTypePhoto) ? NSLocalizedString(@"Photos", nil) : NSLocalizedString(@"Videos", nil);
                 ws.countLabel.text = [NSString stringWithFormat:@"%lu %@", (unsigned long)ws.items.count, suffix];
                 [ws updateEmptyStateUI];
                 [ws updateBottomTitle];

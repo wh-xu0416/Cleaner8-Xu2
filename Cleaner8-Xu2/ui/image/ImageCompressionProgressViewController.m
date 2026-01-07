@@ -1,6 +1,7 @@
 #import "ImageCompressionProgressViewController.h"
 #import "ImageCompressionResultViewController.h"
 #import "LivePhotoCoverFrameManager.h"
+#import "Common.h"
 
 static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; }
 static inline UIColor *ASGrayBG(void){ return [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0]; }
@@ -81,7 +82,6 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
             [self.track.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
             [self.track.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
 
-            // ✅ track 底部贴 bar 底部（用于和左右文案底部对齐）
             [self.track.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:0],
             [self.track.heightAnchor constraintEqualToConstant:16],
 
@@ -89,16 +89,13 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
             [self.fill.topAnchor constraintEqualToAnchor:self.track.topAnchor],
             [self.fill.bottomAnchor constraintEqualToAnchor:self.track.bottomAnchor],
 
-            // icon 覆盖在进度条上方（不被裁切）
             [self.icon.centerYAnchor constraintEqualToAnchor:self.track.centerYAnchor constant:2],
             [self.icon.widthAnchor constraintEqualToConstant:28],
             [self.icon.heightAnchor constraintEqualToConstant:28],
 
             [self.bubble.bottomAnchor constraintEqualToAnchor:self.track.topAnchor constant:-10],
-            // ✅ bubble 高度加大，匹配上下内边距 8
             [self.bubble.heightAnchor constraintEqualToConstant:40],
 
-            // ✅ bubbleLabel：上下 8，左右 5
             [self.bubbleLabel.leadingAnchor constraintEqualToAnchor:self.bubble.leadingAnchor constant:5],
             [self.bubbleLabel.trailingAnchor constraintEqualToAnchor:self.bubble.trailingAnchor constant:-5],
             [self.bubbleLabel.topAnchor constraintEqualToAnchor:self.bubble.topAnchor constant:8],
@@ -114,7 +111,6 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
         self.bubbleCX = [self.bubble.centerXAnchor constraintEqualToAnchor:self.track.leadingAnchor constant:0];
         self.bubbleCX.active = YES;
 
-        // ✅ 确保 icon 永远在最上层（覆盖在进度条上方）
         [self bringSubviewToFront:self.icon];
     }
     return self;
@@ -240,7 +236,6 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 @implementation ImageCompressionProgressViewController
 
 - (void)as_dismissPresentedIfNeededThen:(dispatch_block_t)block {
-    // 如果当前正在展示取消确认弹窗（或其他弹窗），先关掉再执行 block
     UIViewController *presented = self.presentedViewController;
     if (presented) {
         [self dismissViewControllerAnimated:NO completion:block];
@@ -259,7 +254,6 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || self.didExit) return;
 
-        // ✅ 如果之前在显示取消确认弹窗，这里完成了就当作“取消弹窗作废”
         self.showingCancelAlert = NO;
         self.cancelAlert = nil;
 
@@ -271,10 +265,10 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 
             UIAlertController *ac =
             [UIAlertController alertControllerWithTitle:failedTitle
-                                                message:error.localizedDescription ?: @"Unknown error"
+                                                message:error.localizedDescription ?: NSLocalizedString(@"Unknown error", nil)
                                          preferredStyle:UIAlertControllerStyleAlert];
 
-            [ac addAction:[UIAlertAction actionWithTitle:@"OK"
+            [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil)
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(__unused UIAlertAction * _Nonnull action) {
                 [self.navigationController popViewControllerAnimated:YES];
@@ -399,7 +393,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
     self.titleLabel = [UILabel new];
-    self.titleLabel.text = @"In Process";
+    self.titleLabel.text = NSLocalizedString(@"In Process", nil);
     self.titleLabel.font = ASSB(24);
     self.titleLabel.textColor = UIColor.blackColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -408,7 +402,6 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     [header addSubview:self.backBtn];
     [header addSubview:self.titleLabel];
 
-    // ✅ grid：item 114，间距 5
     UICollectionViewFlowLayout *lay = [UICollectionViewFlowLayout new];
     lay.minimumLineSpacing = 5;
     lay.minimumInteritemSpacing = 5;
@@ -454,12 +447,12 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     self.tipLabel.lineBreakMode = NSLineBreakByWordWrapping;
     self.tipLabel.preferredMaxLayoutWidth = UIScreen.mainScreen.bounds.size.width - 60;
     self.tipLabel.textAlignment = NSTextAlignmentCenter;
-    self.tipLabel.text = @"It is recommended not to minimize or close the app...";
+    self.tipLabel.text = NSLocalizedString(@"It is recommended not to minimize or close the app...", nil);
     self.tipLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.tipLabel];
 
     self.cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.cancelBtn setTitle:@"Cancel" forState:UIControlStateNormal];
+    [self.cancelBtn setTitle:NSLocalizedString(@"Cancel", nil) forState:UIControlStateNormal];
     self.cancelBtn.titleLabel.font = ASBD(20);
     [self.cancelBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.cancelBtn.backgroundColor = ASBlue();
@@ -548,7 +541,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
             });
 
         } completion:^(ASImageCompressionSummary * _Nullable summary, NSError * _Nullable error) {
-            [self as_finishWithSummary:summary error:error failedTitle:@"Convert Failed"];
+            [self as_finishWithSummary:summary error:error failedTitle:NSLocalizedString(@"Convert Failed", nil)];
         }];
         return;
     }
@@ -567,7 +560,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
         });
 
     } completion:^(ASImageCompressionSummary * _Nullable summary, NSError * _Nullable error) {
-        [self as_finishWithSummary:summary error:error failedTitle:@"Compress Failed"];
+        [self as_finishWithSummary:summary error:error failedTitle:NSLocalizedString(@"Compress Failed", nil)];
     }];
 }
 
@@ -577,7 +570,6 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 
     BOOL isRunning = NO;
     if (self.mode == ASProgressModeLiveCover) {
-        // liveManager 创建后就视为正在跑（你如果 liveManager 有 isRunning 更好就用它）
         isRunning = (self.liveManager != nil);
     } else {
         isRunning = self.manager.isRunning;
@@ -592,14 +584,14 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     self.showingCancelAlert = YES;
 
     UIAlertController *ac =
-    [UIAlertController alertControllerWithTitle:@"Cancel Conversion"
-                                        message:@"Are you sure you want to cancel the conversion of this Photo?"
+    [UIAlertController alertControllerWithTitle:NSLocalizedString(@"Cancel Conversion", nil)
+                                        message:NSLocalizedString(@"Are you sure you want to cancel the conversion of this Photo?", nil)
                                  preferredStyle:UIAlertControllerStyleAlert];
 
     self.cancelAlert = ac;
 
     __weak typeof(self) weakSelf = self;
-    [ac addAction:[UIAlertAction actionWithTitle:@"NO" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction * _Nonnull action) {
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"NO", nil) style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction * _Nonnull action) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
         self.showingCancelAlert = NO;
@@ -607,7 +599,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
         [self resetPopGesture];
     }]];
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"YES" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"YES", nil) style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
         self.showingCancelAlert = NO;

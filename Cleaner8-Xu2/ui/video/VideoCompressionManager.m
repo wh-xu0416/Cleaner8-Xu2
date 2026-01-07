@@ -288,7 +288,6 @@ static NSError *ASError(NSString *msg, NSInteger code) {
     return [NSError errorWithDomain:@"compress" code:code userInfo:@{NSLocalizedDescriptionKey: msg ?: @"Error"}];
 }
 
-// ✅ 复制 sampleBuffer 并整体平移 PTS/DTS（修复 startSession=0 导致封面黑）
 static CMSampleBufferRef ASCopySampleBufferWithTimeOffset(CMSampleBufferRef sb, CMTime offset) {
     if (!sb) return NULL;
 
@@ -481,7 +480,7 @@ static CMSampleBufferRef ASCopySampleBufferWithTimeOffset(CMSampleBufferRef sb, 
                         return;
                     }
 
-                    // ✅ 写索引：My Studio 列表展示用
+                    // 写索引：My Studio 列表展示用
                     if (createdAssetId.length > 0) {
                         ASStudioItem *sitem = [ASStudioItem new];
                         sitem.assetId = createdAssetId;

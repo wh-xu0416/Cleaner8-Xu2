@@ -1,5 +1,6 @@
 #import "ResultViewController.h"
 #import "LearnPageViewController.h"
+#import "Common.h"
 
 static inline UIColor *ASColorHex(uint32_t rgb, CGFloat a) {
     return [UIColor colorWithRed:((rgb >> 16) & 0xFF)/255.0
@@ -65,7 +66,7 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
     [self.view addSubview:self.greatImageView];
 
     self.titleLabel = [UILabel new];
-    self.titleLabel.text = @"Great！";
+    self.titleLabel.text = NSLocalizedString(@"Great!", nil);
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     self.titleLabel.textColor = UIColor.blackColor;
     self.titleLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightMedium];
@@ -85,7 +86,7 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
 
     UIImage *moreImg = [[UIImage imageNamed:@"ic_learn"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.learnMoreBtn setImage:moreImg forState:UIControlStateNormal];
-    [self.learnMoreBtn setTitle:@"Learn More" forState:UIControlStateNormal];
+    [self.learnMoreBtn setTitle:NSLocalizedString(@"Learn More", nil) forState:UIControlStateNormal];
     [self.learnMoreBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     self.learnMoreBtn.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
 
@@ -106,7 +107,7 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
     self.continueBtn.layer.cornerRadius = 35;
     self.continueBtn.clipsToBounds = YES;
 
-    [self.continueBtn setTitle:@"Continue" forState:UIControlStateNormal];
+    [self.continueBtn setTitle:NSLocalizedString(@"Continue", nil) forState:UIControlStateNormal];
     [self.continueBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.continueBtn.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
     self.continueBtn.contentEdgeInsets = UIEdgeInsetsMake(23, 0, 23, 0);
@@ -157,8 +158,8 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
     NSString *countStr = [NSString stringWithFormat:@"%lu", (unsigned long)self.deletedCount];
     NSString *sizeStr  = ASHumanSize(self.freedBytes);
 
-    NSString *line1 = [NSString stringWithFormat:@"You deleted %@ photos today.", countStr];
-    NSString *line2 = [NSString stringWithFormat:@"Freed up %@ space on your phone.", sizeStr];
+    NSString *line1 = [NSString stringWithFormat:NSLocalizedString(@"You deleted %@ photos today.", nil), countStr];
+    NSString *line2 = [NSString stringWithFormat:NSLocalizedString(@"Freed up %@ space on your phone.", nil), sizeStr];
     NSString *full = [NSString stringWithFormat:@"%@\n%@", line1, line2];
 
     UIColor *blue = ASColorHex(0x024DFF, 1.0);

@@ -1,6 +1,7 @@
 #import "ASCompressionResultBaseViewController.h"
 #import "ASMyStudioViewController.h"
 #import "ASMediaPreviewViewController.h"
+#import "Common.h"
 #import <Photos/Photos.h>
 
 #pragma mark - Helpers
@@ -49,7 +50,7 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     ASDeleteOriginalBottomSheet *v = [ASDeleteOriginalBottomSheet new];
     v.onDelete = onDelete;
-    [v buildUIWithTitle:title ?: @"Delete original ?"];
+    [v buildUIWithTitle:title ?: NSLocalizedString(@"Delete original ?", nil)];
 
     UIView *container = vc.view.window;
     if (!container) {
@@ -120,7 +121,7 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     self.reserveBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.reserveBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.reserveBtn setTitle:@"Reserve" forState:UIControlStateNormal];
+    [self.reserveBtn setTitle:NSLocalizedString(@"Reserve", nil) forState:UIControlStateNormal];
     self.reserveBtn.titleLabel.font = ASFont(20, UIFontWeightRegular);
     [self.reserveBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.reserveBtn.backgroundColor = ASBlue();
@@ -131,7 +132,7 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     self.deleteBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.deleteBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.deleteBtn setTitle:@"Delete" forState:UIControlStateNormal];
+    [self.deleteBtn setTitle:NSLocalizedString(@"Delete", nil) forState:UIControlStateNormal];
     self.deleteBtn.titleLabel.font = ASFont(20, UIFontWeightMedium);
     [self.deleteBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     self.deleteBtn.backgroundColor = ASGrayBG();
@@ -148,7 +149,6 @@ typedef void(^ASDeleteSheetBlock)(void);
     self.deleteBottomC = [self.deleteBtn.bottomAnchor constraintEqualToAnchor:self.sheetView.bottomAnchor constant:-20];
     [self.deleteBottomC setActive:YES];
 
-    // dim 覆盖全屏
     [cs addObjectsFromArray:@[
         [self.dimView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.dimView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
@@ -156,16 +156,14 @@ typedef void(^ASDeleteSheetBlock)(void);
         [self.dimView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
     ]];
 
-    // sheetShadowView 横向贴边，底部贴 safeArea
     [cs addObjectsFromArray:@[
         [self.sheetShadowView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.sheetShadowView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-        [self.sheetShadowView.topAnchor constraintGreaterThanOrEqualToAnchor:self.topAnchor], // 兜底，防止高度不确定
+        [self.sheetShadowView.topAnchor constraintGreaterThanOrEqualToAnchor:self.topAnchor],
     ]];
 
     [cs addObject:[self.sheetShadowView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]];
 
-    // sheetView 填满 shadow 容器
     [cs addObjectsFromArray:@[
         [self.sheetView.leadingAnchor constraintEqualToAnchor:self.sheetShadowView.leadingAnchor],
         [self.sheetView.trailingAnchor constraintEqualToAnchor:self.sheetShadowView.trailingAnchor],
@@ -173,7 +171,6 @@ typedef void(^ASDeleteSheetBlock)(void);
         [self.sheetView.bottomAnchor constraintEqualToAnchor:self.sheetShadowView.bottomAnchor],
     ]];
 
-    // 内容布局
     [cs addObjectsFromArray:@[
         [self.titleLabel.topAnchor constraintEqualToAnchor:self.sheetView.topAnchor constant:30],
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.sheetView.leadingAnchor constant:20],
@@ -323,9 +320,9 @@ typedef void(^ASDeleteSheetBlock)(void);
 - (BOOL)useStaticPreviewIcon { return NO; }
 - (NSString *)staticPreviewIconName { return nil; }
 - (CGSize)staticPreviewSize { return CGSizeMake(180, 170); }
-- (NSString *)deleteSheetTitle { return @"Delete original ?"; }
-- (NSString *)itemSingular { return @"item"; }
-- (NSString *)itemPlural   { return @"items"; }
+- (NSString *)deleteSheetTitle { return NSLocalizedString(@"Delete original ?", nil); }
+- (NSString *)itemSingular { return NSLocalizedString(@"item", nil); }
+- (NSString *)itemPlural   { return NSLocalizedString(@"items", nil); }
 - (NSString *)homeIconName { return @"ic_back_home"; }
 - (BOOL)shouldShowHomeButton { return YES; }
 
@@ -378,7 +375,6 @@ typedef void(^ASDeleteSheetBlock)(void);
         vc = vc.presentedViewController;
     }
 
-    // 如果最顶层已经是 UIAlertController，就回退到它的 presentingVC
     if ([vc isKindOfClass:UIAlertController.class] && vc.presentingViewController) {
         vc = vc.presentingViewController;
     }
@@ -389,17 +385,17 @@ typedef void(^ASDeleteSheetBlock)(void);
     if (assets.count == 0) return;
 
     UIViewController *vc = [self as_topPresentingVC];
-    if (!vc.view.window) return; // 兜底：不在窗口里就别 present（避免直接异常）
+    if (!vc.view.window) return;
 
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Delete original?"
-                                                                message:(assets.count==1 ? @"This will delete the original from your photo library."
-                                                                                       : @"This will delete the originals from your photo library.")
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"Delete original?", nil)
+                                                                message:(assets.count==1 ? NSLocalizedString(@"This will delete the original from your photo library.", nil)
+                                                                                       : NSLocalizedString(@"This will delete the originals from your photo library.", nil))
                                                          preferredStyle:UIAlertControllerStyleAlert];
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
 
     __weak typeof(self) weakSelf = self;
-    [ac addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Delete", nil) style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
         [weakSelf as_deleteOriginalAssetsSafely:assets];
     }]];
 
@@ -416,8 +412,8 @@ typedef void(^ASDeleteSheetBlock)(void);
     else st = [PHPhotoLibrary authorizationStatus];
 
     if (!(st == PHAuthorizationStatusAuthorized || st == PHAuthorizationStatusLimited)) {
-        [self as_showSimpleAlert:@"No Permission"
-                         message:@"Please allow Photos access to delete originals."];
+        [self as_showSimpleAlert:NSLocalizedString(@"No Permission", nil)
+                         message:NSLocalizedString(@"Please allow Photos access to delete originals.", nil)];
         return;
     }
 
@@ -429,8 +425,8 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
     if (fr.count == 0) {
-        [self as_showSimpleAlert:@"Not Found"
-                         message:@"These photos are no longer available."];
+        [self as_showSimpleAlert:NSLocalizedString(@"Not Found", nil)
+                         message:NSLocalizedString(@"These photos are no longer available.", nil)];
         return;
     }
 
@@ -440,7 +436,7 @@ typedef void(^ASDeleteSheetBlock)(void);
         @try {
             [PHAssetChangeRequest deleteAssets:fr];
         } @catch (NSException *e) {
-            exceptionMsg = [NSString stringWithFormat:@"%@: %@", e.name ?: @"Exception", e.reason ?: @""];
+            exceptionMsg = [NSString stringWithFormat:@"%@: %@", e.name ?: NSLocalizedString(@"Exception", nil), e.reason ?: @""];
         }
     } completionHandler:^(BOOL success, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -467,7 +463,7 @@ typedef void(^ASDeleteSheetBlock)(void);
     UIAlertController *ac = [UIAlertController alertControllerWithTitle:title
                                                                 message:msg
                                                          preferredStyle:UIAlertControllerStyleAlert];
-    [ac addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil) style:UIAlertActionStyleDefault handler:nil]];
     [vc presentViewController:ac animated:YES completion:nil];
 }
 
@@ -553,7 +549,7 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     self.greatLabel = [UILabel new];
     self.greatLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.greatLabel.text = @"Great!";
+    self.greatLabel.text = NSLocalizedString(@"Great!", nil);
     self.greatLabel.textColor = UIColor.blackColor;
     self.greatLabel.font = ASFont(34, UIFontWeightMedium);
     self.greatLabel.textAlignment = NSTextAlignmentCenter;
@@ -590,7 +586,7 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     self.studioLabel = [UILabel new];
     self.studioLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.studioLabel.text = @"My studio";
+    self.studioLabel.text = NSLocalizedString(@"My studio", nil);
     self.studioLabel.textColor = UIColor.blackColor;
     self.studioLabel.font = ASFont(24, UIFontWeightMedium);
     [self.studioRow addSubview:self.studioLabel];
@@ -700,10 +696,9 @@ typedef void(^ASDeleteSheetBlock)(void);
     NSArray<PHAsset *> *assets = self.summary.originalAssets ?: @[];
     if (assets.count == 0) return;
 
-    // 如果你只想预览第一条，改成：NSArray *previewAssets = @[assets.firstObject];
     NSArray<PHAsset *> *previewAssets = assets;
 
-    NSIndexSet *preSel = [NSIndexSet indexSet]; // 结果页一般没“勾选态”，传空即可
+    NSIndexSet *preSel = [NSIndexSet indexSet];
 
     ASMediaPreviewViewController *p =
     [[ASMediaPreviewViewController alloc] initWithAssets:previewAssets
@@ -825,9 +820,9 @@ typedef void(^ASDeleteSheetBlock)(void);
     hSep.backgroundColor = [ASBlue() colorWithAlphaComponent:0.25];
     [table addSubview:hSep];
 
-    UIView *t1 = [self makeTitleCellTop:@"Before" bottom:@"Compression"];
-    UIView *t2 = [self makeTitleCellTop:@"After" bottom:@"Compression"];
-    UIView *t3 = [self makeTitleCellSingle:@"Space Saved"];
+    UIView *t1 = [self makeTitleCellTop:NSLocalizedString(@"Before", nil) bottom:NSLocalizedString(@"Compression", nil)];
+    UIView *t2 = [self makeTitleCellTop:NSLocalizedString(@"After", nil) bottom:NSLocalizedString(@"Compression", nil)];
+    UIView *t3 = [self makeTitleCellSingle:NSLocalizedString(@"Space Saved", nil)];
 
     UIStackView *topStack = [[UIStackView alloc] initWithArrangedSubviews:@[t1, [self vSep], t2, [self vSep], t3]];
     topStack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -888,9 +883,9 @@ typedef void(^ASDeleteSheetBlock)(void);
 - (void)fillData {
     NSInteger count = self.summary.inputCount;
     NSString *noun = (count == 1) ? [self itemSingular] : [self itemPlural];
-    NSString *aux  = (count == 1) ? @"has" : @"have"; // 1 image has been / 2 images have been
+    NSString *aux  = (count == 1) ? NSLocalizedString(@"has", nil) : NSLocalizedString(@"have", nil); // 1 image has been / 2 images have been
 
-    self.infoLabel.text = [NSString stringWithFormat:@"%ld %@ %@ been compressed and saved to your system album",
+    self.infoLabel.text = [NSString stringWithFormat:NSLocalizedString(@"%ld %@ %@ been compressed and saved to your system album", nil),
                            (long)count, noun, aux];
 
     self.vBefore.text = ASHumanSize(self.summary.beforeBytes) ?: @"--";
@@ -937,8 +932,8 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     if (deletable.count == 0) {
         // 一个都删不了：别弹 Delete，给提示
-        [self as_showSimpleAlert:@"Can't delete"
-                         message:@"These photos can't be deleted (shared/synced or restricted)."];
+        [self as_showSimpleAlert:NSLocalizedString(@"Can't delete", nil)
+                         message:NSLocalizedString(@"These photos can't be deleted (shared/synced or restricted).", nil)];
         return;
     }
 
@@ -949,9 +944,8 @@ typedef void(^ASDeleteSheetBlock)(void);
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
 
-        // 可选：有 blocked 的话也提示一下
+        // 有 blocked 的话也提示一下
         if (blocked > 0) {
-            // 你也可以把这句话合并到系统确认 message 里
         }
         [self as_deleteOriginalAssetsSafely:deletable];
     }];

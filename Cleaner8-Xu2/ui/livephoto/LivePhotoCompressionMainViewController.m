@@ -4,13 +4,14 @@
 #import <UIKit/UIKit.h>
 #import <Photos/Photos.h>
 #import "LivePhotoCoverFrameManager.h"
+#import "Common.h"
 
 #pragma mark - Helpers (static)
 static NSString *ASImageSavePillText(uint64_t bytes) {
-    if (bytes == 0) return @"Save --MB";
+    if (bytes == 0) return NSLocalizedString(@"Save --MB", nil);
     uint64_t saveBytes = bytes / 2; // 固定 50%
     double mb = (double)saveBytes / (1024.0 * 1024.0);
-    return [NSString stringWithFormat:@"Save %.0fMB", mb];
+    return [NSString stringWithFormat:NSLocalizedString(@"Save %.0fMB", nil), mb];
 }
 
 static NSString * const kASLiveSizeCachePlist = @"as_live_size_cache_v1.plist";
@@ -434,7 +435,7 @@ static NSString *ASMBPill(uint64_t bytes) {
     NSArray<PHAsset *> *newA = selectedAssets ?: @[];
     _selectedAssets = [newA copy];
 
-    self.titleLabel.text = [NSString stringWithFormat:@"Selected %ld Live Photo", (long)newA.count];
+    self.titleLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Selected %ld Live Photo", nil), (long)newA.count];
 
     if (old.count == 0 && newA.count == 0) return;
 
@@ -700,7 +701,7 @@ UICollectionViewDataSourcePrefetching
     [self.blueHeader addSubview:self.backBtn];
 
     self.headerTitle = [UILabel new];
-    self.headerTitle.text = @"Live Photo Compressor";
+    self.headerTitle.text = NSLocalizedString(@"Live Photo Compressor", nil);
     self.headerTitle.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
     self.headerTitle.textColor = UIColor.whiteColor;
     self.headerTitle.textAlignment = NSTextAlignmentCenter;
@@ -716,7 +717,7 @@ UICollectionViewDataSourcePrefetching
     [self.blueHeader addSubview:self.headerTotal];
     
     self.headerSubtitle = [UILabel new];
-    self.headerSubtitle.text = @"After converting Live Photos, you can save --";
+    self.headerSubtitle.text = NSLocalizedString(@"After converting Live Photos, you can save --", nil);
     self.headerSubtitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
     self.headerSubtitle.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.95];
     self.headerSubtitle.textAlignment = NSTextAlignmentCenter;
@@ -744,12 +745,12 @@ UICollectionViewDataSourcePrefetching
     self.filterScroll.translatesAutoresizingMaskIntoConstraints = NO;
     [self.card addSubview:self.filterScroll];
 
-    UIButton *b0 = [self makeFilterButton:@"All" tag:0];
-    UIButton *b1 = [self makeFilterButton:@"Today" tag:1];
-    UIButton *b2 = [self makeFilterButton:@"This week" tag:2];
-    UIButton *b3 = [self makeFilterButton:@"This month" tag:3];
-    UIButton *b4 = [self makeFilterButton:@"Last month" tag:4];
-    UIButton *b5 = [self makeFilterButton:@"Past 6 months" tag:5];
+    UIButton *b0 = [self makeFilterButton:NSLocalizedString(@"All", nil) tag:0];
+    UIButton *b1 = [self makeFilterButton:NSLocalizedString(@"Today", nil) tag:1];
+    UIButton *b2 = [self makeFilterButton:NSLocalizedString(@"This week", nil) tag:2];
+    UIButton *b3 = [self makeFilterButton:NSLocalizedString(@"This month", nil) tag:3];
+    UIButton *b4 = [self makeFilterButton:NSLocalizedString(@"Last month", nil) tag:4];
+    UIButton *b5 = [self makeFilterButton:NSLocalizedString(@"Past 6 months", nil) tag:5];
     self.filterButtons = @[b0,b1,b2,b3,b4,b5];
 
     self.filterStack = [[UIStackView alloc] initWithArrangedSubviews:self.filterButtons];
@@ -880,13 +881,11 @@ UICollectionViewDataSourcePrefetching
             CGFloat leading = 20.0;
             NSInteger columns = 3;
 
-            // ✅ 取当前 section 的 item 数
             NSInteger itemCount = 0;
             if (weakSelf && sectionIndex < weakSelf.sections.count) {
                 itemCount = weakSelf.sections[sectionIndex].assets.count;
             }
 
-            // ✅ 不满一行：rows=1；最多两行：rows<=2
             NSInteger rows = 1;
             if (itemCount > 0) {
                 rows = (NSInteger)ceil((double)itemCount / (double)columns);
@@ -896,22 +895,18 @@ UICollectionViewDataSourcePrefetching
             CGFloat containerW = environment.container.effectiveContentSize.width;
             CGFloat contentW   = containerW - leading * 2.0;
 
-            // ✅ 计算正方形边长（像素对齐）
             CGFloat scale = UIScreen.mainScreen.scale;
             CGFloat rawSide = (contentW - inter * (columns - 1)) / (CGFloat)columns;
             CGFloat itemSide = floor(rawSide * scale) / scale;
-            if (itemSide < 90) itemSide = 90; // 你的原逻辑里有兜底，这里保留
+            if (itemSide < 90) itemSide = 90;
 
-            // ✅ 一行的宽度（3列）
             CGFloat rowW = itemSide * columns + inter * (columns - 1);
 
-            // item（正方形）
             NSCollectionLayoutSize *itemSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]
                                           heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
 
-            // row = 3 列
             NSCollectionLayoutSize *rowSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:rowW]
                                           heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]];
@@ -919,7 +914,6 @@ UICollectionViewDataSourcePrefetching
             [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:rowSize subitem:item count:columns];
             row.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:inter];
 
-            // group = 1 或 2 行
             CGFloat groupH = itemSide * rows + inter * (rows - 1);
             NSCollectionLayoutSize *groupSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:rowW]
@@ -934,7 +928,6 @@ UICollectionViewDataSourcePrefetching
             sec.contentInsets = NSDirectionalEdgeInsetsMake(0, leading, 0, leading);
             sec.supplementariesFollowContentInsets = NO;
 
-            // header
             NSCollectionLayoutSize *headerSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
                                           heightDimension:[NSCollectionLayoutDimension absoluteDimension:40]];
@@ -944,7 +937,6 @@ UICollectionViewDataSourcePrefetching
                                                                                       alignment:NSRectAlignmentTop];
             sec.boundarySupplementaryItems = @[header];
 
-            // ✅ 同步你的 thumbPixelSize
             weakSelf.thumbPixelSize = CGSizeMake(itemSide * scale * 1.6, itemSide * scale * 1.6);
 
             return sec;
@@ -993,7 +985,7 @@ UICollectionViewDataSourcePrefetching
     }
 }
 
-/// ✅ 只取 Live Photo：Image + Hidden + 多来源 + 排除非 Live + 不要 video
+/// 只取 Live Photo：Image + Hidden + 多来源 + 排除非 Live + 不要 video
 - (void)loadAssetsFast {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         PHFetchOptions *opt = [PHFetchOptions new];
@@ -1098,7 +1090,7 @@ UICollectionViewDataSourcePrefetching
     if (possiblyUnknown && known > 0 && (pending > 0 || failed > 0)) totalText = [totalText stringByAppendingString:@"+"];
 
     NSString *savedText = saved > 0 ? ASHumanSizeShort(saved) : @"--";
-    NSString *prefix = @"After converting Live Photos, you can save ";
+    NSString *prefix = NSLocalizedString(@"After converting Live Photos, you can save ", nil);
     NSString *full = [prefix stringByAppendingString:savedText];
 
     NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full];
@@ -1122,7 +1114,7 @@ UICollectionViewDataSourcePrefetching
     return n ? n.unsignedLongLongValue : 0;
 }
 
-/// ✅ Live Photo 占用：图片资源 + paired video 资源一起加
+/// Live Photo 占用：图片资源 + paired video 资源一起加
 - (uint64_t)fileSizeForAsset:(PHAsset *)asset {
     NSArray<PHAssetResource *> *resources = [PHAssetResource assetResourcesForAsset:asset];
     if (resources.count == 0) return 0;

@@ -1,6 +1,7 @@
 #import "LaunchViewController.h"
 #import "OnboardingViewController.h"
 #import "MainTabBarController.h"
+#import "Common.h"
 #import <Network/Network.h>
 
 #pragma mark - UI Helpers
@@ -177,11 +178,17 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
     self.logoView.translatesAutoresizingMaskIntoConstraints = NO;
     self.logoView.image = [UIImage imageNamed:@"launch_icon"];
     self.logoView.contentMode = UIViewContentModeScaleAspectFit;
+    
+    self.logoView.layer.cornerRadius = 36.0;
+    self.logoView.layer.masksToBounds = YES;
+    if (@available(iOS 13.0, *)) {
+        self.logoView.layer.cornerCurve = kCACornerCurveContinuous;
+    }
     [self.centerContainer addSubview:self.logoView];
 
     self.nameLab = [UILabel new];
     self.nameLab.translatesAutoresizingMaskIntoConstraints = NO;
-    self.nameLab.text = @"Compressly";
+    self.nameLab.text = NSLocalizedString(@"Compressly", nil);
     self.nameLab.textColor = UIColor.blackColor;
     self.nameLab.font = ASFont(34, UIFontWeightMedium);
     self.nameLab.textAlignment = NSTextAlignmentCenter;

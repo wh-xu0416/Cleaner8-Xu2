@@ -6,6 +6,7 @@
 #import "ASAssetListViewController.h"
 #import "VideoSubPageViewController.h"
 #import "ASPrivatePermissionBanner.h"
+#import "Common.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -262,14 +263,14 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         [self.contentView addSubview:_iconView];
 
         _t1 = [UILabel new];
-        _t1.text = @"Allow Photo Access";
+        _t1.text = NSLocalizedString(@"Allow Photo Access", nil);
         _t1.textColor = UIColor.blackColor;
         _t1.font = ASFont(20, UIFontWeightMedium);
         _t1.textAlignment = NSTextAlignmentCenter;
         [self.contentView addSubview:_t1];
 
         _t2 = [UILabel new];
-        _t2.text = @"To compress photos, videos, and LivePhotos. please allow access to your photo library.";
+        _t2.text = NSLocalizedString(@"To compress photos, videos, and LivePhotos. please allow access to your photo library.", nil);
         _t2.textColor = ASRGB(102, 102, 102);
         _t2.font = ASFont(13, UIFontWeightRegular);
         _t2.numberOfLines = 3;
@@ -280,7 +281,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         _btn.backgroundColor = ASBlue();
         _btn.layer.cornerRadius = 35;
         _btn.clipsToBounds = YES;
-        [_btn setTitle:@"Go to Settings" forState:UIControlStateNormal];
+        [_btn setTitle:NSLocalizedString(@"Go to Settings", nil) forState:UIControlStateNormal];
         [_btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         _btn.titleLabel.font = ASFont(20, UIFontWeightRegular);
         _btn.contentEdgeInsets = UIEdgeInsetsMake(18, 0, 18, 0);
@@ -337,7 +338,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         [self addSubview:_permissionBanner];
 
         _spaceTitleLabel = [UILabel new];
-        _spaceTitleLabel.text = @"Space To Clean";
+        _spaceTitleLabel.text = NSLocalizedString(@"Space To Clean", nil);
         _spaceTitleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
         _spaceTitleLabel.textColor = UIColor.blackColor;
         [self addSubview:_spaceTitleLabel];
@@ -351,7 +352,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         _proBtn.layer.cornerRadius = 18;
         _proBtn.clipsToBounds = YES;
         _proBtn.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightMedium];
-        [_proBtn setTitle:@"Pro" forState:UIControlStateNormal];
+        [_proBtn setTitle:NSLocalizedString(@"Pro", nil) forState:UIControlStateNormal];
         [_proBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
 
         UIImage *vip = [[UIImage imageNamed:@"ic_vip"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
@@ -394,7 +395,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         [self addSubview:_legend1Dot];
 
         _legend1Name = [UILabel new];
-        _legend1Name.text = @"Clutter";
+        _legend1Name.text = NSLocalizedString(@"Clutter", nil);
         _legend1Name.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
         _legend1Name.textColor = kTextGray();
         [self addSubview:_legend1Name];
@@ -410,7 +411,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         [self addSubview:_legend2Dot];
 
         _legend2Name = [UILabel new];
-        _legend2Name.text = @"App&Data";
+        _legend2Name.text = NSLocalizedString(@"App&Data", nil);
         _legend2Name.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
         _legend2Name.textColor = kTextGray();
         [self addSubview:_legend2Name];
@@ -426,7 +427,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         [self addSubview:_legend3Dot];
 
         _legend3Name = [UILabel new];
-        _legend3Name.text = @"Total";
+        _legend3Name.text = NSLocalizedString(@"Total", nil);
         _legend3Name.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
         _legend3Name.textColor = kTextGray();
         [self addSubview:_legend3Name];
@@ -1008,6 +1009,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 @property (nonatomic, strong) NSUUID *scanProgressToken;
 
 @property (nonatomic) BOOL isLimitedAuth;
+
+@property(nonatomic, assign) ASPhotoAuthLevel lastAppliedAuthLevel;
+@property(nonatomic, assign) BOOL lastAppliedLimited;
 @end
 
 @implementation HomeViewController
@@ -1080,6 +1084,8 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     [super viewDidLoad];
     [self setupUI];
     self.homeBuildQueue = dispatch_queue_create("com.xiaoxu2.home.build", DISPATCH_QUEUE_SERIAL);
+    self.lastAppliedAuthLevel = ASPhotoAuthLevelUnknown;
+    self.lastAppliedLimited = NO;
 
     self.imgMgr = [[PHCachingImageManager alloc] init];
     self.scanMgr = [ASPhotoScanManager shared];
@@ -1125,10 +1131,8 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
             __strong typeof(weakSelf) self = weakSelf;
             if (!self) return;
 
-            // 这些都可以后台算
             [self computeDiskSpace];
 
-            // 扫描中不要做重建（你原逻辑保留）
             if (self.scanMgr.snapshot.state == ASScanStateScanning) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self scheduleScanUIUpdateCoalesced];
@@ -1139,7 +1143,6 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
             NSArray<ASHomeModuleVM *> *old = self.modules ?: @[];
             NSArray<ASHomeModuleVM *> *newMods = [self buildModulesFromManagerAndComputeClutterIsFinal:isFinal];
 
-            // 如果你希望“封面继承，避免抖动”，可以启用你写的 preserve
             // [self preserveCoversFromOld:old toNew:newMods];
 
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -1203,10 +1206,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
                     [weakSelf storeAuthLevel:newLevel];
 
                     if (newLevel == ASPhotoAuthLevelLimited || newLevel == ASPhotoAuthLevelFull) {
-                        // 规则：0->limit / 0->full 全量扫描（不管有没有缓存）
                         [weakSelf startFullScanForce:YES];
                     } else {
-                        [weakSelf rebuildModulesAndReload]; // 继续展示缓存摘要
+                        [weakSelf rebuildModulesAndReload];
                     }
                 });
             }];
@@ -1266,10 +1268,8 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 - (void)startFullScanForce:(BOOL)force {
 
-    // 防重复：如果正在扫且你不想强制重来，就直接返回
     if (!force && self.scanMgr.snapshot.state == ASScanStateScanning) return;
 
-    // 强制重扫：先 cancel
     if (force && self.scanMgr.snapshot.state == ASScanStateScanning) {
         [self.scanMgr cancel];
     }
@@ -1284,33 +1284,28 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 }
 
 - (void)updatePermissionUIForStatus:(PHAuthorizationStatus)st {
-    BOOL hasAccess = (st == PHAuthorizationStatusAuthorized || st == PHAuthorizationStatusLimited);
 
-    self.isLimitedAuth = (@available(iOS 14.0, *) && st == PHAuthorizationStatusLimited);
+    ASPhotoAuthLevel lvl = [self mapToAuthLevel:st];
+    BOOL limited = (@available(iOS 14.0, *) && st == PHAuthorizationStatusLimited);
 
-    if (st == PHAuthorizationStatusDenied || st == PHAuthorizationStatusRestricted) {
-        self.cv.hidden = NO;
+    BOOL authChanged = (self.lastAppliedAuthLevel != lvl) || (self.lastAppliedLimited != limited);
 
-        [self applyLayoutForCurrentAuth];
+    self.lastAppliedAuthLevel = lvl;
+    self.lastAppliedLimited = limited;
+    self.isLimitedAuth = limited;
 
+    self.cv.hidden = NO;
+
+    // 布局/头部高度可能跟权限有关，仍然更新
+    [self applyLayoutForCurrentAuth];
+    [self invalidateHeaderLayoutIfNeeded];
+
+    // ✅ 只有权限/limited 真变化才 reload
+    if (authChanged) {
         [self.cv reloadData];
-        [self invalidateHeaderLayoutIfNeeded];
-        return;
-    }
-
-    if (st == PHAuthorizationStatusNotDetermined) {
-        self.cv.hidden = NO;
-        [self applyLayoutForCurrentAuth];
-        [self.cv reloadData];
-        [self invalidateHeaderLayoutIfNeeded];
-        return;
-    }
-
-    if (hasAccess) {
-        self.cv.hidden = NO;
-        [self applyLayoutForCurrentAuth];
-        [self.cv reloadData];
-        [self invalidateHeaderLayoutIfNeeded];
+    } else {
+        // 不 reload 的情况下，至少把 header 文案/ banner 状态更新一下
+        [self updateHeaderDuringScanning];
     }
 }
 
@@ -1321,14 +1316,13 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     if (![self hasPhotoAccess]) {
         wf.sectionInset = UIEdgeInsetsMake(0, 0, 16, 0);
         wf.interItemSpacing = 0;
-        wf.lineSpacing = 12; // 你想无权限也要有底部间距就留着；不想要可改 0
+        wf.lineSpacing = 12;
     } else {
         wf.sectionInset = UIEdgeInsetsMake(0, kHomeSideInset, kHomeSideInset, kHomeSideInset);
         wf.interItemSpacing = kHomeGridGap;
         wf.lineSpacing = kHomeGridGap;
     }
 
-    // header 高度也一起同步（你原来只在 viewDidLayoutSubviews / invalidateHeaderLayoutIfNeeded 做）
     CGFloat newH = [self collectionView:self.cv layout:wf referenceSizeForHeaderInSection:0].height;
     if (fabs(wf.headerHeight - newH) > 0.5) wf.headerHeight = newH;
 
@@ -1403,7 +1397,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     ASWaterfallLayout *wf = (ASWaterfallLayout *)self.cv.collectionViewLayout;
     if ([wf isKindOfClass:ASWaterfallLayout.class]) {
 
-        // 1) 先同步 sectionInset/interItemSpacing（你已有）
         if (![self hasPhotoAccess]) {
             wf.sectionInset = UIEdgeInsetsMake(0, 0, 16, 0);
             wf.interItemSpacing = 0;
@@ -1412,13 +1405,11 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             wf.interItemSpacing = kHomeGridGap;
         }
 
-        // 2) ✅ 再同步 headerHeight（关键）
         CGFloat newH = [self collectionView:self.cv layout:wf referenceSizeForHeaderInSection:0].height;
         if (fabs(wf.headerHeight - newH) > 0.5) {
             wf.headerHeight = newH;
         }
 
-        // 3) ✅ 统一 invalidate
         [wf invalidateLayout];
     }
   
@@ -1430,7 +1421,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.topBgView.frame = CGRectMake(0, 0, w, bgH + safeTop);
 
     UIEdgeInsets safe = self.view.safeAreaInsets;
-    self.cv.contentInset = UIEdgeInsetsMake(0, 0, safe.bottom + 70, 0);
+    self.cv.contentInset = UIEdgeInsetsMake(20, 0, safe.bottom + 70, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 }
 
@@ -1480,19 +1471,15 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             __strong typeof(weakSelf) self = weakSelf;
             if (!self) return;
 
-            // ✅ 后台：disk + build
             NSDictionary *attrs = [[NSFileManager defaultManager]
                                    attributesOfFileSystemForPath:NSHomeDirectory()
                                    error:nil];
             uint64_t total = [attrs[NSFileSystemSize] unsignedLongLongValue];
             uint64_t free  = [attrs[NSFileSystemFreeSize] unsignedLongLongValue];
 
-            // ⚠️ 不要在后台线程写 self.xxx（避免竞态），先放局部变量
             uint64_t totalLocal = total;
             uint64_t freeLocal  = free;
 
-            // buildModules 内部会用 diskTotal/free 来算 appData/clutter，所以临时用局部值喂进去：
-            // 最简单：先把 self.diskTotal/free 也用局部变量覆盖，但要在同一后台队列里用完，不要依赖主线程读
             self.diskTotalBytes = totalLocal;
             self.diskFreeBytes  = freeLocal;
 
@@ -1503,7 +1490,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                 __strong typeof(weakSelf) self = weakSelf;
                 if (!self) return;
 
-                // ✅ 主线程：写回 disk（供 header 用）
                 self.diskTotalBytes = totalLocal;
                 self.diskFreeBytes  = freeLocal;
 
@@ -1513,7 +1499,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                 if (old.count == 0 || old.count != newMods.count) {
                     [self.cv reloadData];
                 } else {
-                    // ✅ 不要只 diff coverKey，要 diff “内容key”
                     NSMutableArray<NSIndexPath *> *reloadIPs = [NSMutableArray array];
                     for (NSInteger i = 0; i < newMods.count; i++) {
                         NSString *ok = [self contentKeyForVM:old[i]];
@@ -1530,11 +1515,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                     }
                 }
 
-                // ✅ header：只 apply，不再 computeDiskSpace（你得保证 updateHeaderDuringScanning 里不要再算disk）
                 [self updateHeaderDuringScanning];
 
-                // ✅ 关键补丁：无论 reloadIPs 是否为空，都要刷新可见 cell 文本 + 触发封面加载
-                //    （尤其是 thumbLocalIds 从空变有的那一刻）
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self refreshVisibleCellsAndCovers];
                 });
@@ -1571,13 +1553,11 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         ASHomeModuleVM *o = oldByType[@(n.type)];
         if (!o) continue;
 
-        // 旧封面存在且有效：强制继承，保证“封面只在首次设置”
         if (o.thumbLocalIds.count > 0 && [self as_allLocalIdsValid:o.thumbLocalIds]) {
             n.thumbLocalIds = o.thumbLocalIds;
             n.thumbKey = o.thumbKey;
             n.didSetThumb = o.didSetThumb;
         } else {
-            // 旧封面没了/失效：允许新模块的封面（当作首次可用时设置）
             if (n.thumbLocalIds.count > 0) n.didSetThumb = YES;
         }
     }
@@ -1590,7 +1570,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         vm.thumbKey = @"";
     }
 
-    // 让界面马上变成占位，避免继续显示旧封面
     for (NSIndexPath *ip in [self.cv indexPathsForVisibleItems]) {
         HomeModuleCell *cell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:ip];
         if (![cell isKindOfClass:HomeModuleCell.class]) continue;
@@ -1650,7 +1629,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     CFTimeInterval now = CFAbsoluteTimeGetCurrent();
     if (now - self.lastScanUIFire < 0.6) {
-        return; // 还没到时间，保留 pending
+        return;
     }
     self.lastScanUIFire = now;
 
@@ -1748,7 +1727,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     // 更新磁盘信息（free 会变）
 //    [self computeDiskSpace];
 
-    // 触发 header 更新：不 reloadData，直接拿当前 header
     ASHomeHeaderView *hv = (ASHomeHeaderView *)[self.cv supplementaryViewForElementKind:UICollectionElementKindSectionHeader
                                                                             atIndexPath:[NSIndexPath indexPathForItem:0 inSection:0]];
     if (![hv isKindOfClass:ASHomeHeaderView.class]) return;
@@ -1823,7 +1801,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             case ASHomeCardTypeSimilarPhotos: {
                 uint64_t bytes = 0; for (ASAssetModel *m in simImg) bytes += m.fileSizeBytes;
                 NSUInteger cnt = simImg.count;
-                NSString *ct = [NSString stringWithFormat:@"%lu Photos", (unsigned long)cnt];
+                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)cnt];
 
                 if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
                     vm.totalBytes = bytes;
@@ -1846,7 +1824,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             case ASHomeCardTypeDuplicatePhotos: {
                 uint64_t bytes = 0; for (ASAssetModel *m in dupImg) bytes += m.fileSizeBytes;
                 NSUInteger cnt = dupImg.count;
-                NSString *ct = [NSString stringWithFormat:@"%lu Photos", (unsigned long)cnt];
+                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)cnt];
 
                 if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
                     vm.totalBytes = bytes;
@@ -1869,7 +1847,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             case ASHomeCardTypeScreenshots: {
                 uint64_t bytes = 0; for (ASAssetModel *m in shots) bytes += m.fileSizeBytes;
                 NSUInteger cnt = shots.count;
-                NSString *ct = [NSString stringWithFormat:@"%lu Photos", (unsigned long)cnt];
+                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)cnt];
 
                 if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
                     vm.totalBytes = bytes;
@@ -1889,7 +1867,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             case ASHomeCardTypeBlurryPhotos: {
                 uint64_t bytes = 0; for (ASAssetModel *m in blurs) bytes += m.fileSizeBytes;
                 NSUInteger cnt = blurs.count;
-                NSString *ct = [NSString stringWithFormat:@"%lu Photos", (unsigned long)cnt];
+                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)cnt];
 
                 if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
                     vm.totalBytes = bytes;
@@ -1909,7 +1887,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             case ASHomeCardTypeOtherPhotos: {
                 uint64_t bytes = 0; for (ASAssetModel *m in others) bytes += m.fileSizeBytes;
                 NSUInteger cnt = others.count;
-                NSString *ct = [NSString stringWithFormat:@"%lu Photos", (unsigned long)cnt];
+                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)cnt];
 
                 if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
                     vm.totalBytes = bytes;
@@ -1934,7 +1912,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                 for (ASAssetModel *m in bigs) bytes += m.fileSizeBytes;
                 for (ASAssetModel *m in recs) bytes += m.fileSizeBytes;
 
-                NSString *ct = [NSString stringWithFormat:@"%lu Videos", (unsigned long)cnt];
+                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Videos", nil), (unsigned long)cnt];
                 if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
                     vm.totalBytes = bytes;
                     vm.totalCount = cnt;
@@ -2240,29 +2218,29 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     };
 
     uint64_t simBytes = 0; for (ASAssetModel *m in simImg) simBytes += m.fileSizeBytes;
-    NSString *simCountText = [NSString stringWithFormat:@"%lu Photos", (unsigned long)simImg.count];
+    NSString *simCountText = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)simImg.count];
     ASHomeModuleVM *vmSimilar =
-    makeVM(ASHomeCardTypeSimilarPhotos, @"Similar Photos", simCountText, simBytes, simImg.count, simThumbs, YES, NO);
+    makeVM(ASHomeCardTypeSimilarPhotos, NSLocalizedString(@"Similar Photos", nil), simCountText, simBytes, simImg.count, simThumbs, YES, NO);
 
     uint64_t dupBytes = 0; for (ASAssetModel *m in dupImg) dupBytes += m.fileSizeBytes;
-    NSString *dupCountText = [NSString stringWithFormat:@"%lu Photos", (unsigned long)dupImg.count];
+    NSString *dupCountText = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)dupImg.count];
     ASHomeModuleVM *vmDup =
-    makeVM(ASHomeCardTypeDuplicatePhotos, @"Duplicate Photos", dupCountText, dupBytes, dupImg.count, dupThumbs, NO, NO);
+    makeVM(ASHomeCardTypeDuplicatePhotos, NSLocalizedString(@"Duplicate Photos", nil), dupCountText, dupBytes, dupImg.count, dupThumbs, NO, NO);
 
     uint64_t shotsBytes = 0; for (ASAssetModel *m in shots) shotsBytes += m.fileSizeBytes;
-    NSString *shotsCountText = [NSString stringWithFormat:@"%lu Photos", (unsigned long)shots.count];
+    NSString *shotsCountText = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)shots.count];
     ASHomeModuleVM *vmShots =
-    makeVM(ASHomeCardTypeScreenshots, @"Screenshots", shotsCountText, shotsBytes, shots.count, shotThumb, NO, NO);
+    makeVM(ASHomeCardTypeScreenshots, NSLocalizedString(@"Screenshots", nil), shotsCountText, shotsBytes, shots.count, shotThumb, NO, NO);
 
     uint64_t blurBytes = 0; for (ASAssetModel *m in blurs) blurBytes += m.fileSizeBytes;
-    NSString *blurCountText = [NSString stringWithFormat:@"%lu Photos", (unsigned long)blurs.count];
+    NSString *blurCountText = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)blurs.count];
     ASHomeModuleVM *vmBlur =
-    makeVM(ASHomeCardTypeBlurryPhotos, @"Blurry Photos", blurCountText, blurBytes, blurs.count, blurThumb, NO, NO);
+    makeVM(ASHomeCardTypeBlurryPhotos, NSLocalizedString(@"Blurry Photos", nil), blurCountText, blurBytes, blurs.count, blurThumb, NO, NO);
 
     uint64_t otherBytes = 0; for (ASAssetModel *m in others) otherBytes += m.fileSizeBytes;
-    NSString *otherCountText = [NSString stringWithFormat:@"%lu Photos", (unsigned long)others.count];
+    NSString *otherCountText = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)others.count];
     ASHomeModuleVM *vmOther =
-    makeVM(ASHomeCardTypeOtherPhotos, @"Other photos", otherCountText, otherBytes, others.count, otherThumb, NO, NO);
+    makeVM(ASHomeCardTypeOtherPhotos, NSLocalizedString(@"Other photos", nil), otherCountText, otherBytes, others.count, otherThumb, NO, NO);
 
     NSUInteger vCount = simVid.count + dupVid.count + bigs.count + recs.count;
     uint64_t vBytes = 0;
@@ -2271,9 +2249,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     for (ASAssetModel *m in bigs)   vBytes += m.fileSizeBytes;
     for (ASAssetModel *m in recs)   vBytes += m.fileSizeBytes;
 
-    NSString *vCountText = [NSString stringWithFormat:@"%lu Videos", (unsigned long)vCount];
+    NSString *vCountText = [NSString stringWithFormat:NSLocalizedString(@"%lu Videos", nil), (unsigned long)vCount];
     ASHomeModuleVM *vmVideos =
-    makeVM(ASHomeCardTypeVideos, @"Videos", vCountText, vBytes, vCount, videoThumb, NO, YES);
+    makeVM(ASHomeCardTypeVideos, NSLocalizedString(@"Videos", nil), vCountText, vBytes, vCount, videoThumb, NO, YES);
 
     return @[ vmSimilar, vmVideos, vmDup, vmShots, vmBlur, vmOther ];
 }

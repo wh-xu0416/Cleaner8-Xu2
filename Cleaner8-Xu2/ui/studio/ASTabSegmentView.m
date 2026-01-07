@@ -1,4 +1,5 @@
 #import "ASTabSegmentView.h"
+#import "Common.h"
 
 static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; }
 
@@ -22,8 +23,8 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
         _photosBtn.translatesAutoresizingMaskIntoConstraints = NO;
         _videoBtn.translatesAutoresizingMaskIntoConstraints  = NO;
 
-        [_photosBtn setTitle:@"Photos" forState:UIControlStateNormal];
-        [_videoBtn  setTitle:@"Video"  forState:UIControlStateNormal];
+        [_photosBtn setTitle:NSLocalizedString(@"Photos", nil) forState:UIControlStateNormal];
+        [_videoBtn  setTitle:NSLocalizedString(@"Video", nil)  forState:UIControlStateNormal];
 
         _photosBtn.titleLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
         _videoBtn.titleLabel.font  = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];

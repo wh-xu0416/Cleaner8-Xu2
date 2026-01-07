@@ -1,15 +1,16 @@
 #import "ImageCompressionMainViewController.h"
 #import "ImageCompressionQualityViewController.h"
 #import "ASMediaPreviewViewController.h"
+#import "Common.h"
 #import <UIKit/UIKit.h>
 #import <Photos/Photos.h>
 
 #pragma mark - Helpers (static)
 static NSString *ASImageSavePillText(uint64_t bytes) {
-    if (bytes == 0) return @"Save --MB";
+    if (bytes == 0) return NSLocalizedString(@"Save --MB", nil);
     uint64_t saveBytes = bytes / 2; // 固定 50%
     double mb = (double)saveBytes / (1024.0 * 1024.0);
-    return [NSString stringWithFormat:@"Save %.0fMB", mb];
+    return [NSString stringWithFormat:NSLocalizedString(@"Save %.0fMB", nil), mb];
 }
 
 static NSString * const kASImgSizeCachePlist = @"as_img_size_cache_v2.plist";
@@ -104,14 +105,14 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 }
 @end
 
-#pragma mark - Cell (corner 12, check top-right, pill bottom-right)
+#pragma mark - Cell
 
 @interface ASImgCell : UICollectionViewCell
 @property (nonatomic, assign) PHImageRequestID requestId;
 @property (nonatomic, strong) UIImageView *thumbView;
 @property (nonatomic, strong) ASPaddingLabel *pill;
-@property (nonatomic, strong) UIButton *checkBtn;     // icon only
-@property (nonatomic, strong) UIButton *checkTapBtn;  // bigger tap area
+@property (nonatomic, strong) UIButton *checkBtn;
+@property (nonatomic, strong) UIButton *checkTapBtn;
 @property (nonatomic, copy) NSString *representedAssetIdentifier;
 - (void)applySelectedUI:(BOOL)sel;
 @end
@@ -161,13 +162,11 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
             [_checkBtn.widthAnchor constraintEqualToConstant:23],
             [_checkBtn.heightAnchor constraintEqualToConstant:23],
 
-            // bigger tappable area
             [_checkTapBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
             [_checkTapBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [_checkTapBtn.widthAnchor constraintEqualToConstant:56],
             [_checkTapBtn.heightAnchor constraintEqualToConstant:56],
 
-            // pill bottom-right
             [_pill.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-10],
             [_pill.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-10],
             [_pill.heightAnchor constraintEqualToConstant:28],
@@ -182,7 +181,7 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    self.requestId = PHInvalidImageRequestID; // 取消在 VC 里做
+    self.requestId = PHInvalidImageRequestID;
     self.representedAssetIdentifier = nil;
     self.thumbView.image = nil;
     self.pill.text = @"--";
@@ -323,11 +322,9 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
     self.iv.image = nil;
 }
 
-/// ✅ 重要：按钮有一部分在 cell bounds 外时，默认点不到
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
     if ([super pointInside:point withEvent:event]) return YES;
 
-    // 把点击点转换到 contentView，再判断是否落在 delBtn 上
     CGPoint p = [self convertPoint:point toView:self.contentView];
     return CGRectContainsPoint(self.delBtn.frame, p);
 }
@@ -361,12 +358,10 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         }
         cardView.layer.masksToBounds = YES;
 
-        // ✅ 外层自己不裁剪，用来显示阴影
         self.backgroundColor = UIColor.clearColor;
         self.clipsToBounds = NO;
         self.layer.masksToBounds = NO;
 
-        // ✅ 阴影：Offset (0, -5), blur 10, color #00000033
         self.layer.shadowColor = [UIColor blackColor].CGColor;
         self.layer.shadowOpacity = (0x33 / 255.0);        // ≈0.2
         self.layer.shadowOffset = CGSizeMake(0, -5);
@@ -437,7 +432,6 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
             [self.cv.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:10],
             [self.cv.heightAnchor constraintEqualToConstant:64],
 
-            // content bottom sits on safeArea (background still reaches screen bottom)
             [self.cv.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-8],
         ]];
     }
@@ -451,7 +445,7 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
     NSArray<PHAsset *> *newA = selectedAssets ?: @[];
     _selectedAssets = [newA copy];
 
-    self.titleLabel.text = [NSString stringWithFormat:@"Selected %ld Image", (long)newA.count];
+    self.titleLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Selected %ld Image", nil), (long)newA.count];
 
     if (old.count == 0 && newA.count == 0) return;
 
@@ -469,17 +463,15 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         }
     }
 
-    // ✅ 只删除一个（找首个不一致的位置）
     if (old.count == newA.count + 1) {
         NSInteger rm = NSNotFound;
         NSInteger i=0,j=0;
         while (i<old.count && j<newA.count) {
             if ([old[i].localIdentifier isEqualToString:newA[j].localIdentifier]) { i++; j++; }
-            else { rm = i; i++; } // skip old one
+            else { rm = i; i++; }
             if (rm != NSNotFound) break;
         }
         if (rm == NSNotFound) rm = old.count-1;
-        // 校验尾部一致
         BOOL ok = YES;
         for (NSInteger k=rm;k<newA.count;k++) {
             if (![old[k+1].localIdentifier isEqualToString:newA[k].localIdentifier]) { ok = NO; break; }
@@ -493,7 +485,6 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         }
     }
 
-    // fallback：复杂变化就无动画 reload（减少闪）
     [UIView performWithoutAnimation:^{
         [self.cv reloadData];
         [self.cv layoutIfNeeded];
@@ -784,7 +775,7 @@ UICollectionViewDataSourcePrefetching
     [self.blueHeader addSubview:self.backBtn];
 
     self.headerTitle = [UILabel new];
-    self.headerTitle.text = @"Image Compressor";
+    self.headerTitle.text = NSLocalizedString(@"Image Compressor", nil);
     self.headerTitle.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
     self.headerTitle.textColor = UIColor.whiteColor;
     self.headerTitle.textAlignment = NSTextAlignmentCenter;
@@ -800,7 +791,7 @@ UICollectionViewDataSourcePrefetching
     [self.blueHeader addSubview:self.headerTotal];
 
     self.headerSubtitle = [UILabel new];
-    self.headerSubtitle.text = @"Total storage space saved by compressed photos --";
+    self.headerSubtitle.text = NSLocalizedString(@"Total storage space saved by compressed photos --", nil);
     self.headerSubtitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
     self.headerSubtitle.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.95];
     self.headerSubtitle.textAlignment = NSTextAlignmentCenter;
@@ -824,12 +815,12 @@ UICollectionViewDataSourcePrefetching
     self.filterScroll.translatesAutoresizingMaskIntoConstraints = NO;
     [self.card addSubview:self.filterScroll];
 
-    UIButton *b0 = [self makeFilterButton:@"All" tag:0];
-    UIButton *b1 = [self makeFilterButton:@"Today" tag:1];
-    UIButton *b2 = [self makeFilterButton:@"This week" tag:2];
-    UIButton *b3 = [self makeFilterButton:@"This month" tag:3];
-    UIButton *b4 = [self makeFilterButton:@"Last month" tag:4];
-    UIButton *b5 = [self makeFilterButton:@"Past 6 months" tag:5];
+    UIButton *b0 = [self makeFilterButton:NSLocalizedString(@"All", nil) tag:0];
+    UIButton *b1 = [self makeFilterButton:NSLocalizedString(@"Today", nil) tag:1];
+    UIButton *b2 = [self makeFilterButton:NSLocalizedString(@"This week", nil) tag:2];
+    UIButton *b3 = [self makeFilterButton:NSLocalizedString(@"This month", nil) tag:3];
+    UIButton *b4 = [self makeFilterButton:NSLocalizedString(@"Last month", nil) tag:4];
+    UIButton *b5 = [self makeFilterButton:NSLocalizedString(@"Past 6 months", nil) tag:5];
     self.filterButtons = @[b0,b1,b2,b3,b4,b5];
 
     self.filterStack = [[UIStackView alloc] initWithArrangedSubviews:self.filterButtons];
@@ -959,15 +950,13 @@ UICollectionViewDataSourcePrefetching
 
             CGFloat inter   = 5.0;
             CGFloat leading = 20.0;
-            NSInteger columns = 3; // ✅ 和 Image 页保持一致，才能对齐
+            NSInteger columns = 3;
 
-            // ✅ 取本 section 的 itemCount（按你 LivePhoto 的数据结构改这里）
             NSInteger itemCount = 0;
             if (weakSelf && sectionIndex < weakSelf.sections.count) {
                 itemCount = weakSelf.sections[sectionIndex].assets.count;
             }
 
-            // ✅ 不满一行：rows=1；最多两行：rows<=2
             NSInteger rows = 1;
             if (itemCount > 0) {
                 rows = (NSInteger)ceil((double)itemCount / (double)columns);
@@ -977,20 +966,16 @@ UICollectionViewDataSourcePrefetching
             CGFloat containerW = environment.container.effectiveContentSize.width;
             CGFloat contentW = containerW - leading * 2.0;
 
-            // ✅ 像素对齐，保证“视觉上严格正方形”
             CGFloat scale = UIScreen.mainScreen.scale;
             CGFloat rawSide = (contentW - inter * (columns - 1)) / (CGFloat)columns;
             CGFloat itemSide = floor(rawSide * scale) / scale;
 
-            // ✅ 行宽固定（避免系统均分拉伸）
             CGFloat rowW = itemSide * columns + inter * (columns - 1);
 
-            // item（正方形）
             NSCollectionLayoutSize *itemSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]
                                           heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemSide]];
 
-            // ✅ 用 subitems 固定每个 item 的 absolute 尺寸，避免 count 版本“均分”
             NSMutableArray<NSCollectionLayoutItem *> *subitems = [NSMutableArray array];
             for (NSInteger i = 0; i < columns; i++) {
                 [subitems addObject:[NSCollectionLayoutItem itemWithLayoutSize:itemSize]];
@@ -1003,7 +988,6 @@ UICollectionViewDataSourcePrefetching
             [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:rowSize subitems:subitems];
             row.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:inter];
 
-            // ✅ rows 决定高度：1 行就 itemSide；2 行就 itemSide*2+inter
             CGFloat groupH = itemSide * rows + inter * (rows - 1);
             NSCollectionLayoutSize *groupSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:rowW]
@@ -1014,14 +998,11 @@ UICollectionViewDataSourcePrefetching
 
             NSCollectionLayoutSection *sec = [NSCollectionLayoutSection sectionWithGroup:group];
 
-            // ✅ 你 LivePhoto 页原来怎么滚就怎么保留
-            // 如果你也是横向分组滚动：
             sec.orthogonalScrollingBehavior = UICollectionLayoutSectionOrthogonalScrollingBehaviorContinuous;
             sec.interGroupSpacing = inter;
             sec.contentInsets = NSDirectionalEdgeInsetsMake(0, leading, 0, leading);
             sec.supplementariesFollowContentInsets = NO;
 
-            // header（如果 LivePhoto 有分组标题就保留；没有就删掉这段）
             NSCollectionLayoutSize *headerSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
                                           heightDimension:[NSCollectionLayoutDimension absoluteDimension:40]];
@@ -1031,19 +1012,17 @@ UICollectionViewDataSourcePrefetching
                                                                                       alignment:NSRectAlignmentTop];
             sec.boundarySupplementaryItems = @[header];
 
-            // ✅ 同步 thumbPixelSize（如果 LivePhoto 也用 cachingMgr）
             weakSelf.thumbPixelSize = CGSizeMake(itemSide * scale * 1.6, itemSide * scale * 1.6);
 
             return sec;
         }];
 
         UICollectionViewCompositionalLayoutConfiguration *config = [UICollectionViewCompositionalLayoutConfiguration new];
-        config.interSectionSpacing = 18; // ✅ 和 Image 页一致
+        config.interSectionSpacing = 18;
         layout.configuration = config;
         return layout;
     }
 
-    // iOS12- fallback：按你原来的写法即可（重点是 itemSize = 正方形）
     UICollectionViewFlowLayout *fl = [UICollectionViewFlowLayout new];
     fl.scrollDirection = UICollectionViewScrollDirectionVertical;
     fl.sectionInset = UIEdgeInsetsMake(0, 20, 0, 20);
@@ -1063,7 +1042,7 @@ UICollectionViewDataSourcePrefetching
     self.thumbPixelSize = CGSizeMake(120 * scale, 120 * scale);
 }
 
-#pragma mark - Auth + Load (不卡 UI)
+#pragma mark - Auth + Load
 
 - (void)ensureAuthThenLoadFast {
     PHAuthorizationStatus st;
@@ -1171,7 +1150,6 @@ UICollectionViewDataSourcePrefetching
             NSTimeInterval cachedM = [rec[@"m"] doubleValue];
             NSTimeInterval curM = a.modificationDate ? a.modificationDate.timeIntervalSince1970 : 0;
 
-            // modificationDate 基本能作为“是否变化”的版本号
             if (s > 0 && fabs(curM - cachedM) < 1.0) {
                 @synchronized (self.sizeCache) { self.sizeCache[aid] = @(s); }
                 known += s;
@@ -1222,7 +1200,7 @@ UICollectionViewDataSourcePrefetching
     if (possiblyUnknown && known > 0 && (pending > 0 || failed > 0)) totalText = [totalText stringByAppendingString:@"+"];
 
     NSString *savedText = saved > 0 ? ASHumanSizeShort(saved) : @"--";
-    NSString *prefix = @"Total storage space saved by compressed photos ";
+    NSString *prefix = NSLocalizedString(@"Total storage space saved by compressed photos ", nil);
     NSString *full = [prefix stringByAppendingString:savedText];
 
     NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full];
@@ -1323,7 +1301,6 @@ UICollectionViewDataSourcePrefetching
 
     if (missing.count == 0) {
         [self refreshHeaderFromStats:NO];
-        // 可选：这里做一次分组刷新（只有一次，不会闪到肉眼）
         [self applyFilterIndex:self.filterIndex];
         return;
     }
@@ -1386,7 +1363,7 @@ UICollectionViewDataSourcePrefetching
     }
 }
 
-#pragma mark - Filter (async,不卡 UI)
+#pragma mark - Filter
 
 - (void)onFilterTap:(UIButton *)sender {
     self.filterIndex = sender.tag;
@@ -1478,12 +1455,11 @@ UICollectionViewDataSourcePrefetching
         uint64_t s1 = [self cachedFileSizeForAsset:a1];
         uint64_t s2 = [self cachedFileSizeForAsset:a2];
 
-        // 0（未知）永远放最后
         if (s1 == 0 && s2 == 0) return NSOrderedSame;
         if (s1 == 0) return NSOrderedDescending;
         if (s2 == 0) return NSOrderedAscending;
 
-        if (s1 > s2) return NSOrderedAscending;   // 注意：Ascending = “排前面”
+        if (s1 > s2) return NSOrderedAscending;
         if (s1 < s2) return NSOrderedDescending;
         return NSOrderedSame;
     };
@@ -1512,7 +1488,7 @@ UICollectionViewDataSourcePrefetching
         if (isSel) [self.selectedAssets removeObjectAtIndex:idx];
     } else {
         if (self.selectedAssets.count >= 9) {
-            [self as_showToast:@"Only 9 images allowed."];
+            [self as_showToast:NSLocalizedString(@"Only 9 images allowed.", nil)];
             return;
         }
         [self.selectedAssets addObject:asset];
@@ -1597,15 +1573,12 @@ UICollectionViewDataSourcePrefetching
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
 
-        // ✅ 用回传结果覆盖主界面 selectedAssets（保持同一个 mutable 实例更安全）
         [self.selectedAssets removeAllObjects];
         [self.selectedAssets addObjectsFromArray:newSelected ?: @[]];
 
-        // ✅ 同步底部选中条
         self.selectedBar.selectedAssets = self.selectedAssets;
         [self showSelectedBar:(self.selectedAssets.count > 0) animated:NO];
 
-        // ✅ 同步主列表勾选状态（只更新可见，避免 reload 闪）
         [self updateVisibleSelectionOnly];
     };
 
@@ -1631,7 +1604,6 @@ UICollectionViewDataSourcePrefetching
     NSString *newId = asset.localIdentifier ?: @"";
     NSString *capturedId = [newId copy];
 
-    // 如果 cell 复用到了新 asset：先 cancel 旧请求 + 清图
     if (oldId.length && ![oldId isEqualToString:newId]) {
         if (cell.requestId != PHInvalidImageRequestID) {
             [self.cachingMgr cancelImageRequest:cell.requestId];

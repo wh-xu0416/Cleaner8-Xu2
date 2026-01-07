@@ -4,6 +4,8 @@
 #import <Photos/Photos.h>
 #import "ASPhotoScanManager.h"
 #import "ASAssetListViewController.h"
+#import "Common.h"
+#import "VideoCompressionMainViewController.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -44,22 +46,24 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     ASVideoSubCardTypeDuplicate,
     ASVideoSubCardTypeRecordings,
     ASVideoSubCardTypeBig,
+    ASVideoSubCardTypeCompression,
 };
 
 #pragma mark - VM
 
 @interface ASVideoSubCardVM : NSObject
 @property (nonatomic) ASVideoSubCardType type;
+@property (nonatomic, copy, nullable) NSString *badgeText;
 
 @property (nonatomic, copy) NSString *title;
 @property (nonatomic, copy) NSString *countText;
 @property (nonatomic) NSUInteger totalCount;
 @property (nonatomic) uint64_t totalBytes;
 
-@property (nonatomic, strong) NSArray<NSString *> *thumbLocalIds; // 期望 2 个
+@property (nonatomic, strong) NSArray<NSString *> *thumbLocalIds;
 @property (nonatomic, copy) NSString *thumbKey;
 
-@property (nonatomic) BOOL didSetThumb; // 扫描中只设置一次，避免跳动
+@property (nonatomic) BOOL didSetThumb;
 @end
 @implementation ASVideoSubCardVM @end
 
@@ -126,7 +130,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
         _whiteContent.backgroundColor = UIColor.whiteColor;
         _whiteContent.layer.cornerRadius = 22;
         if (@available(iOS 11.0, *)) {
-            _whiteContent.layer.maskedCorners = (kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner); // 上直角，下圆角
+            _whiteContent.layer.maskedCorners = (kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner);
         }
         [_cardContainer addSubview:_whiteContent];
 
@@ -276,13 +280,15 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 - (void)applyVM:(ASVideoSubCardVM *)vm {
     self.titleLabel.text = vm.title ?: @"";
     self.countLabel.text = vm.countText ?: @"";
-    [self.badgeBtn setTitle:ASHumanSizeTight(vm.totalBytes) forState:UIControlStateNormal];
+    NSString *badge = vm.badgeText.length ? vm.badgeText : ASHumanSizeTight(vm.totalBytes);
+    [self.badgeBtn setTitle:badge forState:UIControlStateNormal];
 
     switch (vm.type) {
         case ASVideoSubCardTypeSimilar:    self.topDecor.image = [UIImage imageNamed:@"ic_video_tip"]; break;
         case ASVideoSubCardTypeDuplicate:  self.topDecor.image = [UIImage imageNamed:@"ic_video_tip"]; break;
         case ASVideoSubCardTypeRecordings: self.topDecor.image = [UIImage imageNamed:@"ic_video_tip"]; break;
         case ASVideoSubCardTypeBig:        self.topDecor.image = [UIImage imageNamed:@"ic_video_tip"]; break;
+        case ASVideoSubCardTypeCompression:self.topDecor.image = [UIImage imageNamed:@"ic_video_tip"]; break;
     }
 
     self.play1.hidden = NO;
@@ -327,7 +333,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
 - (instancetype)init {
     if (self = [super init]) {
-        _pageTitle = @"Video Cleanup";
+        _pageTitle = NSLocalizedString(@"Video Cleanup", nil);
     }
     return self;
 }
@@ -382,7 +388,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 #pragma mark - Build UI
 
 - (NSAttributedString *)as_attrSummary1WithSize:(NSString *)sizeStr {
-    NSString *s = [NSString stringWithFormat:@"%@ Free Up", sizeStr ?: @"0B"];
+    NSString *s = [NSString stringWithFormat:NSLocalizedString(@"%@ Free Up", nil), sizeStr ?: @"0B"];
 
     UIFont *font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
     UIColor *gray = ASRGB(102, 102, 102);
@@ -553,11 +559,41 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     self.lastScanUIFire = now;
     self.pendingScanUIUpdate = NO;
 
-    // 扫描中：只更新数量/大小，thumb 只设置一次
     [self rebuildModulesAndReloadIsFinal:NO];
 }
 
 #pragma mark - Build Modules
+
+// 全部视频数量（只统计 type == video 的 PHAsset）
+- (NSUInteger)as_allVideoCount {
+    PHFetchOptions *opt = [PHFetchOptions new];
+    opt.predicate = [NSPredicate predicateWithFormat:@"mediaType == %d", PHAssetMediaTypeVideo];
+    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithOptions:opt];
+    return fr.count;
+}
+
+// 最新两个视频的 localId（按 creationDate/modificationDate 取最新）
+- (NSArray<NSString *> *)as_latestVideoThumbIdsLimit:(NSUInteger)limit {
+    if (limit == 0) return @[];
+
+    PHFetchOptions *opt = [PHFetchOptions new];
+    opt.predicate = [NSPredicate predicateWithFormat:@"mediaType == %d", PHAssetMediaTypeVideo];
+    opt.sortDescriptors = @[
+        [NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO],
+        [NSSortDescriptor sortDescriptorWithKey:@"modificationDate" ascending:NO],
+    ];
+    opt.fetchLimit = limit;
+
+    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithOptions:opt];
+    if (fr.count == 0) return @[];
+
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    [fr enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if (obj.localIdentifier.length) [out addObject:obj.localIdentifier];
+        if (out.count == limit) *stop = YES;
+    }];
+    return out;
+}
 
 - (NSDate *)as_assetBestDate:(PHAsset *)a {
     return a.creationDate ?: a.modificationDate ?: [NSDate distantPast];
@@ -670,7 +706,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
     // 这里按“items”理解：dupVid.count / simVid.count
     // 如果你想让 Duplicate 显示“组数”，改成：dup.count（并且筛 type）即可
-    NSString *line2 = [NSString stringWithFormat:@"%lu Duplicates & %lu Similar Items Found",
+    NSString *line2 = [NSString stringWithFormat:NSLocalizedString(@"%lu Duplicates & %lu Similar Items Found", nil),
                        (unsigned long)dupVid.count,
                        (unsigned long)simVid.count];
 
@@ -688,7 +724,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
         vm.title = title ?: @"";
         vm.totalCount = cnt;
         vm.totalBytes = bytes;
-        vm.countText = [NSString stringWithFormat:@"%lu Videos", (unsigned long)cnt];
+        vm.countText = [NSString stringWithFormat:NSLocalizedString(@"%lu Videos", nil), (unsigned long)cnt];
         vm.thumbLocalIds = thumbIds ?: @[];
         vm.thumbKey = [vm.thumbLocalIds componentsJoinedByString:@"|"];
         vm.didSetThumb = (vm.thumbLocalIds.count > 0);
@@ -706,26 +742,36 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     for (ASAssetModel *m in bigs) if (m.localId.length) [bigIds addObject:m.localId];
     NSArray<NSString *> *bigThumbs = [self as_pickNewestLocalIds:bigIds limit:2];
 
+    NSArray<NSString *> *compressionThumbs = [self as_latestVideoThumbIdsLimit:2];
+    NSUInteger allVideoCnt = [self as_allVideoCount];
+
+    ASVideoSubCardVM *cvm =
+    makeVM(ASVideoSubCardTypeCompression,
+           NSLocalizedString(@"Compression Video", nil),
+           compressionThumbs,
+           allVideoCnt,
+           0);
+    cvm.badgeText = NSLocalizedString(@"Start Now", nil);
+
     NSArray<ASVideoSubCardVM *> *newMods = @[
-        makeVM(ASVideoSubCardTypeSimilar,    @"Similar Videos",    simThumbs, simVid.count, simBytes),
-        makeVM(ASVideoSubCardTypeDuplicate,  @"Duplicate Videos",  dupThumbs, dupVid.count, dupBytes),
-        makeVM(ASVideoSubCardTypeRecordings, @"Screen Recordings", recThumbs, recs.count,   recBytes),
-        makeVM(ASVideoSubCardTypeBig,        @"Big Videos",        bigThumbs, bigs.count,   bigBytes),
+        makeVM(ASVideoSubCardTypeSimilar,    NSLocalizedString(@"Similar Videos", nil),    simThumbs, simVid.count, simBytes),
+        makeVM(ASVideoSubCardTypeDuplicate,  NSLocalizedString(@"Duplicate Videos", nil),  dupThumbs, dupVid.count, dupBytes),
+        makeVM(ASVideoSubCardTypeRecordings, NSLocalizedString(@"Screen Recordings", nil), recThumbs, recs.count,   recBytes),
+        makeVM(ASVideoSubCardTypeBig,        NSLocalizedString(@"Big Videos", nil),        bigThumbs, bigs.count,   bigBytes),
+        cvm,
     ];
 
-    // 扫描中：保持旧 thumb（不让封面跳）
     if (!isFinal && old.count == newMods.count) {
         for (NSInteger i = 0; i < newMods.count; i++) {
             ASVideoSubCardVM *o = old[i];
             ASVideoSubCardVM *n = newMods[i];
 
-            // 只更新数量/大小
             n.didSetThumb = o.didSetThumb;
             if (o.didSetThumb && o.thumbLocalIds.count > 0) {
                 n.thumbLocalIds = o.thumbLocalIds;
                 n.thumbKey = o.thumbKey;
             } else {
-                // 还没设置过封面：如果现在有，就设置一次
+                // 还没设置过封面：如果有就设置一次
                 if (n.thumbLocalIds.count > 0) n.didSetThumb = YES;
             }
         }
@@ -774,12 +820,19 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     if (indexPath.item >= self.modules.count) return;
     ASVideoSubCardVM *vm = self.modules[indexPath.item];
 
+    if (vm.type == ASVideoSubCardTypeCompression) {
+        VideoCompressionMainViewController *vc = [VideoCompressionMainViewController new];
+        [self.navigationController pushViewController:vc animated:YES];
+        return;
+    }
+
     ASAssetListMode mode = ASAssetListModeSimilarVideo;
     switch (vm.type) {
         case ASVideoSubCardTypeSimilar:    mode = ASAssetListModeSimilarVideo; break;
         case ASVideoSubCardTypeDuplicate:  mode = ASAssetListModeDuplicateVideo; break;
         case ASVideoSubCardTypeRecordings: mode = ASAssetListModeScreenRecordings; break;
         case ASVideoSubCardTypeBig:        mode = ASAssetListModeBigVideos; break;
+        default: break;
     }
 
     ASAssetListViewController *vc = [[ASAssetListViewController alloc] initWithMode:mode];

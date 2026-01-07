@@ -1,6 +1,7 @@
 #import "ASArchivedFilesViewController.h"
 #import "ASMediaPreviewViewController.h"
 #import "SwipeManager.h"
+#import "Common.h"
 #import "ASSelectTitleBar.h"
 #import <Photos/Photos.h>
 
@@ -206,7 +207,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
 
     self.headerLabel = [UILabel new];
     self.headerLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.headerLabel.text = @"Archive Files";
+    self.headerLabel.text = NSLocalizedString(@"Archive Files", nil);
     self.headerLabel.font = [UIFont systemFontOfSize:28 weight:UIFontWeightSemibold];
     self.headerLabel.textColor = ASColorFromRGBAHex(0x000000FF);
     self.headerLabel.numberOfLines = 1;
@@ -263,7 +264,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
 
     self.emptyLabel = [UILabel new];
     self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.emptyLabel.text = @"No Content";
+    self.emptyLabel.text = NSLocalizedString(@"No Content", nil);
     self.emptyLabel.textColor = UIColor.blackColor;
     self.emptyLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightMedium];
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
@@ -301,7 +302,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
     self.deleteAllButton.backgroundColor = ASColorFromRGBAHex(0x024DFFFF);
     self.deleteAllButton.layer.cornerRadius = 25.5; // 51/2
     self.deleteAllButton.layer.masksToBounds = YES;
-    [self.deleteAllButton setTitle:@"Delete All" forState:UIControlStateNormal];
+    [self.deleteAllButton setTitle:NSLocalizedString(@"Delete All", nil) forState:UIControlStateNormal];
     [self.deleteAllButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.deleteAllButton.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
     [self.deleteAllButton addTarget:self action:@selector(deleteTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -312,7 +313,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
     self.recoverAllButton.backgroundColor = UIColor.whiteColor;
     self.recoverAllButton.layer.cornerRadius = 25.5;
     self.recoverAllButton.layer.masksToBounds = YES;
-    [self.recoverAllButton setTitle:@"Recover All" forState:UIControlStateNormal];
+    [self.recoverAllButton setTitle:NSLocalizedString(@"Recover All", nil) forState:UIControlStateNormal];
     [self.recoverAllButton setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     self.recoverAllButton.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
     [self.recoverAllButton addTarget:self action:@selector(recoverTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -405,7 +406,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
 
 - (void)updateMetaLabelWithCount:(NSUInteger)count bytes:(unsigned long long)bytes {
     NSString *countStr = [NSString stringWithFormat:@"%lu", (unsigned long)count];
-    NSString *filesWord = @" Files ";
+    NSString *filesWord = NSLocalizedString(@" Files ", nil);
     NSString *sizeStr = [self.class bytesToString:bytes];
 
     NSString *full = [NSString stringWithFormat:@"%@%@%@", countStr, filesWord, sizeStr];

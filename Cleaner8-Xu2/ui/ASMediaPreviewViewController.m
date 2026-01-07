@@ -1,4 +1,5 @@
 #import "ASMediaPreviewViewController.h"
+#import "Common.h"
 #import <PhotosUI/PhotosUI.h>
 #import <AVFoundation/AVFoundation.h>
 #import <AVKit/AVKit.h>
@@ -158,8 +159,6 @@ static UIImage *ASSelectGrayOffImg(void) {
 }
 
 @end
-
-#pragma mark - Preview Cells（Photo/Video/Live：沿用你之前版本，省略逻辑不变，只保留核心）
 
 typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVideo, ASPreviewKindLive };
 
@@ -460,7 +459,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 @property (nonatomic, strong) PHLivePhotoView *lpv;
 @property (nonatomic, strong) UIImpactFeedbackGenerator *impact;
 
-// ✅ 用这两个可调约束来定位 badge 到“图片区域”的底部
 @property (nonatomic, strong) NSLayoutConstraint *liveBadgeCenterXToLPVLeading;
 @property (nonatomic, strong) NSLayoutConstraint *liveBadgeBottomToLPVTop;
 @end
@@ -510,7 +508,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.liveText = [UILabel new];
         self.liveText.translatesAutoresizingMaskIntoConstraints = NO;
         self.liveText.userInteractionEnabled = NO;
-        self.liveText.text = @"Live";
+        self.liveText.text = NSLocalizedString(@"Live", nil);
         self.liveText.textColor = UIColor.whiteColor;
         self.liveText.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
         [self.liveBadge addSubview:self.liveText];
@@ -558,7 +556,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 - (void)layoutSubviews {
     [super layoutSubviews];
 
-    // 计算 LivePhoto 在 lpv 中 AspectFit 后的真实显示区域
     CGRect bounds = self.lpv.bounds;
     CGSize mediaSize = CGSizeZero;
     if (self.asset) {
@@ -570,7 +567,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         imgRect = AVMakeRectWithAspectRatioInsideRect(mediaSize, bounds);
     }
 
-    // badge 居中到图片区域中点，底部=图片区域底-20
     self.liveBadgeCenterXToLPVLeading.constant = CGRectGetMidX(imgRect);
     self.liveBadgeBottomToLPVTop.constant = CGRectGetMaxY(imgRect) - 20.0;
 }
@@ -610,7 +606,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
             weakSelf.lpv.livePhoto = livePhoto;
 
-            // ✅ livePhoto 回来后再触发一次，确保最终位置稳定
             [weakSelf setNeedsLayout];
             [weakSelf layoutIfNeeded];
 
@@ -743,7 +738,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
             [self.ring.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.ring.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            // inset = 3（border=2 + gap=1）
             [self.iv.leadingAnchor constraintEqualToAnchor:self.ring.leadingAnchor constant:3],
             [self.iv.trailingAnchor constraintEqualToAnchor:self.ring.trailingAnchor constant:-3],
             [self.iv.topAnchor constraintEqualToAnchor:self.ring.topAnchor constant:3],
@@ -888,7 +882,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
             ASPreviewThumbCell *oldCell = (ASPreviewThumbCell *)[self.thumbs cellForItemAtIndexPath:oldIP];
             if (oldCell) {
                 [oldCell applyCurrent:NO];
-                // best 你说不管就不处理
             }
         }
 
@@ -912,7 +905,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         if (cell) {
             [cell applyChecked:[self.selected containsIndex:idx]];
         } else {
-            // 不在屏幕上才 reload（不会导致“可见闪烁”）
             [self.thumbs reloadItemsAtIndexPaths:@[ip]];
         }
     }];
@@ -1005,7 +997,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     [self.pager registerClass:ASPreviewLiveCell.class  forCellWithReuseIdentifier:@"live"];
     [self.view addSubview:self.pager];
 
-    // overlays（多资源才显示）
     self.topSelectBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.topSelectBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.topSelectBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
@@ -1020,7 +1011,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     [self.view addSubview:self.bestBadge];
 
-    // thumbs（多资源才显示）
     UICollectionViewFlowLayout *tlay = [UICollectionViewFlowLayout new];
     tlay.scrollDirection = UICollectionViewScrollDirectionHorizontal;
     tlay.minimumLineSpacing = 10;
@@ -1115,7 +1105,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
 
-    // ✅ 手势返回 / interactive pop 会走这里
     if (self.isMovingFromParentViewController || self.isBeingDismissed) {
         [self sendBackIfNeeded];
     }
@@ -1157,7 +1146,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     BOOL checked = [self.selected containsIndex:self.currentIndex];
     [self.topSelectBtn setImage:(checked ? ASSelectOnImg() : ASSelectGrayOffImg()) forState:UIControlStateNormal];
 
-    // 文件模式不显示 best
     if (self.usingFiles) {
         self.bestBadge.hidden = YES;
         return;
@@ -1175,7 +1163,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     else [self.selected addIndex:self.currentIndex];
 
     [self updateOverlays];
-    [self as_updateThumbCheckedAtIndex:self.currentIndex]; // ✅ 不 reload 可见 cell
+    [self as_updateThumbCheckedAtIndex:self.currentIndex];
 
     [self notifySelectionChanged];
 }
@@ -1220,11 +1208,9 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     NSInteger count = [self itemCount];
     if (indexPath.item >= count) {
-        // 防御：返回一个空 cell
         return [collectionView dequeueReusableCellWithReuseIdentifier:@"photo" forIndexPath:indexPath];
     }
 
-    // ====== 1) usingFiles 模式（从沙盒文件预览） ======
     if (self.usingFiles) {
 
         if (collectionView == self.pager) {

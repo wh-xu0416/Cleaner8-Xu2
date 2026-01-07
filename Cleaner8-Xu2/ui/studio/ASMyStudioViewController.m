@@ -7,6 +7,7 @@
 #import "ASStudioCell.h"
 #import "ASStudioUtils.h"
 #import "ASTabSegmentView.h"
+#import "Common.h"
 
 #import "ASMediaPreviewViewController.h"
 
@@ -83,7 +84,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
 
     self.titleLabel = [UILabel new];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.text = @"My studio";
+    self.titleLabel.text = NSLocalizedString(@"My studio", nil);
     self.titleLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
     self.titleLabel.textColor = UIColor.whiteColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -225,7 +226,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     if (!canRead) {
         self.table.hidden = YES;
         self.emptyView.hidden = NO;
-        self.emptyLabel.text = @"Photos access is required.\nPlease enable Photos permission in Settings.";
+        self.emptyLabel.text = NSLocalizedString(@"Photos access is required.\nPlease enable Photos permission in Settings.", nil);
         return;
     }
 
@@ -275,8 +276,8 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     self.emptyView.hidden = has;
     if (!has) {
         self.emptyLabel.text = (self.currentType == ASStudioMediaTypePhoto)
-        ? @"No photos yet.\nCompress photos to see them here."
-        : @"No videos yet.\nCompress videos to see them here.";
+        ? NSLocalizedString(@"No photos yet.\nCompress photos to see them here.", nil)
+        : NSLocalizedString(@"No videos yet.\nCompress videos to see them here.", nil);
     }
 }
 
@@ -290,7 +291,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     ASStudioCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ASStudioCell" forIndexPath:ip];
     ASStudioItem *it = self.data[ip.row];
 
-    cell.nameLabel.text = it.displayName.length ? it.displayName : @"(Unnamed)";
+    cell.nameLabel.text = it.displayName.length ? it.displayName : NSLocalizedString(@"(Unnamed)", nil);
 
     NSString *sizeText = [ASStudioUtils humanBytes:it.afterBytes];
     if (it.type == ASStudioMediaTypeVideo) {

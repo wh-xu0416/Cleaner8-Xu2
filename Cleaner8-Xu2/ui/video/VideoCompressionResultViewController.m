@@ -1,5 +1,6 @@
 #import "VideoCompressionResultViewController.h"
 #import "VideoCompressionManager.h"
+#import "Common.h"
 
 @interface ASCompressionSummary (ASResult) <ASCompressionResultSummary>
 @end
@@ -25,8 +26,8 @@
 @end
 
 @implementation VideoCompressionResultViewController
-- (NSString *)deleteSheetTitle { return @"Delete original Video ?"; }
-- (NSString *)itemSingular { return @"video"; }
-- (NSString *)itemPlural   { return @"videos"; }
+- (NSString *)deleteSheetTitle { return NSLocalizedString(@"Delete original Video ?", nil); }
+- (NSString *)itemSingular { return NSLocalizedString(@"video", nil); }
+- (NSString *)itemPlural   { return NSLocalizedString(@"videos", nil); }
 - (NSString *)homeIconName { return @"ic_back_home"; }
 @end

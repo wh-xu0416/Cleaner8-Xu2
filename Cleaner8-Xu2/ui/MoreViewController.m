@@ -1,6 +1,7 @@
 #import "MoreViewController.h"
 #import "SetViewController.h"
 #import "ASContactsViewController.h"
+#import "Common.h"
 
 #pragma mark - UI Helpers
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
@@ -55,26 +56,26 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
     self.titleLab = [UILabel new];
     self.titleLab.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLab.text = @"More";
+    self.titleLab.text = NSLocalizedString(@"More", nil);
     self.titleLab.textColor = UIColor.blackColor;
     self.titleLab.font = ASFont(28, UIFontWeightSemibold);
     self.titleLab.textAlignment = NSTextAlignmentCenter;
     [self.view addSubview:self.titleLab];
 
     self.contactCard = [self buildCardWithLeftIcon:@"ic_contact_more"
-                                         leftText:@"Contact"
+                                         leftText:NSLocalizedString(@"Contact", nil)
                                         rightType:@"image"
                                        rightValue:@"ic_todo_small"
                                            action:@selector(tapContact)];
 
     self.feedbackCard = [self buildCardWithLeftIcon:@"ic_feedback_more"
-                                          leftText:@"Feedback"
+                                          leftText:NSLocalizedString(@"Feedback", nil)
                                          rightType:@"image"
                                         rightValue:@"ic_todo_small"
                                             action:@selector(tapFeedBack)];
 
     self.settingCard = [self buildCardWithLeftIcon:@"ic_setting_more"
-                                         leftText:@"Setting"
+                                         leftText:NSLocalizedString(@"Setting", nil)
                                         rightType:@"image"
                                        rightValue:@"ic_todo_small"
                                            action:@selector(tapSetting)];

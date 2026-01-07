@@ -3,6 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #import "SwipeManager.h"
+#import "Common.h"
 #import "SwipeAlbumViewController.h"
 #import "ASArchivedFilesViewController.h"
 #import <PhotosUI/PhotosUI.h>
@@ -59,7 +60,7 @@ static inline NSString *SWMonthShort(NSInteger month) {
     static NSArray<NSString *> *arr;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        arr = @[@"Jan.",@"Feb.",@"Mar.",@"Apr.",@"May.",@"Jun.",@"Jul.",@"Aug.",@"Sep.",@"Oct.",@"Nov.",@"Dec."];
+        arr = @[NSLocalizedString(@"Jan.", nil),NSLocalizedString(@"Feb.", nil),NSLocalizedString(@"Mar.", nil),NSLocalizedString(@"Apr.", nil),NSLocalizedString(@"May.", nil),NSLocalizedString(@"Jun.", nil),NSLocalizedString(@"Jul.", nil),NSLocalizedString(@"Aug.", nil),NSLocalizedString(@"Sep.", nil),NSLocalizedString(@"Oct.", nil),NSLocalizedString(@"Nov.", nil),NSLocalizedString(@"Dec.", nil)];
     });
     if (month < 1 || month > 12) return @"";
     return arr[month-1];
@@ -97,8 +98,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
                                       toDate:[cal startOfDayForDate:today]
                                      options:0];
 
-    if (diff.day == 0) return @"Today";
-    if (diff.day == 1) return @"Yesterday";
+    if (diff.day == 0) return NSLocalizedString(@"Today", nil);
+    if (diff.day == 1) return NSLocalizedString(@"Yesterday", nil);
 
     static NSDateFormatter *fmt = nil;
     static dispatch_once_t onceToken;
@@ -176,14 +177,14 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.contentView addSubview:_iconView];
 
         _t1 = [UILabel new];
-        _t1.text = @"Allow Photo Access";
+        _t1.text = NSLocalizedString(@"Allow Photo Access", nil);
         _t1.textColor = UIColor.blackColor;
         _t1.font = ASFont(20, UIFontWeightMedium);
         _t1.textAlignment = NSTextAlignmentCenter;
         [self.contentView addSubview:_t1];
 
         _t2 = [UILabel new];
-        _t2.text = @"To compress photos, videos, and LivePhotos. please allow access to your photo library.";
+        _t2.text = NSLocalizedString(@"To compress photos, videos, and LivePhotos. please allow access to your photo library.", nil);
         _t2.textColor = ASRGB(102, 102, 102);
         _t2.font = ASFont(13, UIFontWeightRegular);
         _t2.numberOfLines = 3;
@@ -194,7 +195,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         _btn.backgroundColor = ASBlue();
         _btn.layer.cornerRadius = 35;
         _btn.clipsToBounds = YES;
-        [_btn setTitle:@"Go to Settings" forState:UIControlStateNormal];
+        [_btn setTitle:NSLocalizedString(@"Go to Settings", nil) forState:UIControlStateNormal];
         [_btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         _btn.titleLabel.font = ASFont(20, UIFontWeightRegular);
         _btn.contentEdgeInsets = UIEdgeInsetsMake(18, 0, 18, 0);
@@ -465,6 +466,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 }
 
 - (void)configTitle:(NSString *)title completed:(BOOL)completed {
+    self.bottomBar.hidden = NO;
     self.titleLabel.text = title ?: @"";
     [self setBottomGradientVisible:NO height:0];
     [self setCompletedUI:completed];
@@ -550,7 +552,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
     if (self.sw_needsReloadOnAppear) {
         self.sw_needsReloadOnAppear = NO;
-        [self sw_scheduleReload]; // 延迟合并，避开转场
+        [self sw_scheduleReload];
     }
 }
 
@@ -558,6 +560,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [super viewDidLoad];
 
     self.view.backgroundColor = SWHexRGBA(0xEAF2FFFF);
+    self.cachedArchivedBytes = UINT64_MAX;
 
     self.assetCache = [NSCache new];
     self.assetCache.countLimit = 800;
@@ -649,7 +652,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
             self.cachedCategorizedProgress = MAX(0, MIN(1, p));
             NSInteger pct = (NSInteger)llround(self.cachedCategorizedProgress * 100.0);
-            self.categorizedLabel.text = [NSString stringWithFormat:@"Categorized %ld%%", (long)pct];
+            self.categorizedLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Categorized %ld%%", nil), (long)pct];
 
             self.cachedArchivedBytes = bytes;
             [self sw_updateArchiveCardText];
@@ -657,13 +660,13 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         });
     });
 
-    if (self.cachedArchivedBytes == 0) {
+    if (self.cachedArchivedBytes == UINT64_MAX) {
         __weak typeof(self) ws = self;
         [[SwipeManager shared] refreshArchivedBytesIfNeeded:^(unsigned long long bytes) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(ws) self = ws;
                 if (!self) return;
-                if (!self.isViewLoaded || self.view.window == nil) return; // 离屏不刷UI
+                if (!self.isViewLoaded || self.view.window == nil) return;
                 self.cachedArchivedBytes = (uint64_t)bytes;
                 [self sw_updateArchiveCardText];
             });
@@ -676,7 +679,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
     [self sw_refreshTopCardsFast];
 
-    // 2) 列表：按模块类型切分（逻辑不变）
     NSMutableArray *recent = [NSMutableArray array];
     NSMutableArray *months = [NSMutableArray array];
     NSMutableArray *others = [NSMutableArray array];
@@ -696,8 +698,24 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         if (m.type == SwipeModuleTypeSelfie) selfie = m;
     }
     NSMutableArray *orderedOthers = [NSMutableArray array];
-    if (rand) [orderedOthers addObject:rand];
-    if (selfie) [orderedOthers addObject:selfie];
+
+    // Random 永远有
+    if (!rand) {
+        rand = [SwipeModule new];
+        rand.type = SwipeModuleTypeRandom20;
+        rand.assetIDs = @[];      // 确保为空
+        rand.title = @"";         // 走默认 NSLocalizedString(@"Random", nil)
+    }
+    // Selfie 永远有
+    if (!selfie) {
+        selfie = [SwipeModule new];
+        selfie.type = SwipeModuleTypeSelfie;
+        selfie.assetIDs = @[];
+        selfie.title = @"";
+    }
+
+    [orderedOthers addObject:rand];
+    [orderedOthers addObject:selfie];
     self.otherModules = orderedOthers.copy;
 
     if (self.monthModules.count > 0) {
@@ -761,7 +779,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.cardsContainer.translatesAutoresizingMaskIntoConstraints = NO;
     [self.contentView addSubview:self.cardsContainer];
 
-    self.cardsTopC = [self.cardsContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:15];
+    self.cardsTopC = [self.cardsContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:40];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.cardsContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:15],
@@ -846,7 +864,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.categorizedLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.categorizedLabel.textColor = SWHexRGBA(0x000000FF);
     self.categorizedLabel.font = SWFont(15, UIFontWeightMedium);
-    self.categorizedLabel.text = @"Categorized 0%";
+    self.categorizedLabel.text = NSLocalizedString(@"Categorized 0%", nil);
     [self.categorizedCard addSubview:self.categorizedLabel];
 
     self.progressTrack = [UIView new];
@@ -915,14 +933,14 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.archiveTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.archiveTitleLabel.textColor = SWHexRGBA(0x000000FF);
     self.archiveTitleLabel.font = SWFont(15, UIFontWeightMedium);
-    self.archiveTitleLabel.text = @"Archive Files";
+    self.archiveTitleLabel.text = NSLocalizedString(@"Archive Files", nil);
     [self.archiveCard addSubview:self.archiveTitleLabel];
 
     self.archiveDetailLabel = [UILabel new];
     self.archiveDetailLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.archiveDetailLabel.textColor = SWHexRGBA(0x666666FF);
     self.archiveDetailLabel.font = SWFont(12, UIFontWeightMedium);
-    self.archiveDetailLabel.text = @"Files:0MB";
+    self.archiveDetailLabel.text = NSLocalizedString(@"Files:0MB", nil);
     [self.archiveCard addSubview:self.archiveDetailLabel];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -944,7 +962,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.recentTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.recentTitleLabel.textColor = SWHexRGBA(0x000000FF);
     self.recentTitleLabel.font = SWFont(20, UIFontWeightSemibold);
-    self.recentTitleLabel.text = @"Recent";
+    self.recentTitleLabel.text = NSLocalizedString(@"Recent", nil);
     [self.contentView addSubview:self.recentTitleLabel];
 
     UICollectionViewFlowLayout *recentLayout = [UICollectionViewFlowLayout new];
@@ -1019,7 +1037,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.othersTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.othersTitleLabel.textColor = SWHexRGBA(0x000000FF);
     self.othersTitleLabel.font = SWFont(20, UIFontWeightSemibold);
-    self.othersTitleLabel.text = @"Others";
+    self.othersTitleLabel.text = NSLocalizedString(@"Others", nil);
     [self.contentView addSubview:self.othersTitleLabel];
 
     self.othersMoreBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -1069,8 +1087,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         CGFloat safeTop = self.view.safeAreaInsets.top;
         CGFloat safeBottom = self.view.safeAreaInsets.bottom;
 
-        self.cardsTopC.constant = safeTop + 15.0;
-        self.contentBottomC.constant = -(safeBottom + 100.0);
+        self.cardsTopC.constant = safeTop + 40.0;
+        self.contentBottomC.constant = -(safeBottom + 80.0);
 
         self.scrollView.scrollIndicatorInsets = UIEdgeInsetsMake(safeTop, 0, safeBottom, 0);
     }
@@ -1108,12 +1126,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.othersCV.hidden = !showSections;
 
     self.permissionBannerHeightC.constant = self.sw_isLimitedAuth ? 150.0 : 0.0;
-
-    if (showSections) {
-        [self.recentCV reloadData];
-        [self.monthCV reloadData];
-        [self.othersCV reloadData];
-    }
 }
 
 - (void)sw_onTapPermissionGate {
@@ -1164,7 +1176,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     CGFloat fillW  = trackW * self.categorizedProgress;
     self.progressFillWidthC.constant = fillW;
 
-    CGFloat centerX = fillW * 0.5;
+    CGFloat centerX = fillW;
     centerX = MAX(12, MIN(trackW - 12, centerX));
     self.speedCenterXC.constant = centerX;
 
@@ -1172,7 +1184,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 }
 
 - (void)sw_updateArchiveCardText {
-    self.archiveDetailLabel.text = [NSString stringWithFormat:@"Files:%@",
+    self.archiveDetailLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Files:%@", nil),
                                     SWHumanBytes(self.cachedArchivedBytes)];
 }
 
@@ -1244,8 +1256,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 #pragma mark - UICollectionView
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    if (collectionView == self.recentCV) return self.recentModules.count;
-    if (collectionView == self.monthCV)  return self.monthModules.count;
+    if (collectionView == self.recentCV) return MAX(self.recentModules.count, 1);
+    if (collectionView == self.monthCV)  return MAX(self.monthModules.count, 1);
     if (collectionView == self.othersCV) return self.otherModules.count;
     return 0;
 }
@@ -1263,6 +1275,25 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     if (collectionView == self.recentCV) {
         SWRecentCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"SWRecentCell"
                                                                        forIndexPath:indexPath];
+        if (self.recentModules.count == 0) {
+            // 占位模块
+            [cell cancelRequestWithManager:self.imageMgr];
+            cell.coverView.backgroundColor = UIColor.clearColor;
+            cell.imgView.backgroundColor = ASRGB(240, 242, 247);
+            cell.imgView.contentMode = UIViewContentModeScaleAspectFit;
+            cell.imgView.image = [UIImage imageNamed:@"ic_placeholder"];
+            cell.tagLabel.text = @"";
+            [cell setBottomGradientVisible:NO height:0];
+            [cell setCompletedUI:NO];
+            cell.userInteractionEnabled = NO;
+            return cell;
+        }
+
+        cell.userInteractionEnabled = YES;
+        cell.coverView.backgroundColor = UIColor.clearColor;
+        cell.imgView.backgroundColor = UIColor.clearColor;
+        cell.imgView.contentMode = UIViewContentModeScaleAspectFill;
+
         SwipeModule *m = self.recentModules[indexPath.item];
 
         BOOL completed = [mgr isModuleCompleted:m];
@@ -1278,6 +1309,26 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     if (collectionView == self.monthCV) {
         SWMonthCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"SWMonthCell"
                                                                       forIndexPath:indexPath];
+        
+        if (self.monthModules.count == 0) {
+            [cell cancelRequestWithManager:self.imageMgr];
+            cell.coverView.backgroundColor = UIColor.clearColor;
+            cell.imgView.backgroundColor = ASRGB(240, 242, 247);
+            cell.imgView.contentMode = UIViewContentModeScaleAspectFit;
+            cell.imgView.image = [UIImage imageNamed:@"ic_placeholder"];
+            cell.monthLabel.text = @"";
+            cell.sizeLabel.text = @"";
+            [cell setBottomGradientVisible:NO height:0];
+            [cell setCompletedUI:NO];
+            cell.userInteractionEnabled = NO;
+            return cell;
+        }
+
+        cell.userInteractionEnabled = YES;
+        cell.coverView.backgroundColor = UIColor.clearColor;
+        cell.imgView.backgroundColor = UIColor.clearColor;
+        cell.imgView.contentMode = UIViewContentModeScaleAspectFill;
+
         SwipeModule *m = self.monthModules[indexPath.item];
 
         NSInteger y = 0, mm = 0;
@@ -1299,9 +1350,38 @@ static inline NSString *SWRecentTag(NSString *ymd) {
                                                                   forIndexPath:indexPath];
     SwipeModule *m = self.otherModules[indexPath.item];
 
-    NSString *title = (m.type == SwipeModuleTypeRandom20) ? @"Random" : @"Selfies";
+    NSString *title = (m.type == SwipeModuleTypeRandom20) ? NSLocalizedString(@"Random", nil) : NSLocalizedString(@"Selfies", nil);
+
+    BOOL noData = (m.assetIDs.count == 0);
+
+    if (noData) {
+        [cell cancelRequestWithManager:self.imageMgr];
+
+        cell.coverView.backgroundColor = UIColor.clearColor;
+        cell.imgView.backgroundColor = ASRGB(240, 242, 247);
+        cell.imgView.contentMode = UIViewContentModeScaleAspectFit;
+        cell.imgView.image = [UIImage imageNamed:@"ic_placeholder"];
+
+        [cell configTitle:title completed:NO];
+
+        // 你这类卡片底部白条会盖图一部分，没数据时也可以不盖图：
+        // 如果你想保留标题条就不要 hidden；想全图占位就 hidden
+        // 这里按“保留标题条”来：
+        cell.bottomBar.hidden = NO;
+
+        cell.userInteractionEnabled = NO;
+        return cell;
+    }
+
+    // 有数据：正常逻辑
+    cell.userInteractionEnabled = YES;
+    cell.coverView.backgroundColor = UIColor.clearColor;
+    cell.imgView.backgroundColor = UIColor.clearColor;
+    cell.imgView.contentMode = UIViewContentModeScaleAspectFill;
+
     BOOL completed = [mgr isModuleCompleted:m];
     [cell configTitle:title completed:completed];
+
     [self requestCoverForAssetId:[self latestAssetIDForModule:m]
                        intoCell:cell
                      targetSize:CGSizeMake(108, 144)];
@@ -1313,7 +1393,11 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self sw_onTapPermissionGate];
         return;
     }
-   
+    
+    if (collectionView == self.recentCV && self.recentModules.count == 0) return;
+    if (collectionView == self.monthCV  && self.monthModules.count  == 0) return;
+    if (collectionView == self.othersCV && self.otherModules.count  == 0) return;
+        
     SwipeModule *m = nil;
     if (collectionView == self.recentCV) m = self.recentModules[indexPath.item];
     else if (collectionView == self.monthCV) m = self.monthModules[indexPath.item];
@@ -1321,6 +1405,11 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
     if (!m) return;
 
+    if (collectionView == self.othersCV) {
+        SwipeModule *m = self.otherModules[indexPath.item];
+        if (m.assetIDs.count == 0) return;
+    }
+    
     UINavigationController *nav = [self sw_currentNav];
     if (!nav) return;
 

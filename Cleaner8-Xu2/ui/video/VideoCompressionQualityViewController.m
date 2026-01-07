@@ -3,6 +3,7 @@
 #import <Photos/Photos.h>
 #import "VideoCompressionProgressViewController.h"
 #import "ASMediaPreviewViewController.h"
+#import "Common.h"
 
 #pragma mark - Helpers
 
@@ -46,7 +47,7 @@ static inline UIColor *ASBlue(void) {
     return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0];
 }
 static inline UIColor *ASSelectCardBG(void) {
-    return [UIColor colorWithRed:221/255.0 green:229/255.0 blue:247/255.0 alpha:1.0]; // 浅蓝卡片
+    return [UIColor colorWithRed:221/255.0 green:229/255.0 blue:247/255.0 alpha:1.0];
 }
 static inline UIFont *ASSB(CGFloat s) { return [UIFont systemFontOfSize:s weight:UIFontWeightSemibold]; }
 static inline UIFont *ASMD(CGFloat s) { return [UIFont systemFontOfSize:s weight:UIFontWeightMedium]; }
@@ -124,11 +125,9 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 }
 
 - (void)as_applyRowLayout_PaddingH15_V12_ContentCenter {
-    // ⚠️ 这方法要求：init 里不要再激活旧的那套 constraints
     self.pad = [UIView new];
        self.pad.translatesAutoresizingMaskIntoConstraints = NO;
 
-       // ✅ 关键：不要让容器 view 抢 hitTest
        self.pad.userInteractionEnabled = NO;
 
        [self addSubview:self.pad];
@@ -149,7 +148,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
        rightGroup.translatesAutoresizingMaskIntoConstraints = NO;
        spacer.translatesAutoresizingMaskIntoConstraints = NO;
 
-       // 保险起见也关掉（其实 pad 关掉后，这些也不会再抢）
        leftGroup.userInteractionEnabled = NO;
        rightGroup.userInteractionEnabled = NO;
        spacer.userInteractionEnabled = NO;
@@ -160,7 +158,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
        h.distribution = UIStackViewDistributionFill;
        h.spacing = 12;
        h.translatesAutoresizingMaskIntoConstraints = NO;
-       h.userInteractionEnabled = NO; // 保险
+       h.userInteractionEnabled = NO;
 
        [self.pad addSubview:h];
 
@@ -172,11 +170,9 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
        ]];
 
 
-    // spacer 可伸缩
     [spacer setContentHuggingPriority:1 forAxis:UILayoutConstraintAxisHorizontal];
     [spacer setContentCompressionResistancePriority:1 forAxis:UILayoutConstraintAxisHorizontal];
 
-    // 把控件放入左右组
     [self.radioIcon removeFromSuperview];
     [self.titleLabel removeFromSuperview];
     [self.subLabel removeFromSuperview];
@@ -196,7 +192,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.percentLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.sizeLabel.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // 左组：icon + (title/sub) 两行
     [NSLayoutConstraint activateConstraints:@[
         [self.radioIcon.leadingAnchor constraintEqualToAnchor:leftGroup.leadingAnchor],
         [self.radioIcon.centerYAnchor constraintEqualToAnchor:leftGroup.centerYAnchor],
@@ -213,7 +208,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.subLabel.bottomAnchor constraintEqualToAnchor:leftGroup.bottomAnchor],
     ]];
 
-    // 右组：percent + size 两行（靠右）
     self.percentLabel.textAlignment = NSTextAlignmentRight;
     self.sizeLabel.textAlignment = NSTextAlignmentRight;
 
@@ -228,7 +222,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.sizeLabel.bottomAnchor constraintEqualToAnchor:rightGroup.bottomAnchor],
     ]];
 
-    // 右组不被压缩（防止 -29% 被挤没）
     [rightGroup setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [rightGroup setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 }
@@ -265,11 +258,9 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 
 @property (nonatomic, strong) CAGradientLayer *bgGradient;
 
-// Header（固定）
 @property (nonatomic, strong) UIButton *backBtn;
 @property (nonatomic, strong) UILabel *titleLabel;
 
-// Preview
 @property (nonatomic, strong) UIImageView *thumbView;
 @property (nonatomic, strong) UIButton *playBtn;
 
@@ -280,13 +271,11 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 @property (nonatomic, strong) UILabel *resKey;
 @property (nonatomic, strong) UILabel *resVal;
 
-// Before/After
 @property (nonatomic, strong) UILabel *beforeLabel;
 @property (nonatomic, strong) UIImageView *arrowView;
 @property (nonatomic, strong) UILabel *afterLabel;
 @property (nonatomic, strong) UILabel *saveLabel;
 
-// Select card
 @property (nonatomic, strong) UIView *selectCard;
 @property (nonatomic, strong) UILabel *selectTitle;
 @property (nonatomic, strong) UIView *whiteBox;
@@ -294,7 +283,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 @property (nonatomic, strong) ASQualityRow *rowMedium;
 @property (nonatomic, strong) ASQualityRow *rowLarge;
 
-// Bottom
 @property (nonatomic, strong) UIButton *compressBtn;
 @end
 
@@ -347,7 +335,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 }
 
 - (void)buildUI {
-    // 背景渐变（和截图接近）
     self.bgGradient = [CAGradientLayer layer];
     self.bgGradient.colors = @[
         (id)[UIColor colorWithRed:229/255.0 green:241/255.0 blue:251/255.0 alpha:1].CGColor,
@@ -357,9 +344,8 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.bgGradient.endPoint   = CGPointMake(0.5, 1.0);
     [self.view.layer insertSublayer:self.bgGradient atIndex:0];
 
-    // 底部按钮（固定）
     self.compressBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.compressBtn setTitle:@"Compress" forState:UIControlStateNormal];
+    [self.compressBtn setTitle:NSLocalizedString(@"Compress", nil) forState:UIControlStateNormal];
     self.compressBtn.titleLabel.font = ASRG(20);
     [self.compressBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.compressBtn.backgroundColor = ASBlue();
@@ -414,28 +400,23 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     [self.view addSubview:preview];
     preview.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // info 容器
     UIView *info = [UIView new];
     info.translatesAutoresizingMaskIntoConstraints = NO;
 
 
-    // playBtn 覆盖在 thumb 上（加到 preview 上也可以）
     [self.thumbView addSubview:self.playBtn];
     self.thumbView.translatesAutoresizingMaskIntoConstraints = NO;
     self.playBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // ✅ 关键：提高 hugging/抗压缩，避免 info 被拉伸到屏幕边缘
     [self.thumbView setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [self.thumbView setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [info setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [info setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
-    // ✅ content 容器：把 thumb + info 当成一个整体居中
     UIView *content = [UIView new];
     content.translatesAutoresizingMaskIntoConstraints = NO;
     [preview addSubview:content];
 
-    // thumb + info 放到 content 里
     [self.thumbView removeFromSuperview];
     [info removeFromSuperview];
     [content addSubview:self.thumbView];
@@ -444,12 +425,11 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.thumbView.translatesAutoresizingMaskIntoConstraints = NO;
     info.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // info labels
-    self.sizeKey = [self makeKey:@"Size"];
+    self.sizeKey = [self makeKey:NSLocalizedString(@"Size", nil)];
     self.sizeVal = [self makeVal];
-    self.durKey  = [self makeKey:@"Duration"];
+    self.durKey  = [self makeKey:NSLocalizedString(@"Duration", nil)];
     self.durVal  = [self makeVal];
-    self.resKey  = [self makeKey:@"Resolution"];
+    self.resKey  = [self makeKey:NSLocalizedString(@"Resolution", nil)];
     self.resVal  = [self makeVal];
 
     [info addSubview:self.sizeKey];
@@ -464,13 +444,11 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     CGFloat thumbW = 150;
     CGFloat thumbH = 200;
 
-    // preview block
     [NSLayoutConstraint activateConstraints:@[
         [preview.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:16],
         [preview.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [preview.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
 
-        // thumb 固定尺寸
         [self.thumbView.widthAnchor constraintEqualToConstant:thumbW],
         [self.thumbView.heightAnchor constraintEqualToConstant:thumbH],
         
@@ -480,31 +458,28 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [content.leadingAnchor constraintGreaterThanOrEqualToAnchor:preview.leadingAnchor],
         [content.trailingAnchor constraintLessThanOrEqualToAnchor:preview.trailingAnchor],
 
-        // thumb 固定尺寸 + 贴 content 左侧
         [self.thumbView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
         [self.thumbView.topAnchor constraintEqualToAnchor:content.topAnchor],
         [self.thumbView.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
         [self.thumbView.widthAnchor constraintEqualToConstant:thumbW],
         [self.thumbView.heightAnchor constraintEqualToConstant:thumbH],
 
-        // info 跟在 thumb 右侧，整体由内容决定宽度
         [info.leadingAnchor constraintEqualToAnchor:self.thumbView.trailingAnchor constant:18],
         [info.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
         [info.centerYAnchor constraintEqualToAnchor:self.thumbView.centerYAnchor],
 
-        // play button 覆盖在 thumb 上
         [self.playBtn.leadingAnchor constraintEqualToAnchor:self.thumbView.leadingAnchor constant:11],
         [self.playBtn.topAnchor constraintEqualToAnchor:self.thumbView.topAnchor constant:11],
         [self.playBtn.widthAnchor constraintEqualToConstant:22],
         [self.playBtn.heightAnchor constraintEqualToConstant:22],
 
-        // info labels（高度闭合很关键）
         [self.sizeKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-            [self.sizeVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-            [self.durKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-            [self.durVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-            [self.resKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-            [self.resVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
+        [self.sizeVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
+        [self.durKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
+        [self.durVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
+        [self.resKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
+        [self.resVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
+        
         [self.sizeKey.topAnchor constraintEqualToAnchor:info.topAnchor],
         [self.sizeKey.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
 
@@ -523,12 +498,9 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.resVal.topAnchor constraintEqualToAnchor:self.resKey.bottomAnchor constant:6],
         [self.resVal.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
 
-        // ✅ 让 info 的高度闭合（否则对齐容易怪）
         [self.resVal.bottomAnchor constraintEqualToAnchor:info.bottomAnchor],
     ]];
 
-  
-    // Before/After
     self.beforeLabel = [UILabel new];
     self.beforeLabel.font = ASSB(24);
     self.beforeLabel.textColor = UIColor.blackColor;
@@ -566,7 +538,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     [self.view addSubview:self.saveLabel];
     self.saveLabel.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // Select card
     self.selectCard = [UIView new];
     self.selectCard.backgroundColor = ASSelectCardBG();
     self.selectCard.layer.cornerRadius = 22;
@@ -575,7 +546,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.selectTitle = [UILabel new];
     self.selectTitle.font = ASSB(20);
     self.selectTitle.textColor = UIColor.blackColor;
-    self.selectTitle.text = @"Select size";
+    self.selectTitle.text = NSLocalizedString(@"Select size", nil);
 
     self.whiteBox = [UIView new];
     self.whiteBox.backgroundColor = UIColor.whiteColor;
@@ -590,14 +561,14 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.whiteBox.translatesAutoresizingMaskIntoConstraints = NO;
 
     self.rowSmall = [[ASQualityRow alloc] initWithQuality:ASCompressionQualitySmall
-                                                   title:@"Small Size"
-                                                subtitle:@"Compact and shareable"];
+                                                   title:NSLocalizedString(@"Small Size", nil)
+                                                subtitle:NSLocalizedString(@"Compact and shareable", nil)];
     self.rowMedium = [[ASQualityRow alloc] initWithQuality:ASCompressionQualityMedium
-                                                    title:@"Medium Size"
-                                                 subtitle:@"Balance quality and space"];
+                                                    title:NSLocalizedString(@"Medium Size", nil)
+                                                 subtitle:NSLocalizedString(@"Balance quality and space", nil)];
     self.rowLarge = [[ASQualityRow alloc] initWithQuality:ASCompressionQualityLarge
-                                                   title:@"Large Size"
-                                                subtitle:@"Maximum quality, larger file"];
+                                                   title:NSLocalizedString(@"Large Size", nil)
+                                                subtitle:NSLocalizedString(@"Maximum quality, larger file", nil)];
     [self.rowSmall addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
     [self.rowMedium addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
     [self.rowLarge addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
@@ -620,7 +591,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.compressBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:0],
         [self.compressBtn.heightAnchor constraintEqualToConstant:70],
 
-        // header
         [header.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [header.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -634,7 +604,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:header.centerXAnchor],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
 
-        // preview block
         [preview.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:16],
         [preview.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [preview.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
@@ -642,11 +611,9 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.thumbView.widthAnchor constraintEqualToConstant:thumbW],
         [self.thumbView.heightAnchor constraintEqualToConstant:thumbH],
 
-        // thumb 固定尺寸保持
         [self.thumbView.widthAnchor constraintEqualToConstant:thumbW],
         [self.thumbView.heightAnchor constraintEqualToConstant:thumbH],
 
-        // info labels
         [self.sizeKey.topAnchor constraintEqualToAnchor:info.topAnchor],
         [self.sizeKey.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
         [self.sizeVal.topAnchor constraintEqualToAnchor:self.sizeKey.bottomAnchor constant:6],
@@ -662,7 +629,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.resVal.topAnchor constraintEqualToAnchor:self.resKey.bottomAnchor constant:6],
         [self.resVal.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
 
-        // before/after
         [ba.topAnchor constraintEqualToAnchor:preview.bottomAnchor constant:22],
         [ba.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [ba.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
@@ -683,12 +649,10 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.saveLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [self.saveLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
 
-        // select card
         [self.selectCard.topAnchor constraintEqualToAnchor:self.saveLabel.bottomAnchor constant:18],
         [self.selectCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [self.selectCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
 
-        // select card must be above bottom button (no scroll)
         [self.selectCard.bottomAnchor constraintLessThanOrEqualToAnchor:self.compressBtn.topAnchor constant:0],
 
         [self.selectTitle.topAnchor constraintEqualToAnchor:self.selectCard.topAnchor constant:13],
@@ -714,7 +678,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 
 - (void)loadTopInfo {
     NSInteger count = self.assets.count;
-    self.titleLabel.text = (count <= 1) ? @"1 Video Selected" : [NSString stringWithFormat:@"%ld Videos Selected",(long)count];
+    self.titleLabel.text = (count <= 1) ? NSLocalizedString(@"1 Video Selected", nil) : [NSString stringWithFormat:NSLocalizedString(@"%ld Videos Selected", nil),(long)count];
 
     uint64_t total = 0;
     for (PHAsset *a in self.assets) total += ASAssetFileSize(a);
@@ -757,7 +721,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.beforeLabel.text = (self.totalBeforeBytes > 0) ? ASMB1(self.totalBeforeBytes) : @"--";
     self.afterLabel.text  = (self.totalBeforeBytes > 0) ? ASMB1(after) : @"--";
     NSString *saveSize = (self.totalBeforeBytes > 0 ? ASMB1(saved) : @"--");
-    NSString *prefix = @"You will save about ";
+    NSString *prefix = NSLocalizedString(@"You will save about ", nil);
 
     NSMutableAttributedString *attr =
     [[NSMutableAttributedString alloc] initWithString:prefix

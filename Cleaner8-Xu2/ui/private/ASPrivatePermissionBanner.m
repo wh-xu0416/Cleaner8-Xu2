@@ -1,5 +1,6 @@
 #import "ASPrivatePermissionBanner.h"
 #import "ASColors.h"
+#import "Common.h"
 
 @implementation ASPrivatePermissionBanner {
     UILabel *_title;
@@ -15,7 +16,7 @@
 
         _title = [UILabel new];
         _title.translatesAutoresizingMaskIntoConstraints = NO;
-        _title.text = @"Full Photo Access Required";
+        _title.text = NSLocalizedString(@"Full Photo Access Required", nil);
         _title.textColor = UIColor.blackColor;
         _title.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
         _title.textAlignment = NSTextAlignmentCenter;
@@ -31,7 +32,7 @@
 
         UILabel *t = [UILabel new];
         t.translatesAutoresizingMaskIntoConstraints = NO;
-        t.text = @"Go to Settings";
+        t.text = NSLocalizedString(@"Go to Settings", nil);
         t.textColor = UIColor.whiteColor;
         t.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
         [_btn addSubview:t];

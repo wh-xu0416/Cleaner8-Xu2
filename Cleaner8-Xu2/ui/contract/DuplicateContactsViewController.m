@@ -1,6 +1,7 @@
 #import "DuplicateContactsViewController.h"
 #import "ContactsManager.h"
 #import "ASSelectTitleBar.h"
+#import "Common.h"
 #import <Contacts/Contacts.h>
 #import <UIKit/UIKit.h>
 
@@ -79,9 +80,8 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
 @property (nonatomic, strong) NSArray<ASDCDupBgAttrs *> *blueAttrs;
 @property (nonatomic, strong) NSArray<ASDCDupBgAttrs *> *whiteAttrs;
 
-// 关键参数：制造“蓝底在白色下面并向下延伸，白色向上盖住一截”的效果
-@property (nonatomic, assign) CGFloat blueExtendDown; // 蓝底向下延伸
-@property (nonatomic, assign) CGFloat whiteOverlap;   // 白底向上盖住蓝底
+@property (nonatomic, assign) CGFloat blueExtendDown;
+@property (nonatomic, assign) CGFloat whiteOverlap;
 @end
 
 @implementation ASDCDupCardFlowLayout
@@ -90,15 +90,12 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
     if (self = [super init]) {
         self.minimumLineSpacing = 8;
 
-        // ✅ 白色部分顶部更“下”一点：把 top 从 20 提到 28
         self.sectionInset = UIEdgeInsetsMake(20, 15, 30, 15);
 
         self.headerReferenceSize = CGSizeMake(0, 54);
 
-        // ✅ 蓝色部分往下延伸更多：18 -> 28
         self.blueExtendDown = 35;
 
-        // ✅ 白色向上覆盖少一点（白色顶部往下）：14 -> 8
         self.whiteOverlap   = 0;
 
         [self registerClass:[ASDCDupBgView class] forDecorationViewOfKind:kASDCDupBlueBgKind];
@@ -125,7 +122,6 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
                                               atIndexPath:ip0];
         if (!h) continue;
 
-        // 蓝底：header 高度 + 向下延伸
         CGRect blueRect = h.frame;
         blueRect.origin.x = 0;
         blueRect.size.width = W;
@@ -141,7 +137,6 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
         ba.maskedCorners = (kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner); // 上圆角
         [blue addObject:ba];
 
-        // 白底：从 header 底部往上盖住一截（whiteOverlap），到底部包含 item + bottom padding(20)
         NSInteger items = [self.collectionView numberOfItemsInSection:s];
         if (items <= 0) continue;
 
@@ -153,7 +148,7 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
 
         CGRect unionRect = CGRectUnion(first.frame, last.frame);
 
-        CGFloat bottomPad = 20.0; // 白底内边距下 20
+        CGFloat bottomPad = 20.0;
         CGFloat y0 = CGRectGetMaxY(h.frame) - self.whiteOverlap;
         CGFloat y1 = CGRectGetMaxY(unionRect) + bottomPad;
 
@@ -167,7 +162,7 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
         wa.fillColor = UIColor.whiteColor;
         wa.cornerRadius = 16.0;
         wa.maskedCorners = (kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner |
-                            kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner); // 四角
+                            kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner);
         [white addObject:wa];
     }
 
@@ -241,7 +236,6 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
         [self.selectBtn addTarget:self action:@selector(tapSelect) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:self.selectBtn];
 
-        // Remove button (preview)
         self.removeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         self.removeBtn.translatesAutoresizingMaskIntoConstraints = NO;
         self.removeBtn.backgroundColor = UIColor.clearColor;
@@ -251,7 +245,6 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
         [self.removeBtn addTarget:self action:@selector(tapRemove) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:self.removeBtn];
 
-        // constraints
         NSLayoutConstraint *titleToSelect =
             [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectBtn.leadingAnchor constant:-10];
         NSLayoutConstraint *titleToRemove =
@@ -271,7 +264,6 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
             [self.selectBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10],
             [self.selectBtn.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
 
-            // 44x44 点击区域，图标自然 24x24
             [self.removeBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10],
             [self.removeBtn.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
             [self.removeBtn.widthAnchor constraintEqualToConstant:44],
@@ -295,7 +287,7 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
     self.removeBtnZeroWidth.active = !showRemove;
 
     if (showSelect) {
-        [self.selectBtn setTitle:(allSelected ? @"Deselect All" : @"Select All") forState:UIControlStateNormal];
+        [self.selectBtn setTitle:(allSelected ? NSLocalizedString(@"Deselect All", nil) : NSLocalizedString(@"Select All", nil)) forState:UIControlStateNormal];
 
         UIColor *c = allSelected ? ASDCBlue() : ASDCGray666();
         self.selectBtn.layer.borderColor = c.CGColor;
@@ -375,7 +367,6 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
             [self.borderView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.borderView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            // content padding: 左右18，上下11
             [self.avatarView.leadingAnchor constraintEqualToAnchor:self.borderView.leadingAnchor constant:18],
             [self.avatarView.centerYAnchor constraintEqualToAnchor:self.borderView.centerYAnchor],
             [self.avatarView.widthAnchor constraintEqualToConstant:48],
@@ -499,7 +490,7 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
 - (void)setupUI {
     __weak typeof(self) weakSelf = self;
 
-    self.titleBar = [[ASSelectTitleBar alloc] initWithTitle:@"Duplicate"];
+    self.titleBar = [[ASSelectTitleBar alloc] initWithTitle:NSLocalizedString(@"Duplicate", nil)];
     self.titleBar.showTitle = NO;
     self.titleBar.showSelectButton = YES;
 
@@ -520,18 +511,15 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
     };
     [self.view addSubview:self.titleBar];
 
-    // page title
     self.pageTitleLabel = [UILabel new];
-    self.pageTitleLabel.text = @"Duplicate";
+    self.pageTitleLabel.text = NSLocalizedString(@"Duplicate", nil);
     self.pageTitleLabel.textColor = UIColor.blackColor;
     self.pageTitleLabel.font = ASDCFont(28, UIFontWeightSemibold);
     [self.view addSubview:self.pageTitleLabel];
 
-    // count label
     self.countLabel = [UILabel new];
     [self.view addSubview:self.countLabel];
 
-    // collection
     ASDCDupCardFlowLayout *layout = [ASDCDupCardFlowLayout new];
 
     self.cv = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
@@ -597,7 +585,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         weakSelf.hasContactsAccess = (error == nil);
 
         if (error) {
-            // ✅ 无权限也要显示占位
             weakSelf.allGroups = @[];
             weakSelf.previewMode = NO;
             weakSelf.previewGroups = nil;
@@ -619,7 +606,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                                                                   NSArray<CMDuplicateGroup *> * _Nullable phoneGroups,
                                                                   NSError * _Nullable error2) {
             if (error2) {
-                // ✅ 拉取失败也当空态（至少别白屏）
                 weakSelf.allGroups = @[];
                 weakSelf.previewMode = NO;
                 weakSelf.previewGroups = nil;
@@ -672,7 +658,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     [self.previewGroups removeObjectAtIndex:section];
 
-    // 全部移除：回到合并前（非预览）状态，可再次点预览
     if (self.previewGroups.count == 0) {
         self.previewMode = NO;
         self.previewGroups = nil;
@@ -699,7 +684,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 - (void)updateTopCountLabel {
     NSInteger count = [self allDuplicateIDsSet].count;
     NSString *num = [NSString stringWithFormat:@"%ld", (long)count];
-    NSString *full = [NSString stringWithFormat:@"%@ Contacts", num];
+    NSString *full = [NSString stringWithFormat:NSLocalizedString(@"%@ Contacts", nil), num];
 
     NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full];
     UIFont *font = ASDCFont(16, UIFontWeightMedium);
@@ -709,7 +694,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     if (nr.location != NSNotFound) {
         [att addAttribute:NSForegroundColorAttributeName value:ASDCBlue() range:nr];
     }
-    NSRange cr = [full rangeOfString:@"Contacts"];
+    NSRange cr = [full rangeOfString:NSLocalizedString(@"Contacts", nil)];
     if (cr.location != NSNotFound) {
         [att addAttribute:NSForegroundColorAttributeName value:ASDCGray666() range:cr];
     }
@@ -807,10 +792,10 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     if (!show) return;
 
     if (!self.previewMode) {
-        [self.floatingButton setTitle:@"See Merge Preview" forState:UIControlStateNormal];
+        [self.floatingButton setTitle:NSLocalizedString(@"See Merge Preview", nil) forState:UIControlStateNormal];
     } else {
         NSInteger n = [self selectedMergeableContactCount];
-        [self.floatingButton setTitle:[NSString stringWithFormat:@"Merge %ld contacts", (long)n]
+        [self.floatingButton setTitle:[NSString stringWithFormat:NSLocalizedString(@"Merge %ld contacts", nil), (long)n]
                              forState:UIControlStateNormal];
     }
 }
@@ -838,12 +823,12 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     __weak typeof(self) weakSelf = self;
 
-    NSString *msg = [NSString stringWithFormat:@"This will merge %ld contacts. Continue?", (long)n];
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Merge Contacts"
+    NSString *msg = [NSString stringWithFormat:NSLocalizedString(@"This will merge %ld contacts. Continue?", nil), (long)n];
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"Merge Contacts", nil)
                                                                 message:msg
                                                          preferredStyle:UIAlertControllerStyleAlert];
-    [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [ac addAction:[UIAlertAction actionWithTitle:@"Merge" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Merge", nil) style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
         weakSelf.floatingButton.enabled = NO;
         weakSelf.floatingButton.alpha = 0.7;
 
@@ -862,7 +847,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     if (old) [old removeFromSuperview];
 
     UILabel *lab = [UILabel new];
-    lab.text = @"Done!";
+    lab.text = NSLocalizedString(@"Done!", nil);
     lab.textColor = UIColor.whiteColor;
     lab.font = ASDCFont(16, UIFontWeightMedium);
     lab.textAlignment = NSTextAlignmentCenter;
@@ -973,13 +958,12 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.cv.hidden = YES;
     self.emptyView.hidden = NO;
 
-    // ✅ 无权限：也显示占位图（按你需求：没数据也显示占位图）
     if (noPermission) {
         self.pageTitleLabel.hidden = YES;
         self.countLabel.hidden = YES;
 
         self.emptyImage.image = [UIImage imageNamed:@"ic_no_contact"];
-        self.emptyTitle.text = @"No Content";
+        self.emptyTitle.text = NSLocalizedString(@"No Content", nil);
         self.emptyTitle.font = ASDCFont(24, UIFontWeightMedium);
 
         self.emptySubTitle.hidden = YES;
@@ -989,16 +973,15 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return;
     }
 
-    // ===== 原逻辑保持 =====
     if (self.didMergeOnce) {
         self.emptyImage.image = [UIImage imageNamed:@"ic_contact_success"];
-        self.emptyTitle.text = @"Done!";
+        self.emptyTitle.text = NSLocalizedString(@"Done!", nil);
         self.emptyTitle.font = ASDCFont(34, UIFontWeightMedium);
 
-        self.emptySubTitle.text = @"No Preview Available";
+        self.emptySubTitle.text = NSLocalizedString(@"No Preview Available", nil);
         self.emptySubTitle.font = ASDCFont(20, UIFontWeightMedium);
 
-        self.emptyHint.text = @"Go Back And Select Duplicates To See a Preview";
+        self.emptyHint.text = NSLocalizedString(@"Go Back And Select Duplicates To See a Preview", nil);
         self.emptyHint.hidden = NO;
         self.emptySubTitle.hidden = NO;
     } else {
@@ -1006,7 +989,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         self.countLabel.hidden = YES;
 
         self.emptyImage.image = [UIImage imageNamed:@"ic_no_contact"];
-        self.emptyTitle.text = @"No Content";
+        self.emptyTitle.text = NSLocalizedString(@"No Content", nil);
         self.emptyTitle.font = ASDCFont(24, UIFontWeightMedium);
 
         self.emptySubTitle.hidden = YES;
@@ -1043,7 +1026,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         CNContact *c = g.items[indexPath.item];
 
         NSString *name = [CNContactFormatter stringFromContact:c style:CNContactFormatterStyleFullName];
-        if (name.length == 0) name = @"(No Name)";
+        if (name.length == 0) name = NSLocalizedString(@"No Name", nil);
 
         NSString *phone = @"";
         if ([c isKeyAvailable:CNContactPhoneNumbersKey] && c.phoneNumbers.count > 0) {
@@ -1080,11 +1063,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return cell;
     }
 
-    // ===== preview cell =====
     CMDuplicateGroup *g = self.previewGroups[indexPath.section];
     NSArray<NSString *> *selIds = [self selectedIdentifiersInGroup:g];
 
-    // primary：取第一个选中的 contact
     CNContact *primary = nil;
     for (CNContact *c in g.items) {
         if ([selIds containsObject:c.identifier]) { primary = c; break; }
@@ -1092,9 +1073,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     if (!primary) primary = g.items.firstObject;
 
     NSString *name = [CNContactFormatter stringFromContact:primary style:CNContactFormatterStyleFullName];
-    if (name.length == 0) name = @"(No Name)";
+    if (name.length == 0) name = NSLocalizedString(@"No Name", nil);
 
-    // 合并展示电话（去重）
     NSMutableOrderedSet<NSString *> *phones = [NSMutableOrderedSet orderedSet];
     for (CNContact *c in g.items) {
         if (![selIds containsObject:c.identifier]) continue;
@@ -1139,7 +1119,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         countToShow = [self selectedIdentifiersInGroup:g].count;
     }
 
-    NSString *title = [NSString stringWithFormat:@"%ld Duplicate Contacts", (long)countToShow];
+    NSString *title = [NSString stringWithFormat:NSLocalizedString(@"%ld Duplicate Contacts", nil), (long)countToShow];
     [v configTitle:title allSelected:allSel showSelect:showSelect showRemove:showRemove];
 
     __weak typeof(self) weakSelf = self;
@@ -1172,7 +1152,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 - (CGSize)collectionView:(UICollectionView *)collectionView
                   layout:(UICollectionViewLayout *)collectionViewLayout
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    // sectionInset.left/right = 15，所以 cell 宽 = W - 30
     return CGSizeMake(collectionView.bounds.size.width - 30, 72);
 }
 
@@ -1204,15 +1183,12 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.floatingButton.frame = CGRectMake(pagePad, btnY, btnW, btnH);
     self.floatingButton.layer.cornerRadius = btnH * 0.5;
 
-    // 列表：左右离屏幕 20；底部延伸到屏幕底（不减 safeBottom）
     self.cv.frame = CGRectMake(pagePad, y, W - pagePad * 2, H - y);
 
-    // 防止被浮动按钮挡住（只改 contentInset，不给“列表背景内边距”）
     CGFloat extraBottom = self.floatingButton.hidden ? 20.0 : (btnH + 20.0);
     self.cv.contentInset = UIEdgeInsetsMake(0, 0, safeBottom + extraBottom, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 
-    // empty
     self.emptyView.frame = CGRectMake(0, navH, W, H - navH);
     if (!self.emptyView.hidden) {
         CGSize imgSize = self.didMergeOnce ? CGSizeMake(181, 172) : CGSizeMake(182, 168);

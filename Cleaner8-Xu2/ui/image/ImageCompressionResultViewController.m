@@ -1,5 +1,6 @@
 #import "ImageCompressionResultViewController.h"
 #import "ImageCompressionManager.h"
+#import "Common.h"
 
 @interface ASImageCompressionSummary (ASResult) <ASCompressionResultSummary>
 @end
@@ -12,9 +13,9 @@
 - (NSString *)staticPreviewIconName { return @"ic_img_great"; }
 - (CGSize)staticPreviewSize { return CGSizeMake(180, 170); }
 
-- (NSString *)deleteSheetTitle { return @"Delete original Image ?"; }
-- (NSString *)itemSingular { return @"image"; }
-- (NSString *)itemPlural   { return @"images"; }
+- (NSString *)deleteSheetTitle { return NSLocalizedString(@"Delete original Image ?", nil); }
+- (NSString *)itemSingular { return NSLocalizedString(@"image", nil); }
+- (NSString *)itemPlural   { return NSLocalizedString(@"images", nil); }
 
 - (NSString *)homeIconName { return @"ic_back_home"; }
 

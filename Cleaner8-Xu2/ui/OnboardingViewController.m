@@ -1,5 +1,6 @@
 #import "OnboardingViewController.h"
 #import "MainTabBarController.h"
+#import "Common.h"
 
 static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 
@@ -58,7 +59,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     self.continueBtn.layer.cornerRadius = 20;
     self.continueBtn.layer.masksToBounds = YES;
 
-    [self.continueBtn setTitle:@"Continue" forState:UIControlStateNormal];
+    [self.continueBtn setTitle:NSLocalizedString(@"Continue", nil) forState:UIControlStateNormal];
     [self.continueBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.continueBtn.titleLabel.font = ASFont(18, UIFontWeightSemibold);
 

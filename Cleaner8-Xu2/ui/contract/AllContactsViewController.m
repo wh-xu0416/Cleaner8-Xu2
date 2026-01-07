@@ -4,6 +4,7 @@
 #import <Contacts/Contacts.h>
 #import <UIKit/UIKit.h>
 #import <ContactsUI/ContactsUI.h>
+#import "Common.h"
 
 #pragma mark - UI Helpers
 
@@ -164,13 +165,11 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
         self.selectButton.translatesAutoresizingMaskIntoConstraints = NO;
         self.selectButton.adjustsImageWhenHighlighted = NO;
         self.selectButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
-        // 让点按区域更大，图标仍是 24
         self.selectButton.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
         [self.selectButton addTarget:self action:@selector(onSelectButtonTap) forControlEvents:UIControlEventTouchUpInside];
         [self.contentView addSubview:self.selectButton];
 
         [NSLayoutConstraint activateConstraints:@[
-            // content padding: 左右18，上下11（沿用你之前的视觉）
             [self.avatarView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:18],
             [self.avatarView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
             [self.avatarView.widthAnchor constraintEqualToConstant:48],
@@ -304,7 +303,6 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
 
     BOOL noData = (self.contacts.count == 0);
 
-    // restore 模式不依赖系统通讯录权限（你是读备份）
     BOOL needContactsPermission = (self.mode != AllContactsModeRestore);
     BOOL noPermission = (needContactsPermission && !self.hasContactsAccess);
 
@@ -313,12 +311,11 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
     self.emptyView.hidden = !showEmpty;
     self.cv.hidden = showEmpty;
 
-    // 文案/图可以按需区分（不要求的话也可以不改）
     if (noPermission) {
-        self.emptyTitle.text = @"No Permission";
-        self.emptyImage.image = [UIImage imageNamed:@"ic_no_contact"]; // 你要的占位图
+        self.emptyTitle.text = NSLocalizedString(@"No Permission", nil);
+        self.emptyImage.image = [UIImage imageNamed:@"ic_no_contact"];
     } else {
-        self.emptyTitle.text = @"No Content";
+        self.emptyTitle.text = NSLocalizedString(@"No Content", nil);
         self.emptyImage.image = [UIImage imageNamed:@"ic_no_contact"];
     }
 
@@ -350,9 +347,9 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
 #pragma mark - Title Bar
 
 - (NSString *)pageTitleText {
-    NSString *title = @"All";
-    if (self.mode == AllContactsModeBackup) title = @"Backup Contacts";
-    if (self.mode == AllContactsModeRestore) title = @"Restore Backup";
+    NSString *title = NSLocalizedString(@"All", nil);
+    if (self.mode == AllContactsModeBackup) title = NSLocalizedString(@"Backup Contacts", nil);
+    if (self.mode == AllContactsModeRestore) title = NSLocalizedString(@"Restore Backup", nil);
     if (self.mode == AllContactsModeIncomplete) title = @"";
     return title;
 }
@@ -391,7 +388,7 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
     if (self.mode != AllContactsModeIncomplete) return;
 
     self.pageTitleLabel = [UILabel new];
-    self.pageTitleLabel.text = @"Incomplete Contacts";
+    self.pageTitleLabel.text = NSLocalizedString(@"Incomplete Contacts", nil);
     self.pageTitleLabel.textColor = UIColor.blackColor;
     self.pageTitleLabel.font = ASACFont(28, UIFontWeightSemibold);
     [self.view addSubview:self.pageTitleLabel];
@@ -405,7 +402,7 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
 
     NSInteger count = self.contacts.count;
     NSString *num = [NSString stringWithFormat:@"%ld", (long)count];
-    NSString *full = [NSString stringWithFormat:@"%@ Contacts", num];
+    NSString *full = [NSString stringWithFormat:NSLocalizedString(@"%@ Contacts", nil), num];
 
     NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full];
     UIFont *f = ASACFont(16, UIFontWeightMedium);
@@ -415,7 +412,7 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
     if (nr.location != NSNotFound) {
         [att addAttribute:NSForegroundColorAttributeName value:ASACBlue() range:nr];       // #024DFF
     }
-    NSRange cr = [full rangeOfString:@"Contacts"];
+    NSRange cr = [full rangeOfString:NSLocalizedString(@"Contacts", nil)];
     if (cr.location != NSNotFound) {
         [att addAttribute:NSForegroundColorAttributeName value:ASACGray666() range:cr];    // #666666
     }
@@ -435,7 +432,7 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
     [self.emptyView addSubview:self.emptyImage];
 
     self.emptyTitle = [UILabel new];
-    self.emptyTitle.text = @"No Content";
+    self.emptyTitle.text = NSLocalizedString(@"No Content", nil);
     self.emptyTitle.textColor = UIColor.blackColor;
     self.emptyTitle.font = ASACFont(33, UIFontWeightMedium);
     self.emptyTitle.textAlignment = NSTextAlignmentCenter;
@@ -487,19 +484,19 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
 - (void)setupBottomButtons {
     if (self.mode == AllContactsModeRestore) {
-        self.leftButton  = [self buildPillButtonWithTitle:@"Delete"  bg:ASACBlue()];
-        self.rightButton = [self buildPillButtonWithTitle:@"Restore" bg:ASACRestoreBlue()];
+        self.leftButton  = [self buildPillButtonWithTitle:NSLocalizedString(@"Delete", nil)  bg:ASACBlue()];
+        self.rightButton = [self buildPillButtonWithTitle:NSLocalizedString(@"Restore", nil) bg:ASACRestoreBlue()];
         [self.leftButton addTarget:self action:@selector(onDeleteFromBackup) forControlEvents:UIControlEventTouchUpInside];
         [self.rightButton addTarget:self action:@selector(onRestore) forControlEvents:UIControlEventTouchUpInside];
 
         [self.view addSubview:self.leftButton];
         [self.view addSubview:self.rightButton];
     } else {
-        NSString *t = @"Delete 0 Contacts";
+        NSString *t = NSLocalizedString(@"Delete 0 Contacts", nil);
         UIColor *bg = ASACBlue();
 
         if (self.mode == AllContactsModeBackup) {
-            t = @"Backup 0 Contacts";
+            t = NSLocalizedString(@"Backup 0 Contacts", nil);
             bg = ASACBlue();
         }
 
@@ -516,13 +513,13 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     NSUInteger count = self.selectedContactIds.count;
 
     if (self.mode == AllContactsModeBackup) {
-        NSString *t = [NSString stringWithFormat:@"Backup %lu Contacts", (unsigned long)count];
+        NSString *t = [NSString stringWithFormat:NSLocalizedString(@"Backup %lu Contacts", nil), (unsigned long)count];
         [self.primaryButton setTitle:t forState:UIControlStateNormal];
         self.primaryButton.backgroundColor = ASACBlue();
         return;
     }
 
-    NSString *t = [NSString stringWithFormat:@"Delete %lu Contacts", (unsigned long)count];
+    NSString *t = [NSString stringWithFormat:NSLocalizedString(@"Delete %lu Contacts", nil), (unsigned long)count];
     [self.primaryButton setTitle:t forState:UIControlStateNormal];
     self.primaryButton.backgroundColor = ASACBlue();
 }
@@ -615,7 +612,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
 - (NSString *)displayNameForContact:(CNContact *)c {
     NSString *name = [CNContactFormatter stringFromContact:c style:CNContactFormatterStyleFullName];
-    if (name.length == 0) name = @"No name";
+    if (name.length == 0) name = NSLocalizedString(@"No name", nil);
     return name;
 }
 
@@ -716,7 +713,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         }
         phone = [arr componentsJoinedByString:@" · "];
     }
-    if (phone.length == 0) phone = @"No phone number";
+    if (phone.length == 0) phone = NSLocalizedString(@"No phone number", nil);
 
     BOOL selected = NO;
     if (self.mode == AllContactsModeRestore) {
@@ -774,7 +771,6 @@ referenceSizeForHeaderInSection:(NSInteger)section {
     (void)collectionView;
     (void)collectionViewLayout;
     (void)section;
-    // 分组列表间隔 10（bottom=10），左右 20，header 到 item 间距用 top=10
     return UIEdgeInsetsMake(10, 20, 10, 20);
 }
 
@@ -783,7 +779,6 @@ referenceSizeForHeaderInSection:(NSInteger)section {
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
     (void)collectionViewLayout;
     (void)indexPath;
-    // 左右 inset 20 -> 宽 = W - 40
     return CGSizeMake(collectionView.bounds.size.width - 40, 72);
 }
 
@@ -922,20 +917,20 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
 
     __weak typeof(self) weakSelf = self;
 
-    NSString *title = @"Would you like to back up your contacts before making any changes?";
-    NSString *msg = @"Changes cannot be reversed if you do not back up your contacts.";
+    NSString *title = NSLocalizedString(@"Would you like to back up your contacts before making any changes?", nil);
+    NSString *msg = NSLocalizedString(@"Changes cannot be reversed if you do not back up your contacts.", nil);
 
     UIAlertController *ac = [UIAlertController alertControllerWithTitle:title
                                                                 message:msg
                                                          preferredStyle:UIAlertControllerStyleAlert];
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"No" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"No", nil) style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
         weakSelf.primaryButton.enabled = NO;
         weakSelf.primaryButton.alpha = 0.7;
         [weakSelf doDeleteSelectedFromSystem];
     }]];
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"Back up" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Back up", nil) style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
         weakSelf.primaryButton.enabled = NO;
         weakSelf.primaryButton.alpha = 0.7;
         [weakSelf doBackupThenDeleteSelectedFromSystem];
@@ -952,13 +947,13 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
     fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
     fmt.dateFormat = @"yyyy-MM-dd HH:mm:ss";
-    NSString *backupName = [NSString stringWithFormat:@"Backup %@", [fmt stringFromDate:[NSDate date]]];
+    NSString *backupName = [NSString stringWithFormat:NSLocalizedString(@"Backup %@", nil), [fmt stringFromDate:[NSDate date]]];
 
     [self.contactsManager requestContactsAccess:^(NSError * _Nullable error) {
         if (error) {
             weakSelf.primaryButton.enabled = YES;
             weakSelf.primaryButton.alpha = 1.0;
-            [weakSelf showAlertWithTitle:@"Unable to access the address book." message:error.localizedDescription];
+            [weakSelf showAlertWithTitle:NSLocalizedString(@"Unable to access the address book.", nil) message:error.localizedDescription];
             return;
         }
 
@@ -970,19 +965,18 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
             if (error2) {
                 weakSelf.primaryButton.enabled = YES;
                 weakSelf.primaryButton.alpha = 1.0;
-                [weakSelf showAlertWithTitle:@"Backup failed." message:error2.localizedDescription];
+                [weakSelf showAlertWithTitle:NSLocalizedString(@"Backup failed.", nil) message:error2.localizedDescription];
                 return;
             }
 
             [[NSNotificationCenter defaultCenter] postNotificationName:@"CMBackupDidFinish" object:nil];
 
-            // ✅ 备份成功后继续删除
             [weakSelf.contactsManager deleteContactsWithIdentifiers:weakSelf.selectedContactIds.allObjects
                                                         completion:^(NSError * _Nullable error3) {
                 if (error3) {
                     weakSelf.primaryButton.enabled = YES;
                     weakSelf.primaryButton.alpha = 1.0;
-                    [weakSelf showAlertWithTitle:@"Delete failed." message:error3.localizedDescription];
+                    [weakSelf showAlertWithTitle:NSLocalizedString(@"Delete failed.", nil) message:error3.localizedDescription];
                     return;
                 }
 
@@ -1014,16 +1008,15 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
 
     __weak typeof(self) weakSelf = self;
 
-    NSString *title = @"Are you sure?";
-    NSString *msg = @"All your old contacts will be removed from your iPhone and iCloud. This process cannot be reversed.";
+    NSString *title = NSLocalizedString(@"Are you sure?", nil);
+    NSString *msg = NSLocalizedString(@"All your old contacts will be removed from your iPhone and iCloud. This process cannot be reversed.", nil);
 
     UIAlertController *ac = [UIAlertController alertControllerWithTitle:title
                                                                 message:msg
                                                          preferredStyle:UIAlertControllerStyleAlert];
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [ac addAction:[UIAlertAction actionWithTitle:@"Yes" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
-        // 防连点
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Yes", nil) style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
         weakSelf.primaryButton.enabled = NO;
         weakSelf.primaryButton.alpha = 0.7;
         [weakSelf doDeleteIncompleteSelectedFromSystem];
@@ -1038,14 +1031,14 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     __weak typeof(self) weakSelf = self;
     [self.contactsManager requestContactsAccess:^(NSError * _Nullable error) {
         if (error) {
-            [weakSelf showAlertWithTitle:@"Unable to access the address book." message:error.localizedDescription];
+            [weakSelf showAlertWithTitle:NSLocalizedString(@"Unable to access the address book.", nil) message:error.localizedDescription];
             return;
         }
 
         [weakSelf.contactsManager deleteContactsWithIdentifiers:weakSelf.selectedContactIds.allObjects
                                                     completion:^(NSError * _Nullable error2) {
             if (error2) {
-                [weakSelf showAlertWithTitle:@"Delete failed" message:error2.localizedDescription];
+                [weakSelf showAlertWithTitle:NSLocalizedString(@"Delete failed", nil) message:error2.localizedDescription];
                 return;
             }
 
@@ -1081,13 +1074,13 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     __weak typeof(self) weakSelf = self;
 
     NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
-    fmt.locale = [NSLocale localeWithLocaleIdentifier:@"zh_CN"];
+    fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
     fmt.dateFormat = @"yyyy-MM-dd HH:mm:ss";
-    NSString *backupName = [NSString stringWithFormat:@"备份 %@", [fmt stringFromDate:[NSDate date]]];
+    NSString *backupName = [NSString stringWithFormat:NSLocalizedString(@"Backup %@", nil), [fmt stringFromDate:[NSDate date]]];
 
     [self.contactsManager requestContactsAccess:^(NSError * _Nullable error) {
         if (error) {
-            [weakSelf showAlertWithTitle:@"Unable to access the address book." message:error.localizedDescription];
+            [weakSelf showAlertWithTitle:NSLocalizedString(@"Unable to access the address book.", nil) message:error.localizedDescription];
             return;
         }
 
@@ -1096,12 +1089,12 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                                                      completion:^(NSString * _Nullable backupId, NSError * _Nullable error2) {
             (void)backupId;
             if (error2) {
-                [weakSelf showAlertWithTitle:@"Backup failed." message:error2.localizedDescription];
+                [weakSelf showAlertWithTitle:NSLocalizedString(@"Backup failed.", nil) message:error2.localizedDescription];
                 return;
             }
 
             [[NSNotificationCenter defaultCenter] postNotificationName:@"CMBackupDidFinish" object:nil];
-            [weakSelf showAlertPopBackWithTitle:@"Succeed" message:@"Backup completed"];
+            [weakSelf showAlertPopBackWithTitle:NSLocalizedString(@"Succeed", nil) message:NSLocalizedString(@"Backup completed", nil)];
         }];
     }];
 }
@@ -1114,7 +1107,6 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     CNContactStore *store = [CNContactStore new];
     CNContact *showContact = c;
 
-    // 能用 identifier 就拿系统完整 contact（系统详情页体验最好）
     if (c.identifier.length > 0) {
         NSError *err = nil;
         showContact = [store unifiedContactWithIdentifier:c.identifier
@@ -1130,7 +1122,6 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
         vc.allowsEditing = NO;
         vc.allowsActions = YES;
     } else {
-        // 备份里可能没有 identifier：用“未知联系人”系统页（会带添加入口）
         vc = [CNContactViewController viewControllerForUnknownContact:showContact];
         vc.contactStore = store;
         vc.allowsEditing = NO;
@@ -1139,7 +1130,6 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
 
     vc.hidesBottomBarWhenPushed = YES;
 
-    // 你当前页面隐藏了系统导航栏，进系统页前把导航栏打开
     [self.navigationController setNavigationBarHidden:NO animated:YES];
     [self.navigationController pushViewController:vc animated:YES];
 }
@@ -1150,14 +1140,14 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     __weak typeof(self) weakSelf = self;
     [self.contactsManager requestContactsAccess:^(NSError * _Nullable error) {
         if (error) {
-            [weakSelf showAlertWithTitle:@"Unable to access the address book." message:error.localizedDescription];
+            [weakSelf showAlertWithTitle:NSLocalizedString(@"Unable to access the address book.", nil) message:error.localizedDescription];
             return;
         }
 
         [weakSelf.contactsManager deleteContactsWithIdentifiers:weakSelf.selectedContactIds.allObjects
                                                     completion:^(NSError * _Nullable error2) {
             if (error2) {
-                [weakSelf showAlertWithTitle:@"Delete failed." message:error2.localizedDescription];
+                [weakSelf showAlertWithTitle:NSLocalizedString(@"Delete failed.", nil) message:error2.localizedDescription];
                 return;
             }
 
@@ -1195,7 +1185,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                                          contactIndicesInBackup:indices
                                                      completion:^(NSError * _Nullable error) {
         if (error) {
-            [weakSelf showAlertWithTitle:@"Failed to Resotre" message:error.localizedDescription];
+            [weakSelf showAlertWithTitle:NSLocalizedString(@"Failed to Resotre", nil) message:error.localizedDescription];
             return;
         }
 
@@ -1204,7 +1194,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
         [weakSelf updateBottomState];
         [weakSelf.cv reloadData];
 
-        [weakSelf showAlertPopBackWithTitle:@"Succeed" message:@"Restore Complete"];
+        [weakSelf showAlertPopBackWithTitle:NSLocalizedString(@"Succeed", nil) message:NSLocalizedString(@"Restore Complete", nil)];
     }];
 }
 
@@ -1218,11 +1208,10 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                              contactIndicesInBackup:indices
                                          completion:^(NSError * _Nullable error) {
         if (error) {
-            [weakSelf showAlertWithTitle:@"Delete failed" message:error.localizedDescription];
+            [weakSelf showAlertWithTitle:NSLocalizedString(@"Delete failed", nil) message:error.localizedDescription];
             return;
         }
 
-        // 本地删除：indices 是“原始 contacts index”
         NSMutableIndexSet *rm = [NSMutableIndexSet indexSet];
         for (NSNumber *n in indices) {
             NSInteger i = n.integerValue;
@@ -1332,7 +1321,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     UIAlertController *ac = [UIAlertController alertControllerWithTitle:title
                                                                 message:message
                                                          preferredStyle:UIAlertControllerStyleAlert];
-    [ac addAction:[UIAlertAction actionWithTitle:@"OK"
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil)
                                           style:UIAlertActionStyleDefault
                                         handler:nil]];
     [self presentViewController:ac animated:YES completion:nil];
@@ -1344,7 +1333,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     UIAlertController *ac = [UIAlertController alertControllerWithTitle:title
                                                                 message:message
                                                          preferredStyle:UIAlertControllerStyleAlert];
-    [ac addAction:[UIAlertAction actionWithTitle:@"OK"
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil)
                                           style:UIAlertActionStyleDefault
                                         handler:^(__unused UIAlertAction * _Nonnull action) {
         [weakSelf.navigationController popViewControllerAnimated:YES];
@@ -1365,7 +1354,6 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     CGFloat navH = 44 + safeTop;
     self.titleBar.frame = CGRectMake(0, 0, W, navH);
 
-    // bottom button 与你原逻辑一致（showBottom/extraBottom 也一致）
     CGFloat pagePad = 20.0;
     CGFloat btnH = 64;
     CGFloat btnY = H - safeBottom - btnH;
@@ -1407,7 +1395,6 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
         self.cv.contentInset = UIEdgeInsetsMake(0, 0, safeBottom + extraBottom, 0);
         self.cv.scrollIndicatorInsets = self.cv.contentInset;
 
-        // empty view：居中
         self.emptyView.frame = CGRectMake(0, navH, W, H - navH);
         if (!self.emptyView.hidden) {
             CGSize img = CGSizeMake(182, 168);

@@ -1,5 +1,6 @@
 #import "ImageCompressionQualityViewController.h"
 #import "ImageCompressionProgressViewController.h"
+#import "Common.h"
 #import <Photos/Photos.h>
 
 #pragma mark - Helpers
@@ -47,7 +48,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
 
-        // ✅ 不裁剪：允许按钮突出
         self.clipsToBounds = NO;
         self.layer.masksToBounds = NO;
         self.contentView.clipsToBounds = NO;
@@ -67,7 +67,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         self.minusBtn.layer.cornerRadius = 12;
         self.minusBtn.layer.masksToBounds = YES;
 
-        // ✅ ic_delete 22x22 原尺寸显示
         UIImage *delImg = [[UIImage imageNamed:@"ic_delete"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         [self.minusBtn setImage:delImg forState:UIControlStateNormal];
         self.minusBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
@@ -172,7 +171,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 - (void)as_applyRowLayout_PaddingH15_V12_ContentCenter {
     self.pad = [UIView new];
     self.pad.translatesAutoresizingMaskIntoConstraints = NO;
-    self.pad.userInteractionEnabled = NO; // ✅ 防止抢点击
+    self.pad.userInteractionEnabled = NO;
     [self addSubview:self.pad];
 
     self.padL = [self.pad.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:17];
@@ -360,8 +359,8 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
     NSInteger count = self.assets.count;
     self.titleLabel.text = (count <= 1)
-    ? @"1 Photo Selected"
-    : [NSString stringWithFormat:@"%ld Photos Selected", (long)count];
+    ? NSLocalizedString(@"1 Photo Selected", nil)
+    : [NSString stringWithFormat:NSLocalizedString(@"%ld Photos Selected", nil), (long)count];
 }
 
 #pragma mark - UI
@@ -379,9 +378,8 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.bgGradient.endPoint   = CGPointMake(0.5, 1.0);
     [self.view.layer insertSublayer:self.bgGradient atIndex:0];
 
-    // 底部按钮（同视频）
     self.compressBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.compressBtn setTitle:@"Compress" forState:UIControlStateNormal];
+    [self.compressBtn setTitle:NSLocalizedString(@"Compress", nil) forState:UIControlStateNormal];
     self.compressBtn.titleLabel.font = ASRG(20);
     [self.compressBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.compressBtn.backgroundColor = ASBlue();
@@ -391,7 +389,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     [self.view addSubview:self.compressBtn];
     self.compressBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // Header（同视频）
     UIView *header = [UIView new];
     header.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:header];
@@ -441,7 +438,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.grid.layer.masksToBounds = NO;
 
 
-    // Before/After（同视频）
     self.beforeLabel = [UILabel new];
     self.beforeLabel.font = ASSB(24);
     self.beforeLabel.textColor = UIColor.blackColor;
@@ -478,7 +474,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.saveLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.saveLabel];
 
-    // Select card（同视频）
     self.selectCard = [UIView new];
     self.selectCard.backgroundColor = ASSelectCardBG();
     self.selectCard.layer.cornerRadius = 22;
@@ -488,7 +483,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.selectTitle = [UILabel new];
     self.selectTitle.font = ASSB(20);
     self.selectTitle.textColor = UIColor.blackColor;
-    self.selectTitle.text = @"Select size";
+    self.selectTitle.text = NSLocalizedString(@"Select size", nil);
     self.selectTitle.translatesAutoresizingMaskIntoConstraints = NO;
 
     self.whiteBox = [UIView new];
@@ -502,14 +497,14 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     [self.selectCard addSubview:self.whiteBox];
 
     self.rowSmall = [[ASImageQualityRow alloc] initWithQuality:ASImageCompressionQualitySmall
-                                                       title:@"Small Size"
-                                                    subtitle:@"Compact and shareable"];
+                                                       title:NSLocalizedString(@"Small Size", nil)
+                                                    subtitle:NSLocalizedString(@"Compact and shareable", nil)];
     self.rowMedium = [[ASImageQualityRow alloc] initWithQuality:ASImageCompressionQualityMedium
-                                                        title:@"Medium Size"
-                                                     subtitle:@"Balance quality and space"];
+                                                        title:NSLocalizedString(@"Medium Size", nil)
+                                                     subtitle:NSLocalizedString(@"Balance quality and space", nil)];
     self.rowLarge = [[ASImageQualityRow alloc] initWithQuality:ASImageCompressionQualityLarge
-                                                       title:@"Large Size"
-                                                    subtitle:@"Maximum quality, larger file"];
+                                                       title:NSLocalizedString(@"Large Size", nil)
+                                                    subtitle:NSLocalizedString(@"Maximum quality, larger file", nil)];
     [self.rowSmall addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
     [self.rowMedium addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
     [self.rowLarge addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
@@ -524,12 +519,11 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
     CGFloat gridItem = 80;
     CGFloat gridGap = 10;
-    CGFloat gridSide = gridItem * 3 + gridGap * 2; // 272
+    CGFloat gridSide = gridItem * 3 + gridGap * 2;
 
     CGFloat headerH = 56;
 
     [NSLayoutConstraint activateConstraints:@[
-        // bottom button (same as video)
         [self.compressBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [self.compressBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
         [self.compressBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:0],
@@ -549,19 +543,16 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:header.centerXAnchor],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
 
-        // preview block position same as video
         [preview.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:10],
         [preview.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [preview.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
 
-        // grid centered in preview
         [self.grid.centerXAnchor constraintEqualToAnchor:preview.centerXAnchor],
         [self.grid.topAnchor constraintEqualToAnchor:preview.topAnchor],
         [self.grid.bottomAnchor constraintEqualToAnchor:preview.bottomAnchor],
         [self.grid.widthAnchor constraintEqualToConstant:gridSide],
         [self.grid.heightAnchor constraintEqualToConstant:gridSide],
 
-        // before/after
         [ba.topAnchor constraintEqualToAnchor:preview.bottomAnchor constant:10],
         [ba.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [ba.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
@@ -618,7 +609,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.afterLabel.text  = (self.totalBeforeBytes > 0) ? ASMB1(after) : @"--";
 
     NSString *saveSize = (self.totalBeforeBytes > 0) ? ASMB1(saved) : @"--";
-    NSString *prefix = @"You will save about ";
+    NSString *prefix = NSLocalizedString(@"You will save about ", nil);
 
     NSMutableAttributedString *attr =
     [[NSMutableAttributedString alloc] initWithString:prefix
@@ -704,7 +695,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     opt.networkAccessAllowed = YES;
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
 
-    // 80x80 cell，给个稍大 targetSize 避免糊
     [[PHImageManager defaultManager] requestImageForAsset:a
                                               targetSize:CGSizeMake(360, 360)
                                              contentMode:PHImageContentModeAspectFill
@@ -733,7 +723,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
     [self.assets removeObjectAtIndex:i];
 
-    // ✅ 关键：每次删除都回传最新选择
     [self notifySelectionChanged];
 
     if (self.assets.count == 0) {
@@ -763,7 +752,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 - (CGSize)collectionView:(UICollectionView *)collectionView
                   layout:(UICollectionViewLayout*)collectionViewLayout
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    // ✅ 固定 80x80
     return CGSizeMake(80, 80);
 }
 

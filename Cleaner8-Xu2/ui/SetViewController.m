@@ -1,4 +1,5 @@
 #import "SetViewController.h"
+#import "Common.h"
 
 #pragma mark - UI Helpers
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
@@ -72,7 +73,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     // 标题（放在 content 上）
     self.titleLab = [UILabel new];
     self.titleLab.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLab.text = @"Setting";
+    self.titleLab.text = NSLocalizedString(@"Setting", nil);
     self.titleLab.textColor = UIColor.blackColor;
     self.titleLab.font = ASFont(28, UIFontWeightSemibold);
     self.titleLab.textAlignment = NSTextAlignmentCenter;
@@ -87,18 +88,18 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [self.content addSubview:self.backBtn];
 
     // 三个卡片（加到 content）
-    self.termsCard = [self buildCardWithLeftText:@"Terms of User"
+    self.termsCard = [self buildCardWithLeftText:NSLocalizedString(@"Terms of User", nil)
                                       rightType:@"image"
                                      rightValue:@"ic_todo_small"
                                          action:@selector(tapTerms)];
 
-    self.privacyCard = [self buildCardWithLeftText:@"Privacy Policy"
+    self.privacyCard = [self buildCardWithLeftText:NSLocalizedString(@"Privacy Policy", nil)
                                         rightType:@"image"
                                        rightValue:@"ic_todo_small"
                                            action:@selector(tapPrivacy)];
 
     NSString *ver = [self appVersionString];
-    self.versionCard = [self buildCardWithLeftText:@"Version"
+    self.versionCard = [self buildCardWithLeftText:NSLocalizedString(@"Version", nil)
                                          rightType:@"version"
                                         rightValue:ver
                                             action:nil];

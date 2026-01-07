@@ -5,6 +5,7 @@
 #import "ASMyStudioViewController.h"
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
+#import "Common.h"
 
 #pragma mark - UI Helpers
 static NSString * const kASLastPhotoAuthStatusKey = @"as_last_photo_auth_status_v1";
@@ -18,6 +19,105 @@ static inline UIColor *ASBlue(void) {
 static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     return [UIFont systemFontOfSize:size weight:weight];
 }
+
+@interface ASNoAuthPlaceholderView : UIView
+@property(nonatomic,strong) UIImageView *iconView;
+@property(nonatomic,strong) UILabel *t1;
+@property(nonatomic,strong) UILabel *t2;
+@property(nonatomic,strong) UIButton *btn;
+@property(nonatomic,copy) void (^onTap)(void);
+- (CGFloat)preferredHeightForWidth:(CGFloat)width;
+@end
+
+@implementation ASNoAuthPlaceholderView
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self = [super initWithFrame:frame]) {
+        self.backgroundColor = UIColor.clearColor;
+
+        _iconView = [UIImageView new];
+        _iconView.contentMode = UIViewContentModeScaleAspectFit;
+        _iconView.image = [UIImage imageNamed:@"ic_photo_permission_not"];
+        [self addSubview:_iconView];
+
+        _t1 = [UILabel new];
+        _t1.text = NSLocalizedString(@"Allow Photo Access", nil);
+        _t1.textColor = UIColor.blackColor;
+        _t1.font = ASFont(20, UIFontWeightMedium);
+        _t1.textAlignment = NSTextAlignmentCenter;
+        [self addSubview:_t1];
+
+        _t2 = [UILabel new];
+        _t2.text = NSLocalizedString(@"To compress photos, videos, and LivePhotos. please allow access to your photo library.", nil);
+        _t2.textColor = ASRGB(102, 102, 102);
+        _t2.font = ASFont(13, UIFontWeightRegular);
+        _t2.numberOfLines = 3;
+        _t2.textAlignment = NSTextAlignmentCenter;
+        [self addSubview:_t2];
+
+        _btn = [UIButton buttonWithType:UIButtonTypeCustom];
+        _btn.backgroundColor = ASBlue();
+        _btn.layer.cornerRadius = 35;
+        _btn.clipsToBounds = YES;
+        [_btn setTitle:NSLocalizedString(@"Go to Settings", nil) forState:UIControlStateNormal];
+        [_btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        _btn.titleLabel.font = ASFont(20, UIFontWeightRegular);
+        _btn.contentEdgeInsets = UIEdgeInsetsMake(18, 0, 18, 0);
+        [_btn addTarget:self action:@selector(onBtn) forControlEvents:UIControlEventTouchUpInside];
+        [self addSubview:_btn];
+    }
+    return self;
+}
+
+- (void)onBtn {
+    if (self.onTap) self.onTap();
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+
+    CGFloat w = self.bounds.size.width;
+    CGFloat top = 60;
+
+    self.iconView.frame = CGRectMake((w - 96)/2.0, top, 96, 96);
+    self.t1.frame = CGRectMake(30, CGRectGetMaxY(self.iconView.frame) + 20, w - 60, 24);
+
+    CGFloat t2W = w - 90;
+    CGSize t2Size = [self.t2 sizeThatFits:CGSizeMake(t2W, CGFLOAT_MAX)];
+    CGFloat lineH = self.t2.font.lineHeight;
+    CGFloat t2H = MIN(t2Size.height, ceil(lineH * 3.0));
+
+    self.t2.frame = CGRectMake(45, CGRectGetMaxY(self.t1.frame) + 10, t2W, t2H);
+
+    CGFloat btnW = w - 90;
+    self.btn.frame = CGRectMake((w - btnW)/2.0,
+                                CGRectGetMaxY(self.t2.frame) + 50,
+                                btnW,
+                                70);
+}
+
+- (CGFloat)preferredHeightForWidth:(CGFloat)width {
+    CGFloat w = width;
+    CGFloat top = 60;
+    CGFloat iconBottom = top + 96;
+    CGFloat t1Top = iconBottom + 20;
+    CGFloat t1Bottom = t1Top + 24;
+
+    CGFloat t2W = w - 90;
+    CGSize t2Size = [self.t2 sizeThatFits:CGSizeMake(t2W, CGFLOAT_MAX)];
+    CGFloat lineH = self.t2.font.lineHeight;
+    CGFloat t2H = MIN(t2Size.height, ceil(lineH * 3.0));
+
+    CGFloat t2Top = t1Bottom + 10;
+    CGFloat t2Bottom = t2Top + t2H;
+
+    CGFloat btnTop = t2Bottom + 50;
+    CGFloat btnBottom = btnTop + 70;
+
+    return ceil(btnBottom);
+}
+
+@end
 
 @interface VideoViewController ()
 
@@ -47,7 +147,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 @property(nonatomic,strong) NSLayoutConstraint *imageCardTopToSettingBar;
 @property(nonatomic,strong) NSLayoutConstraint *settingBarHeightZero;
 
-@property(nonatomic,strong) UIView *noAuthView;
+@property(nonatomic,strong) ASNoAuthPlaceholderView *noAuthView;
 
 @property(nonatomic,strong) NSArray<UIView *> *shadowViews;
 
@@ -115,6 +215,23 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         CGFloat r = v.layer.cornerRadius;
         v.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:v.bounds cornerRadius:r].CGPath;
     }
+
+    if (!self.noAuthView.hidden) {
+        CGFloat w = self.view.bounds.size.width;
+        CGFloat h = [self.noAuthView preferredHeightForWidth:w];
+
+        CGRect titleInView = [self.titleLab.superview convertRect:self.titleLab.frame toView:self.view];
+        CGFloat minY = CGRectGetMaxY(titleInView) + 20;
+
+        CGFloat viewH = self.view.bounds.size.height;
+        CGFloat safeBottom = 0;
+        if (@available(iOS 11.0, *)) safeBottom = self.view.safeAreaInsets.bottom;
+
+        CGFloat y = MAX(minY, (viewH - h) * 0.5);
+        y = MIN(y, viewH - safeBottom - h - 20);
+
+        self.noAuthView.frame = CGRectMake(0, y, w, h);
+    }
 }
 
 #pragma mark - Photo Permission
@@ -158,16 +275,37 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [ud synchronize];
 
     self.noAuthView.hidden = !deniedOrRestricted;
-    self.scroll.hidden = deniedOrRestricted;
+
+    self.scroll.hidden = NO;
+
+    self.scroll.scrollEnabled = !deniedOrRestricted;
 
     [self setFeatureButtonsEnabled:!deniedOrRestricted];
 
-    BOOL showBubble = (!deniedOrRestricted && limited);
-    self.settingBar.hidden = !showBubble;
-    self.settingBarHeightZero.active = !showBubble;
+    self.imageCard.hidden = deniedOrRestricted;
+    self.videoCard.hidden = deniedOrRestricted;
+    self.liveRow.hidden   = deniedOrRestricted;
+    self.studioRow.hidden = deniedOrRestricted;
 
-    self.imageCardTopToTitle.active = !showBubble;
-    self.imageCardTopToSettingBar.active = showBubble;
+    if (deniedOrRestricted) {
+        self.settingBar.hidden = YES;
+        self.settingBarHeightZero.active = YES;
+    }
+
+    if (!deniedOrRestricted) {
+        BOOL limited = (status == PHAuthorizationStatusLimited);
+        BOOL showBubble = limited;
+        self.settingBar.hidden = !showBubble;
+        self.settingBarHeightZero.active = !showBubble;
+
+        self.imageCardTopToTitle.active = !showBubble;
+        self.imageCardTopToSettingBar.active = showBubble;
+
+        self.imageCard.hidden = NO;
+        self.videoCard.hidden = NO;
+        self.liveRow.hidden   = NO;
+        self.studioRow.hidden = NO;
+    }
 
     [UIView animateWithDuration:0.20 animations:^{
         [self.view layoutIfNeeded];
@@ -220,7 +358,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
     self.titleLab = [UILabel new];
     self.titleLab.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLab.text = @"Compress";
+    self.titleLab.text = NSLocalizedString(@"Compress", nil);
     self.titleLab.textColor = UIColor.blackColor;
     self.titleLab.font = ASFont(28, UIFontWeightSemibold);
     self.titleLab.textAlignment = NSTextAlignmentCenter;
@@ -239,7 +377,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
     self.settingTipLab = [UILabel new];
     self.settingTipLab.translatesAutoresizingMaskIntoConstraints = NO;
-    self.settingTipLab.text = @"Photo Access Is Required.";
+    self.settingTipLab.text = NSLocalizedString(@"Photo Access Is Required.", nil);
     self.settingTipLab.textColor = UIColor.whiteColor;
     self.settingTipLab.font = ASFont(15, UIFontWeightMedium);
     [self.settingBar addSubview:self.settingTipLab];
@@ -248,7 +386,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
     UILabel *settingTextLab = [UILabel new];
     settingTextLab.translatesAutoresizingMaskIntoConstraints = NO;
-    settingTextLab.text = @"Setting";
+    settingTextLab.text = NSLocalizedString(@"Setting", nil);
     settingTextLab.textColor = accent;
     settingTextLab.font = ASFont(15, UIFontWeightMedium);
 
@@ -282,15 +420,15 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
     // small cards
     self.imageCard = [self buildHomeSmallCardWithIcon:@"ic_img"
-                                               title:@"Image"
-                                            subtitle:@"Compressor"
+                                               title:NSLocalizedString(@"Image", nil)
+                                            subtitle:NSLocalizedString(@"Compressor", nil)
                                             todoIcon:@"ic_todo_small"
                                               action:@selector(tapImage)
                                           todoBtnRef:&_imgTodoBtn];
 
     self.videoCard = [self buildHomeSmallCardWithIcon:@"ic_video"
-                                               title:@"Video"
-                                            subtitle:@"Compressor"
+                                               title:NSLocalizedString(@"Video", nil)
+                                            subtitle:NSLocalizedString(@"Compressor", nil)
                                             todoIcon:@"ic_todo_small"
                                               action:@selector(tapVideo)
                                           todoBtnRef:&_videoTodoBtn];
@@ -299,14 +437,14 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [self.content addSubview:self.videoCard];
 
     self.liveRow = [self buildHomeRowWithIcon:@"ic_livephoto"
-                                       title:@"Live Photo"
-                                    subtitle:@"Compressor"
+                                       title:NSLocalizedString(@"Live Photo", nil)
+                                    subtitle:NSLocalizedString(@"Compressor", nil)
                                     todoIcon:@"ic_todo_big"
                                       action:@selector(tapLive)
                                    todoBtnRef:&_liveTodoBtn];
 
     self.studioRow = [self buildHomeRowWithIcon:@"ic_studio"
-                                         title:@"My studio"
+                                         title:NSLocalizedString(@"My studio", nil)
                                       subtitle:nil
                                       todoIcon:@"ic_todo_big"
                                         action:@selector(tapStudio)
@@ -392,72 +530,15 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 }
 
 - (void)buildNoAuthPlaceholder {
-    self.noAuthView = [UIView new];
-    self.noAuthView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.noAuthView.backgroundColor = UIColor.clearColor;
+    self.noAuthView = [[ASNoAuthPlaceholderView alloc] initWithFrame:CGRectZero];
     self.noAuthView.hidden = YES;
+
+    __weak typeof(self) weakSelf = self;
+    self.noAuthView.onTap = ^{
+        [weakSelf openSettings];
+    };
+
     [self.view addSubview:self.noAuthView];
-
-    UIImageView *img = [UIImageView new];
-    img.translatesAutoresizingMaskIntoConstraints = NO;
-    img.image = [UIImage imageNamed:@"ic_photo_permission_not"];
-    img.contentMode = UIViewContentModeScaleAspectFit;
-    [self.noAuthView addSubview:img];
-
-    UILabel *t1 = [UILabel new];
-    t1.translatesAutoresizingMaskIntoConstraints = NO;
-    t1.text = @"Allow Photo Access";
-    t1.textColor = UIColor.blackColor;
-    t1.font = ASFont(20, UIFontWeightMedium);
-    t1.textAlignment = NSTextAlignmentCenter;
-    [self.noAuthView addSubview:t1];
-
-    UILabel *t2 = [UILabel new];
-    t2.translatesAutoresizingMaskIntoConstraints = NO;
-    t2.text = @"To compress photos, videos, and LivePhotos.\nplease allow access to your photo library.";
-    t2.textColor = ASRGB(102, 102, 102); // #666666FF
-    t2.font = ASFont(13, UIFontWeightRegular);
-    t2.numberOfLines = 0;
-    t2.textAlignment = NSTextAlignmentCenter;
-    [self.noAuthView addSubview:t2];
-
-    UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-    btn.translatesAutoresizingMaskIntoConstraints = NO;
-    btn.backgroundColor = ASBlue(); // #024DFFFF
-    btn.layer.cornerRadius = 35;
-    btn.layer.masksToBounds = YES;
-    [btn setTitle:@"Go to Settings" forState:UIControlStateNormal];
-    [btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    btn.titleLabel.font = ASFont(20, UIFontWeightRegular);
-    btn.contentEdgeInsets = UIEdgeInsetsMake(23, 0, 23, 0);
-    [btn addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
-    [self.noAuthView addSubview:btn];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [self.noAuthView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.noAuthView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
-        [self.noAuthView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.noAuthView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-
-        [img.topAnchor constraintEqualToAnchor:self.noAuthView.topAnchor],
-        [img.centerXAnchor constraintEqualToAnchor:self.noAuthView.centerXAnchor],
-        [img.widthAnchor constraintEqualToConstant:96],
-        [img.heightAnchor constraintEqualToConstant:96],
-
-        [t1.topAnchor constraintEqualToAnchor:img.bottomAnchor constant:20],
-        [t1.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:30],
-        [t1.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-30],
-
-        [t2.topAnchor constraintEqualToAnchor:t1.bottomAnchor constant:10],
-        [t2.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:45],
-        [t2.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-45],
-
-        [btn.topAnchor constraintEqualToAnchor:t2.bottomAnchor constant:60],
-        [btn.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:45],
-        [btn.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-45],
-
-        [btn.bottomAnchor constraintEqualToAnchor:self.noAuthView.bottomAnchor],
-    ]];
 }
 
 #pragma mark - Small Card

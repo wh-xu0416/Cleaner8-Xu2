@@ -1,4 +1,5 @@
 #import "ASStudioAlbumManager.h"
+#import "Common.h"
 
 static NSString * const kASStudioAlbumIdKey = @"ASStudioAlbumLocalId";
 
@@ -9,7 +10,7 @@ static NSString * const kASStudioAlbumIdKey = @"ASStudioAlbumLocalId";
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         s = [ASStudioAlbumManager new];
-        s.albumTitle = @"My Studio";
+        s.albumTitle = NSLocalizedString(@"My Studio", nil);
     });
     return s;
 }

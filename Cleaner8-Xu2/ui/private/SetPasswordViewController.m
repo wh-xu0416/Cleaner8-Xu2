@@ -3,6 +3,7 @@
 #import "ASColors.h"
 #import "ASPasscodeManager.h"
 #import "ASCustomNavBar.h"
+#import "Common.h"
 #import "UIViewController+ASRootNav.h"
 
 @interface SetPasswordViewController () <UITextFieldDelegate>
@@ -41,7 +42,7 @@
 - (void)buildUI {
     __weak typeof(self) ws = self;
 
-    self.nav = [[ASCustomNavBar alloc] initWithTitle:@"Password"];
+    self.nav = [[ASCustomNavBar alloc] initWithTitle:NSLocalizedString(@"Password", nil)];
     self.nav.translatesAutoresizingMaskIntoConstraints = NO;
     self.nav.onBack = ^{
         [ws.navigationController popViewControllerAnimated:YES];
@@ -53,7 +54,7 @@
         [self.nav.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.nav.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.nav.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.nav.heightAnchor constraintEqualToConstant:88], // 含安全区 + 44
+        [self.nav.heightAnchor constraintEqualToConstant:88],
     ]];
 
     self.titleLabel = [UILabel new];
@@ -73,7 +74,6 @@
     [self.hiddenTF addTarget:self action:@selector(tfChanged) forControlEvents:UIControlEventEditingChanged];
     [self.view addSubview:self.hiddenTF];
 
-    // boxes
     NSMutableArray *boxes = [NSMutableArray array];
     NSMutableArray *stars = [NSMutableArray array];
 
@@ -142,9 +142,9 @@
 
 - (void)updatePrompt {
     if (self.flow == ASPasswordFlowSet) {
-        self.titleLabel.text = (self.firstCode.length ? @"Confirm Password" : @"Enter Password");
+        self.titleLabel.text = (self.firstCode.length ? NSLocalizedString(@"Confirm Password", nil) : NSLocalizedString(@"Enter Password", nil));
     } else {
-        self.titleLabel.text = @"Enter Password";
+        self.titleLabel.text = NSLocalizedString(@"Enter Password", nil);
     }
 }
 

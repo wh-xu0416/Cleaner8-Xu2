@@ -1,4 +1,5 @@
 #import "SwipeManager.h"
+#import "Common.h"
 #import <UIKit/UIKit.h>
 
 NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNotification";
@@ -45,24 +46,18 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 #pragma mark - SwipeManager
 
 @interface SwipeManager ()
-// moduleID -> 当前待处理(未处理)的 assetID（用于下次继续）
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *moduleCursorAssetIDByID;
 
 @property (nonatomic, strong) NSMutableArray<SwipeModule *> *mutableModules;
 
-// 状态：assetID -> status
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSNumber *> *statusByAssetID;
 
-// 尺寸缓存：assetID -> bytes（仅对已归档的有意义）
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSNumber *> *bytesByAssetID;
 
-// 模块排序偏好：moduleID -> BOOL
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSNumber *> *moduleSortAscendingByID;
 
-// 随机20固定选择（持久化）
 @property (nonatomic, strong) NSMutableArray<NSString *> *random20AssetIDs;
 
-// moduleID -> undo stack
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSMutableArray<SwipeUndoRecord *> *> *undoStacks;
 
 @property (nonatomic, strong) PHCachingImageManager *imageManager;
@@ -177,8 +172,8 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
     NSArray *random20    = state[@"random20AssetIDs"];
     NSNumber *archBytes  = state[@"archivedBytesCached"];
 
-    NSDictionary *cursor = state[@"moduleCursorAssetIDByID"];   // ✅ 新增
-    NSDictionary *undo   = state[@"undoStacksByModuleID"];      // ✅ 新增（序列化形式）
+    NSDictionary *cursor = state[@"moduleCursorAssetIDByID"];
+    NSDictionary *undo   = state[@"undoStacksByModuleID"];
 
     if ([status isKindOfClass:NSDictionary.class]) self.statusByAssetID = status.mutableCopy;
     if ([bytes isKindOfClass:NSDictionary.class]) self.bytesByAssetID = bytes.mutableCopy;
@@ -190,7 +185,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
         self.moduleCursorAssetIDByID = cursor.mutableCopy;
     }
 
-    // undo stacks 反序列化：moduleID -> [ {assetID, prevStatus} ... ]
     if ([undo isKindOfClass:NSDictionary.class]) {
         NSMutableDictionary *stacks = [NSMutableDictionary dictionary];
         [undo enumerateKeysAndObjectsUsingBlock:^(NSString *key, id obj, BOOL *stop) {
@@ -231,7 +225,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
             cursorSnap = [self.moduleCursorAssetIDByID copy] ?: @{};
             archSnap   = @(self.archivedBytesCached);
 
-            // undo stacks 序列化（注意 stack 也要 copy，避免同时被改）
             NSMutableDictionary *undoSer = [NSMutableDictionary dictionary];
             [self.undoStacks enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSMutableArray<SwipeUndoRecord *> *stack, BOOL *stop) {
                 NSArray *stackSnap = [stack copy];
@@ -284,8 +277,8 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 #pragma mark - Title / Subtitle helpers
 
 - (NSString *)dayTitleForDate:(NSDate *)date calendar:(NSCalendar *)cal weekdayFormatter:(NSDateFormatter *)weekdayFmt {
-    if ([cal isDateInToday:date]) return @"Today";
-    if ([cal isDateInYesterday:date]) return @"Yesterday";
+    if ([cal isDateInToday:date]) return NSLocalizedString(@"Today", nil);
+    if ([cal isDateInYesterday:date]) return NSLocalizedString(@"Yesterday", nil);
     return [weekdayFmt stringFromDate:date]; // e.g. Wednesday
 }
 
@@ -375,7 +368,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
                 NSCalendar *cal = [NSCalendar currentCalendar];
                 NSDate *now = [NSDate date];
 
-                // 你想固定英文就用 en_US_POSIX；想随系统语言就用 currentLocale
                 NSLocale *en = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
 
                 NSDateFormatter *weekdayFmt = [NSDateFormatter new];
@@ -473,8 +465,8 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
             SwipeModule *m = [SwipeModule new];
             m.type = SwipeModuleTypeRandom20;
             m.moduleID = @"Random";
-            m.title = @"Random";
-            m.subtitle = @"Random";
+            m.title = NSLocalizedString(@"Random", nil);
+            m.subtitle = NSLocalizedString(@"Random", nil);
 
             // 先过滤掉已不存在的
             NSMutableArray<NSString *> *valid = [NSMutableArray array];
@@ -521,8 +513,8 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
                 SwipeModule *m = [SwipeModule new];
                 m.type = SwipeModuleTypeSelfie;
                 m.moduleID = @"Selfies";
-                m.title = @"Selfies";
-                m.subtitle = @"Selfies";
+                m.title = NSLocalizedString(@"Selfies", nil);
+                m.subtitle = NSLocalizedString(@"Selfies", nil);
                 m.assetIDs = [self assetIDsFromFetchResult:r];
 
                 NSNumber *sortPref = self.moduleSortAscendingByID[m.moduleID];
@@ -558,12 +550,10 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
         if (b) {
             sum += b.unsignedLongLongValue;
         } else {
-            // 没缓存就尽量快速读一次（你已有 quickAssetBytes）
             unsigned long long v = [self quickAssetBytes:aid];
             if (v > 0) {
                 self.bytesByAssetID[aid] = @(v);
                 sum += v;
-                // 这里不强行改 archivedBytesCached（它是全局），仅补齐模块显示足够
             }
         }
     }
@@ -571,8 +561,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 }
 
 - (SwipeModule *)moduleByApplyingSort:(SwipeModule *)module {
-    // module.assetIDs 默认常为 creationDate 降序（我们构造时就是）
-    // 若需要升序则翻转
     if (module.sortAscending) {
         module.assetIDs = [[module.assetIDs reverseObjectEnumerator] allObjects];
     }
@@ -714,7 +702,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
     @synchronized (self.stateLock) {
         self.moduleSortAscendingByID[moduleID] = @(ascending);
 
-        // ✅ 关键：排序后游标必须失效（否则 VC 会把旧待处理顶回顶部）
         [self.moduleCursorAssetIDByID removeObjectForKey:moduleID];
     }
     [self saveStateToDisk];
@@ -811,7 +798,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
 #pragma mark - Bytes helper
 
-/// 尝试快速获取 asset bytes（优先走 PHAssetResource KVC：不保证所有系统都可用；失败返回0）
 - (unsigned long long)quickAssetBytes:(NSString *)assetID {
     PHAsset *asset = [self assetForID:assetID];
     if (!asset) return 0;
@@ -819,10 +805,8 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
     NSArray<PHAssetResource *> *resources = [PHAssetResource assetResourcesForAsset:asset];
     if (resources.count == 0) return 0;
 
-    // 一般第一项是主资源
     PHAssetResource *res = resources.firstObject;
     @try {
-        // 非公开字段，某些版本可用；若不可用会抛异常
         unsigned long long v = [[res valueForKey:@"fileSize"] unsignedLongLongValue];
         return v;
     } @catch (__unused NSException *e) {
@@ -871,7 +855,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
                 continue;
             }
 
-            // fallback：读取数据累计（可能慢）
+            // fallback：读取数据累计
             __block unsigned long long bytes = 0;
             [[PHAssetResourceManager defaultManager] requestDataForAssetResource:res
                                                                         options:nil
@@ -913,7 +897,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
     NSArray<PHAsset *> *assets = [self assetsForIDs:assetIDs];
     if (assets.count == 0) {
-        // 清理状态
         for (NSString *aid in assetIDs) {
             [self.statusByAssetID removeObjectForKey:aid];
             [self.bytesByAssetID removeObjectForKey:aid];
@@ -958,7 +941,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 #pragma mark - PHPhotoLibraryChangeObserver
 
 - (void)photoLibraryDidChange:(PHChange *)changeInstance {
-    // 相册变化：增量更新这里简单做全量刷新（你后续可按需细化为增量diff）
     dispatch_async(dispatch_get_main_queue(), ^{
         [self reloadModules];
     });

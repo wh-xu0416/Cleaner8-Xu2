@@ -2,6 +2,7 @@
 #import "ContactsManager.h"
 #import "AllContactsViewController.h"
 #import "ASSelectTitleBar.h"
+#import "Common.h"
 #import <UIKit/UIKit.h>
 
 #pragma mark - UI Helpers
@@ -24,8 +25,8 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
 @interface ASBackupInfoCell : UICollectionViewCell
 @property (nonatomic, copy) void (^onSelectTap)(void);
 
-@property (nonatomic, strong) UILabel *dateLabel;   // Dec 24,2025
-@property (nonatomic, strong) UILabel *subLabel;    // 4 Contacts | 10:10am
+@property (nonatomic, strong) UILabel *dateLabel;
+@property (nonatomic, strong) UILabel *subLabel;
 @property (nonatomic, strong) UIButton *selectButton;
 
 - (void)configDateText:(NSString *)dateText
@@ -195,7 +196,7 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
 - (void)setupTitleBar {
     __weak typeof(self) weakSelf = self;
 
-    self.titleBar = [[ASSelectTitleBar alloc] initWithTitle:@"Backups"];
+    self.titleBar = [[ASSelectTitleBar alloc] initWithTitle:NSLocalizedString(@"Backups", nil)];
     self.titleBar.showTitle = YES;
     self.titleBar.showSelectButton = YES;
     self.titleBar.onBack = ^{
@@ -222,9 +223,9 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
 - (void)updateBottomButtonState {
     NSUInteger n = self.selectedBackupIds.count;
     if (n == 0) {
-        [self.addBackupsButton setTitle:@"Add Backups" forState:UIControlStateNormal];
+        [self.addBackupsButton setTitle:NSLocalizedString(@"Add Backups", nil) forState:UIControlStateNormal];
     } else {
-        NSString *t = [NSString stringWithFormat:@"Delete %lu Backups", (unsigned long)n];
+        NSString *t = [NSString stringWithFormat:NSLocalizedString(@"Delete %lu Backups", nil), (unsigned long)n];
         [self.addBackupsButton setTitle:t forState:UIControlStateNormal];
     }
 }
@@ -275,7 +276,6 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
     [self.cv registerClass:[ASBackupInfoCell class] forCellWithReuseIdentifier:@"ASBackupInfoCell"];
     [self.view addSubview:self.cv];
 
-    // 顶部留 20 的滚动内边距（和你上面页面一致）
     self.cv.contentInset = UIEdgeInsetsMake(20, 0, 0, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 }
@@ -287,12 +287,12 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
     [b setTitle:title forState:UIControlStateNormal];
     b.titleLabel.font = ASACFont(20, UIFontWeightRegular);
     b.titleLabel.textAlignment = NSTextAlignmentCenter;
-    b.contentEdgeInsets = UIEdgeInsetsMake(22, 22, 22, 22); // 同 AllContacts
+    b.contentEdgeInsets = UIEdgeInsetsMake(22, 22, 22, 22);
     return b;
 }
 
 - (void)setupBottomButton {
-    self.addBackupsButton = [self buildPillButtonWithTitle:@"Add Backups" bg:ASACBlue()];
+    self.addBackupsButton = [self buildPillButtonWithTitle:NSLocalizedString(@"Add Backups", nil) bg:ASACBlue()];
     [self.addBackupsButton addTarget:self action:@selector(onBottomButtonTap) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.addBackupsButton];
 }
@@ -310,13 +310,13 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
     if (n == 0) return;
 
     __weak typeof(self) weakSelf = self;
-    NSString *msg = [NSString stringWithFormat:@"Are you sure you want to delete %lu backups?", (unsigned long)n];
+    NSString *msg = [NSString stringWithFormat:NSLocalizedString(@"Are you sure you want to delete %lu backups?", nil), (unsigned long)n];
 
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Delete Backups"
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"Delete Backups", nil)
                                                                 message:msg
                                                          preferredStyle:UIAlertControllerStyleAlert];
-    [ac addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [ac addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Delete", nil) style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
 
         NSArray<NSString *> *ids = weakSelf.selectedBackupIds.allObjects;
         [weakSelf.contactsManager deleteBackupsWithIds:ids completion:^(NSError * _Nullable error) {
@@ -343,7 +343,7 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
     [self.emptyView addSubview:self.emptyImage];
 
     self.emptyTitle = [UILabel new];
-    self.emptyTitle.text = @"No Content";
+    self.emptyTitle.text = NSLocalizedString(@"No Content", nil);
     self.emptyTitle.textColor = UIColor.blackColor;
     self.emptyTitle.font = ASACFont(24, UIFontWeightMedium);
     self.emptyTitle.textAlignment = NSTextAlignmentCenter;
@@ -429,7 +429,7 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
     NSString *dateText = [self dateStringForBackup:info];
 
     NSString *timeText = [self timeStringForBackup:info];
-    NSString *subText = [NSString stringWithFormat:@"%lu Contacts | %@", (unsigned long)info.count, timeText];
+    NSString *subText = [NSString stringWithFormat:NSLocalizedString(@"%lu Contacts | %@", nil), (unsigned long)info.count, timeText];
 
     BOOL selected = (info.backupId.length > 0) && [self.selectedBackupIds containsObject:info.backupId];
     [cell configDateText:dateText subText:subText selected:selected];
@@ -481,8 +481,8 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
                   layout:(UICollectionViewLayout *)collectionViewLayout
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
     (void)collectionViewLayout; (void)indexPath;
-    CGFloat w = collectionView.bounds.size.width - 40; // 左右 20
-    return CGSizeMake(w, 84); // 18 + 24 + 7 + 17 + 18 ≈ 84
+    CGFloat w = collectionView.bounds.size.width - 40;
+    return CGSizeMake(w, 84);
 }
 
 #pragma mark - Layout

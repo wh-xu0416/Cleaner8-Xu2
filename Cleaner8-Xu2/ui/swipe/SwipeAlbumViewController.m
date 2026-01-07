@@ -4,6 +4,7 @@
 
 #import "SwipeManager.h"
 #import "ASArchivedFilesViewController.h"
+#import "Common.h"
 
 #pragma mark - Helpers
 
@@ -51,10 +52,10 @@ static inline BOOL SWIsWithinLastNDays(NSString *ymd, NSInteger days) {
     return (diff.day >= 0 && diff.day <= (days - 1));
 }
 
-// 给 RecentDay 的 next 按钮一个标题（简单点：用 subtitle 直接显示也行）
+// 给 RecentDay 的 next 按钮标题
 static inline NSString *SWNextRecentTitle(NSString *ymd) {
-    if (ymd.length >= 10) return [NSString stringWithFormat:@"Next Album > %@", ymd];
-    return @"Next Album";
+    if (ymd.length >= 10) return [NSString stringWithFormat:NSLocalizedString(@"Next Album > %@", nil), ymd];
+    return NSLocalizedString(@"Next Album", nil);
 }
 
 static inline UIColor *SWHexRGBA(uint32_t hex) {
@@ -118,7 +119,7 @@ static inline NSString *SWMonthShort(NSInteger month) {
     static NSArray<NSString *> *arr;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        arr = @[@"Jan.",@"Feb.",@"Mar.",@"Apr.",@"May.",@"Jun.",@"Jul.",@"Aug.",@"Sep.",@"Oct.",@"Nov.",@"Dec."];
+        arr = @[NSLocalizedString(@"Jan.", nil),NSLocalizedString(@"Feb.", nil),NSLocalizedString(@"Mar.", nil),NSLocalizedString(@"Apr.", nil),NSLocalizedString(@"May.", nil),NSLocalizedString(@"Jun.", nil),NSLocalizedString(@"Jul.", nil),NSLocalizedString(@"Aug.", nil),NSLocalizedString(@"Sep.", nil),NSLocalizedString(@"Oct.", nil),NSLocalizedString(@"Nov.", nil),NSLocalizedString(@"Dec.", nil)];
     });
     if (month < 1 || month > 12) return @"";
     return arr[month-1];
@@ -207,7 +208,8 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         [self addSubview:_imageView];
 
         _hintLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-        _hintLabel.font = SWFont(24, UIFontWeightBold);
+        _hintLabel.textAlignment = NSTextAlignmentLeft;
+        _hintLabel.font = SWFont(30, UIFontWeightBold);
         _hintLabel.textColor = UIColor.whiteColor;
         _hintLabel.alpha = 0;
         [self addSubview:_hintLabel];
@@ -218,14 +220,21 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 - (void)layoutSubviews {
     [super layoutSubviews];
     _imageView.frame = self.bounds;
-    _hintLabel.frame = CGRectMake(16, 16, self.bounds.size.width - 32, 30);
+    _hintLabel.frame = CGRectMake(16, 16, self.bounds.size.width - 32, 40);
 }
 @end
 
-
 #pragma mark - SwipeAlbumViewController
 
-@interface SwipeAlbumViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout>
+@interface SwipeAlbumViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate>
+@property (nonatomic, assign) BOOL sw_hasOperated; // 本页是否做过“任何操作”
+@property (nonatomic, strong) UIView *sw_exitMask;
+@property (nonatomic, strong) UIView *sw_exitPopup;
+
+@property (nonatomic, strong) UILabel *sw_exitArchiveValue;
+@property (nonatomic, strong) UILabel *sw_exitKeepValue;
+@property (nonatomic, strong) UIButton *sw_exitViewArchivedBtn;
+
 @property (nonatomic, assign) BOOL cardAnimating;
 @property (nonatomic, assign) BOOL sw_needsRefreshOnAppear;
 
@@ -270,10 +279,10 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 @property (nonatomic, strong) NSLayoutConstraint *bottomBarHeightC;
 
 #pragma mark - UI (Completed)
-@property (nonatomic, strong) UIView *doneCard;          // 330x465
-@property (nonatomic, strong) UIImageView *doneIcon;     // ic_hot 80
-@property (nonatomic, strong) UILabel *doneTitleLabel;   // Organized 100%
-@property (nonatomic, strong) UIView *doneTable;         // 280x100
+@property (nonatomic, strong) UIView *doneCard;
+@property (nonatomic, strong) UIImageView *doneIcon;
+@property (nonatomic, strong) UILabel *doneTitleLabel;
+@property (nonatomic, strong) UIView *doneTable;
 @property (nonatomic, strong) UILabel *doneArchiveTitle;
 @property (nonatomic, strong) UILabel *doneArchiveValue;
 @property (nonatomic, strong) UILabel *doneKeepTitle;
@@ -491,7 +500,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.archiveBtn.backgroundColor = SWHexRGBA(0x024DFFFF);
     self.archiveBtn.layer.cornerRadius = 24;
     self.archiveBtn.titleLabel.font = SWFont(20, UIFontWeightRegular);
-    [self.archiveBtn setTitle:@"Archive" forState:UIControlStateNormal];
+    [self.archiveBtn setTitle:NSLocalizedString(@"Archive", nil) forState:UIControlStateNormal];
     [self.archiveBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.archiveBtn addTarget:self action:@selector(onArchiveBtn) forControlEvents:UIControlEventTouchUpInside];
     [self.cardArea addSubview:self.archiveBtn];
@@ -501,7 +510,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.keepBtn.backgroundColor = SWHexRGBA(0x028BFFFF);
     self.keepBtn.layer.cornerRadius = 24;
     self.keepBtn.titleLabel.font = SWFont(20, UIFontWeightRegular);
-    [self.keepBtn setTitle:@"Keep" forState:UIControlStateNormal];
+    [self.keepBtn setTitle:NSLocalizedString(@"Keep", nil) forState:UIControlStateNormal];
     [self.keepBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.keepBtn addTarget:self action:@selector(onKeepBtn) forControlEvents:UIControlEventTouchUpInside];
     [self.cardArea addSubview:self.keepBtn];
@@ -615,7 +624,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.doneTitleLabel.textColor = UIColor.blackColor;
     self.doneTitleLabel.font = SWFont(20, UIFontWeightSemibold);
     self.doneTitleLabel.textAlignment = NSTextAlignmentCenter;
-    self.doneTitleLabel.text = @"Organized 100%";
+    self.doneTitleLabel.text = NSLocalizedString(@"Organized 100%", nil);
     [self.doneCard addSubview:self.doneTitleLabel];
 
     self.doneTable = [UIView new];
@@ -633,7 +642,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
     self.doneArchiveTitle = [UILabel new];
     self.doneArchiveTitle.translatesAutoresizingMaskIntoConstraints = NO;
-    self.doneArchiveTitle.text = @"Archive";
+    self.doneArchiveTitle.text = NSLocalizedString(@"Archive", nil);
     self.doneArchiveTitle.textColor = UIColor.blackColor;
     self.doneArchiveTitle.font = SWFont(17, UIFontWeightRegular);
     self.doneArchiveTitle.textAlignment = NSTextAlignmentCenter;
@@ -649,7 +658,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
     self.doneKeepTitle = [UILabel new];
     self.doneKeepTitle.translatesAutoresizingMaskIntoConstraints = NO;
-    self.doneKeepTitle.text = @"Keep";
+    self.doneKeepTitle.text = NSLocalizedString(@"Keep", nil);
     self.doneKeepTitle.textColor = UIColor.blackColor;
     self.doneKeepTitle.font = SWFont(17, UIFontWeightRegular);
     self.doneKeepTitle.textAlignment = NSTextAlignmentCenter;
@@ -666,7 +675,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.nextAlbumBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.nextAlbumBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.nextAlbumBtn.backgroundColor = SWHexRGBA(0x024DFFFF);
-    self.nextAlbumBtn.layer.cornerRadius = 16;
+    self.nextAlbumBtn.layer.cornerRadius = 25;
     self.nextAlbumBtn.titleLabel.font = SWFont(17, UIFontWeightRegular);
     [self.nextAlbumBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.nextAlbumBtn addTarget:self action:@selector(onNextAlbum) forControlEvents:UIControlEventTouchUpInside];
@@ -675,13 +684,12 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.viewArchivedBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.viewArchivedBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.viewArchivedBtn.backgroundColor = SWHexRGBA(0xF6F6F6FF);
-    self.viewArchivedBtn.layer.cornerRadius = 16;
+    self.viewArchivedBtn.layer.cornerRadius = 25;
     self.viewArchivedBtn.titleLabel.font = SWFont(17, UIFontWeightMedium);
     [self.viewArchivedBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     [self.viewArchivedBtn addTarget:self action:@selector(onViewArchived) forControlEvents:UIControlEventTouchUpInside];
     [self.doneCard addSubview:self.viewArchivedBtn];
 
-    // doneCard padding: L/R 25, T/B 30
     [NSLayoutConstraint activateConstraints:@[
         [self.doneIcon.topAnchor constraintEqualToAnchor:self.doneCard.topAnchor constant:30],
         [self.doneIcon.centerXAnchor constraintEqualToAnchor:self.doneCard.centerXAnchor],
@@ -702,7 +710,6 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         [divider.bottomAnchor constraintEqualToAnchor:self.doneTable.bottomAnchor constant:-12],
         [divider.widthAnchor constraintEqualToConstant:1],
 
-        // Left column
         [self.doneArchiveTitle.centerXAnchor constraintEqualToAnchor:self.doneTable.leadingAnchor constant:70],
         [self.doneArchiveTitle.topAnchor constraintEqualToAnchor:self.doneTable.topAnchor constant:14],
         [self.doneArchiveValue.centerXAnchor constraintEqualToAnchor:self.doneArchiveTitle.centerXAnchor],
@@ -768,6 +775,12 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    // 拦截系统左滑返回
+    if (self.navigationController.interactivePopGestureRecognizer) {
+        self.navigationController.interactivePopGestureRecognizer.delegate = self;
+        self.navigationController.interactivePopGestureRecognizer.enabled = YES;
+    }
+    
     if (self.sw_needsRefreshOnAppear) {
         self.sw_needsRefreshOnAppear = NO;
         [self reloadFromManagerAndRender:NO];
@@ -799,7 +812,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     }
     if (latest) self.module = latest;
 
-    self.titleLabel.text = self.module.title ?: @"Album";
+    self.titleLabel.text = self.module.title ?: NSLocalizedString(@"Album", nil);
     
     NSArray<NSString *> *newAll = self.module.assetIDs ?: @[];
     BOOL idsChanged = (self.allAssetIDs == nil) || ![self.allAssetIDs isEqualToArray:newAll];
@@ -896,7 +909,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         NSFontAttributeName: SWFont(15, UIFontWeightMedium)
     };
 
-    [att appendAttributedString:[[NSAttributedString alloc] initWithString:@"Files: " attributes:kFiles]];
+    [att appendAttributedString:[[NSAttributedString alloc] initWithString:NSLocalizedString(@"Files: ", nil) attributes:kFiles]];
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%lu", (unsigned long)total] attributes:kNum]];
 
     if (done) {
@@ -911,7 +924,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
             NSFontAttributeName: SWFont(15, UIFontWeightMedium)
         };
 
-        [att appendAttributedString:[[NSAttributedString alloc] initWithString:@" Can free up " attributes:kFree]];
+        [att appendAttributedString:[[NSAttributedString alloc] initWithString:NSLocalizedString(@" Can free up ", nil) attributes:kFree]];
         [att appendAttributedString:[[NSAttributedString alloc] initWithString:SWHumanBytesNoSpace(bytes) attributes:kBytes]];
     }
 
@@ -964,16 +977,16 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
     if (next) {
         if (next.type == SwipeModuleTypeMonth) {
-            NSString *t = [NSString stringWithFormat:@"Next Album > %@", (next.title.length ? next.title : @"Next")];
+            NSString *t = [NSString stringWithFormat:NSLocalizedString(@"Next Album > %@", nil), (next.title.length ? next.title : NSLocalizedString(@"Next", nil))];
             [self.nextAlbumBtn setTitle:t forState:UIControlStateNormal];
         } else if (next.type == SwipeModuleTypeRecentDay) {
             NSString *ymd = SWDayKeyFromModule(next) ?: @"";
             NSString *wk = SWWeekdayFromYMD(ymd);
-            if (wk.length == 0) wk = (next.title.length ? next.title : @"Next");
-            NSString *t = [NSString stringWithFormat:@"Next Album > %@", wk];
+            if (wk.length == 0) wk = (next.title.length ? next.title : NSLocalizedString(@"Next", nil));
+            NSString *t = [NSString stringWithFormat:NSLocalizedString(@"Next Album > %@", nil), wk];
             [self.nextAlbumBtn setTitle:t forState:UIControlStateNormal];
         } else {
-            [self.nextAlbumBtn setTitle:@"Next Album" forState:UIControlStateNormal];
+            [self.nextAlbumBtn setTitle:NSLocalizedString(@"Next Album", nil) forState:UIControlStateNormal];
         }
         self.nextAlbumBtn.hidden = NO;
     } else {
@@ -983,7 +996,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
     // Total archived bytes
     uint64_t totalBytes = (uint64_t)[[SwipeManager shared] totalArchivedBytesCached];
-    NSString *btnTitle = [NSString stringWithFormat:@"View Archived Files(%@)", SWHumanBytesNoSpace(totalBytes)];
+    NSString *btnTitle = [NSString stringWithFormat:NSLocalizedString(@"View Archived Files(%@)", nil), SWHumanBytesNoSpace(totalBytes)];
     [self.viewArchivedBtn setTitle:btnTitle forState:UIControlStateNormal];
 }
 
@@ -1076,12 +1089,11 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     SwipeCardView *oldMid    = self.cards[1];
     SwipeCardView *oldBottom = self.cards[2];
 
-    // 轮转：mid->top, bottom->mid, oldTop->bottom(复用)
+    // 轮转：mid->top, bottom->mid
     self.cards[0] = oldMid;
     self.cards[1] = oldBottom;
     self.cards[2] = oldTop;
 
-    // ✅把所有卡状态先清干净
     for (SwipeCardView *c in self.cards) {
         [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:c];
         c.transform = CGAffineTransformIdentity;
@@ -1089,7 +1101,6 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         c.alpha = 1.0;
     }
 
-    // ✅关键：oldTop 刚刚飞出屏幕 —— 复用它做 bottom 时，必须“瞬移到栈底并隐藏”，不能参与动画回归
     oldTop.hidden = YES;
     oldTop.alpha = 0.0;
     [UIView performWithoutAnimation:^{
@@ -1116,7 +1127,6 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     [self.cardsHost bringSubviewToFront:self.cards[1]]; // mid
     [self.cardsHost bringSubviewToFront:self.cards[0]]; // top
 
-    // ✅只动画“剩下的两张上移”，bottom 复用卡不做从屏外回来的动画
     void (^applyFrames)(void) = ^{
         self.cards[0].frame = SWCardFrameForIndex(0); // oldMid -> top
         self.cards[1].frame = SWCardFrameForIndex(1); // oldBottom -> mid
@@ -1128,7 +1138,6 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         [self updateTopUIFromManager];
         [self scrollThumbsToTopIfNeededAnimated:animated];
 
-        // ✅新 bottom（复用的 oldTop）最后再淡入出现
         if (newBottomAid.length) {
             oldTop.hidden = NO;
             [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
@@ -1157,10 +1166,6 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 }
 
 static inline CGRect SWCardFrameForIndex(NSInteger idx) {
-    // cardArea: 330x543
-    // bottom: 256x416 at y=0
-    // middle: 320x520 at y=12
-    // top:    330x520 at y=23
     if (idx == 0) { // top
         return CGRectMake(0, 23, 330, 520);
     } else if (idx == 1) { // middle
@@ -1190,9 +1195,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         card.userInteractionEnabled = NO;
     }
 
-    // cards 数组现在是 [bottom, middle, top]? 我们希望 0=top
-    // 上面 add 的顺序是 i=count-1..0，最后加入的是 top，cards 内顺序是 [bottom, middle, top]
-    // 调整为 0=top
     self.cards = [[[self.cards reverseObjectEnumerator] allObjects] mutableCopy];
 
     [self attachPanToTopCard];
@@ -1265,15 +1267,14 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     CGFloat progress = MIN(1.0, fabs(x) / (w * 0.55));
 
     if (pan.state == UIGestureRecognizerStateBegan) {
-        // ✅ 顶部中心支点：底部摆动更明显
         [self sw_setAnchorPoint:CGPointMake(0.5, 0.0) forView:card];
     }
 
-    // ✅ 顶部也要“轻微位移”：不要 1:1 跟手，做弱位移更像钟摆
+    // 顶部也要“轻微位移”：不要 1:1 跟手，做弱位移更像钟摆
     CGFloat tx = x * 0.35;                 // 顶部轻微跟随左右
     CGFloat ty = (t.y * 0.08) - progress*18; // 轻微上下 + 摆动带一点上提
 
-    // ✅ 方向修正：右滑要顺时针 => rotation 为负
+    // 方向修正：右滑要顺时针 => rotation 为负
     CGFloat maxAngle = (CGFloat)(M_PI / 10.0); // 18°
     CGFloat rot = -(x / w) * maxAngle;
 
@@ -1285,9 +1286,11 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     // hint
     if (x > 25) {
         card.hintLabel.text = @"Keep";
+        card.hintLabel.textAlignment = NSTextAlignmentRight;
         card.hintLabel.alpha = MIN(1.0, x / 120.0);
     } else if (x < -25) {
         card.hintLabel.text = @"Archive";
+        card.hintLabel.textAlignment = NSTextAlignmentLeft;
         card.hintLabel.alpha = MIN(1.0, -x / 120.0);
     } else {
         card.hintLabel.alpha = 0;
@@ -1295,13 +1298,13 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     if (pan.state == UIGestureRecognizerStateEnded || pan.state == UIGestureRecognizerStateCancelled) {
 
-        // ✅ 先判断“快速甩动”，快速滑动也要适配
+        // 先判断“快速甩动”，快速滑动也要适配
         CGFloat vx = v.x;
 
         BOOL flingRight = (vx > 900);
         BOOL flingLeft  = (vx < -900);
 
-        // ✅ 再判断“位移阈值”，灵敏度稍微高一点
+        // 再判断“位移阈值”，灵敏度稍微高一点
         CGFloat threshold = w * 0.35;
 
         if (flingRight || x > threshold) {
@@ -1313,7 +1316,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
             return;
         }
 
-        // ✅ 回弹：先把 transform 回到 identity（保持顶部支点）
+        // 回弹：先把 transform 回到 identity（保持顶部支点）
         [UIView animateWithDuration:0.22
                               delay:0
              usingSpringWithDamping:0.9
@@ -1324,7 +1327,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
             card.hintLabel.alpha = 0;
         } completion:^(__unused BOOL finished) {
 
-            // ✅ 回弹结束再把支点复位到中心，避免“中途改 anchor 抖一下”
+            // 回弹结束再把支点复位到中心，避免“中途改 anchor 抖一下”
             [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:card];
             [self layoutCardsAnimated:YES];
         }];
@@ -1335,13 +1338,14 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 - (void)onKeepBtn    { [self commitTopCardArchived:NO  velocity:CGPointZero]; }
 
 - (void)commitTopCardArchived:(BOOL)archived velocity:(CGPoint)velocity {
-    if (self.cardAnimating) return; // ✅ 防连点 / 防重复
+    if (self.cardAnimating) return; // 防连点 / 防重复
+    self.sw_hasOperated = YES;
     SwipeCardView *top = self.cards.firstObject;
     if (!top) return;
 
     self.cardAnimating = YES;
 
-    // ✅ 如果手势结束时支点已复位，这里确保是顶部中心（钟摆飞出一致）
+    // 如果手势结束时支点已复位，这里确保是顶部中心（钟摆飞出一致）
     [self sw_setAnchorPoint:CGPointMake(0.5, 0.0) forView:top];
 
     // 预取下一张（更稳）
@@ -1356,12 +1360,12 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     CGFloat dir = archived ? -1.0 : 1.0;
 
-    // ✅ 飞出：x 方向更大，y 给一点“向下/斜飞”的趋势（更像从顶部甩出去）
+    // 飞出：x 方向更大，y 给一点“向下/斜飞”的趋势（更像从顶部甩出去）
     CGFloat viewW = self.view.bounds.size.width;
     CGFloat offX = dir * (viewW * 1.35) + velocity.x * 0.22; // 甩得快飞更远
     CGFloat offY = velocity.y * 0.01;
 
-    // ✅ 额外旋转：右滑顺时针（负角度）
+    // 额外旋转：右滑顺时针（负角度）
     CGFloat extraRot = -dir * (CGFloat)(M_PI / 8.5);
 
     [UIView animateWithDuration:0.28
@@ -1375,7 +1379,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
         NSString *aid = top.assetID ?: @"";
 
-        // ✅ 飞出后立刻隐藏+清图，避免复用时“像回到底部”
+        // 飞出后立刻隐藏+清图，避免复用时“像回到底部”
         top.hidden = YES;
         top.imageView.image = nil;
         top.alpha = 1.0;
@@ -1398,11 +1402,11 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         [[SwipeManager shared] setCurrentUnprocessedAssetID:(topID.length ? topID : @"")
                                                 forModuleID:self.module.moduleID];
 
-        // ✅ 刷新卡堆（轮转复用）
+        // 刷新卡
         [self sw_refreshCardStackAfterRemovingTopAnimated:YES completion:^{
             self.archiveBtn.userInteractionEnabled = YES;
             self.keepBtn.userInteractionEnabled = YES;
-            self.cardAnimating = NO; // ✅ 动画真正结束才解锁
+            self.cardAnimating = NO; // 动画真正结束才解锁
         }];
     }];
 }
@@ -1416,7 +1420,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     CGFloat scale = UIScreen.mainScreen.scale;
     CGSize ts = CGSizeMake(targetSize.width * scale, targetSize.height * scale);
 
-    // 如果你的 imageManager 是 PHCachingImageManager，直接走缓存接口最好
     if ([self.imageManager isKindOfClass:PHCachingImageManager.class]) {
         [(PHCachingImageManager *)self.imageManager startCachingImagesForAssets:@[asset]
                                                                     targetSize:ts
@@ -1425,7 +1428,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         return;
     }
 
-    // 否则退化为“预请求一次”来暖缓存（回调不用管）
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.networkAccessAllowed = YES;
     opt.resizeMode = PHImageRequestOptionsResizeModeFast;
@@ -1437,7 +1439,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
                                     options:opt
                               resultHandler:^(__unused UIImage * _Nullable result,
                                               __unused NSDictionary * _Nullable info) {
-        // no-op: 只为预热缓存
     }];
 }
 
@@ -1462,10 +1463,316 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     [self sw_reloadThumbForAssetIDNoFlicker:aid];
 }
 
+#pragma mark - Exit Popup
+
+- (void)sw_showExitPopup {
+    if (self.sw_exitPopup) return;
+
+    [self sw_lockAction];
+
+    UIView *mask = [UIView new];
+    mask.translatesAutoresizingMaskIntoConstraints = NO;
+    mask.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.35];
+    mask.alpha = 0.0;
+    [self.view addSubview:mask];
+    [NSLayoutConstraint activateConstraints:@[
+        [mask.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [mask.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [mask.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [mask.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+    ]];
+    self.sw_exitMask = mask;
+
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(sw_exitMaskTapped)];
+    tap.cancelsTouchesInView = YES;
+    tap.delegate = self;
+    [mask addGestureRecognizer:tap];
+
+    UIView *popup = [UIView new];
+    popup.translatesAutoresizingMaskIntoConstraints = NO;
+    popup.backgroundColor = UIColor.whiteColor;
+    popup.layer.cornerRadius = 20;
+    popup.layer.masksToBounds = YES;
+    popup.alpha = 0.0;
+    popup.transform = CGAffineTransformMakeScale(0.98, 0.98);
+    [mask addSubview:popup];
+    self.sw_exitPopup = popup;
+
+    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+        [popup.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:36],
+        [popup.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-36],
+        [popup.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+
+        [popup.topAnchor constraintGreaterThanOrEqualToAnchor:safe.topAnchor constant:20],
+        [popup.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:-20],
+    ]];
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = NSLocalizedString(@"View Archived Files", nil);
+    title.textAlignment = NSTextAlignmentCenter;
+    title.textColor = UIColor.blackColor;
+    title.font = SWFont(20, UIFontWeightSemibold);
+    [popup addSubview:title];
+
+    UILabel *msg = [UILabel new];
+    msg.translatesAutoresizingMaskIntoConstraints = NO;
+    msg.textAlignment = NSTextAlignmentCenter;
+    msg.numberOfLines = 0;
+    msg.textColor = UIColor.blackColor;
+    msg.font = SWFont(15, UIFontWeightRegular);
+    msg.text = NSLocalizedString(@"You can perform this action now to free up space, or do it at any convenient time", nil);
+    [popup addSubview:msg];
+
+    // ===== 表格（同 doneTable 样式）=====
+    UIView *table = [UIView new];
+    table.translatesAutoresizingMaskIntoConstraints = NO;
+    table.layer.cornerRadius = 16;
+    table.layer.borderWidth = 2;
+    table.layer.borderColor = SWHexRGBA(0x024DFFFF).CGColor;
+    table.backgroundColor = UIColor.clearColor;
+    [popup addSubview:table];
+
+    UIView *divider = [UIView new];
+    divider.translatesAutoresizingMaskIntoConstraints = NO;
+    divider.backgroundColor = [SWHexRGBA(0x024DFFFF) colorWithAlphaComponent:0.40];
+    [table addSubview:divider];
+
+    UIView *leftCol = [UIView new];
+    leftCol.translatesAutoresizingMaskIntoConstraints = NO;
+    [table addSubview:leftCol];
+
+    UIView *rightCol = [UIView new];
+    rightCol.translatesAutoresizingMaskIntoConstraints = NO;
+    [table addSubview:rightCol];
+
+    UILabel *aTitle = [UILabel new];
+    aTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    aTitle.text = NSLocalizedString(@"Archive", nil);
+    aTitle.textColor = UIColor.blackColor;
+    aTitle.font = SWFont(17, UIFontWeightRegular);
+    aTitle.textAlignment = NSTextAlignmentCenter;
+    [leftCol addSubview:aTitle];
+
+    UILabel *aValue = [UILabel new];
+    aValue.translatesAutoresizingMaskIntoConstraints = NO;
+    aValue.textColor = UIColor.blackColor;
+    aValue.font = SWFont(40, UIFontWeightSemibold);
+    aValue.textAlignment = NSTextAlignmentCenter;
+    aValue.text = @"0";
+    [leftCol addSubview:aValue];
+    self.sw_exitArchiveValue = aValue;
+
+    UILabel *kTitle = [UILabel new];
+    kTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    kTitle.text = NSLocalizedString(@"Keep", nil);
+    kTitle.textColor = UIColor.blackColor;
+    kTitle.font = SWFont(17, UIFontWeightRegular);
+    kTitle.textAlignment = NSTextAlignmentCenter;
+    [rightCol addSubview:kTitle];
+
+    UILabel *kValue = [UILabel new];
+    kValue.translatesAutoresizingMaskIntoConstraints = NO;
+    kValue.textColor = UIColor.blackColor;
+    kValue.font = SWFont(40, UIFontWeightSemibold);
+    kValue.textAlignment = NSTextAlignmentCenter;
+    kValue.text = @"0";
+    [rightCol addSubview:kValue];
+    self.sw_exitKeepValue = kValue;
+
+    UIButton *viewBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    viewBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    viewBtn.backgroundColor = SWHexRGBA(0x024DFFFF);
+    viewBtn.layer.cornerRadius = 16;
+    viewBtn.titleLabel.font = SWFont(17, UIFontWeightRegular);
+    [viewBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    [viewBtn addTarget:self action:@selector(sw_exitViewArchivedTapped) forControlEvents:UIControlEventTouchUpInside];
+    [popup addSubview:viewBtn];
+    self.sw_exitViewArchivedBtn = viewBtn;
+
+    UIButton *laterBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    laterBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    laterBtn.backgroundColor = SWHexRGBA(0xF6F6F6FF);
+    laterBtn.layer.cornerRadius = 16;
+    laterBtn.titleLabel.font = SWFont(17, UIFontWeightMedium);
+    [laterBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+    [laterBtn setTitle:NSLocalizedString(@"Later", nil) forState:UIControlStateNormal];
+    [laterBtn addTarget:self action:@selector(sw_exitLaterTapped) forControlEvents:UIControlEventTouchUpInside];
+    [popup addSubview:laterBtn];
+
+    // layout
+    [NSLayoutConstraint activateConstraints:@[
+        [title.topAnchor constraintEqualToAnchor:popup.topAnchor constant:40],
+        [title.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:25],
+        [title.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-25],
+
+        [msg.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:10],
+        [msg.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:25],
+        [msg.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-25],
+
+        [table.topAnchor constraintEqualToAnchor:msg.bottomAnchor constant:30],
+        [table.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:25],
+        [table.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-25],
+        [table.heightAnchor constraintEqualToConstant:100],
+
+        [divider.centerXAnchor constraintEqualToAnchor:table.centerXAnchor],
+        [divider.topAnchor constraintEqualToAnchor:table.topAnchor constant:12],
+        [divider.bottomAnchor constraintEqualToAnchor:table.bottomAnchor constant:-12],
+        [divider.widthAnchor constraintEqualToConstant:1],
+
+        [leftCol.leadingAnchor constraintEqualToAnchor:table.leadingAnchor],
+        [leftCol.trailingAnchor constraintEqualToAnchor:divider.leadingAnchor],
+        [leftCol.topAnchor constraintEqualToAnchor:table.topAnchor],
+        [leftCol.bottomAnchor constraintEqualToAnchor:table.bottomAnchor],
+
+        [rightCol.leadingAnchor constraintEqualToAnchor:divider.trailingAnchor],
+        [rightCol.trailingAnchor constraintEqualToAnchor:table.trailingAnchor],
+        [rightCol.topAnchor constraintEqualToAnchor:table.topAnchor],
+        [rightCol.bottomAnchor constraintEqualToAnchor:table.bottomAnchor],
+
+        [aTitle.topAnchor constraintEqualToAnchor:leftCol.topAnchor constant:14],
+        [aTitle.centerXAnchor constraintEqualToAnchor:leftCol.centerXAnchor],
+        [aValue.topAnchor constraintEqualToAnchor:aTitle.bottomAnchor constant:6],
+        [aValue.centerXAnchor constraintEqualToAnchor:leftCol.centerXAnchor],
+
+        [kTitle.topAnchor constraintEqualToAnchor:rightCol.topAnchor constant:14],
+        [kTitle.centerXAnchor constraintEqualToAnchor:rightCol.centerXAnchor],
+        [kValue.topAnchor constraintEqualToAnchor:kTitle.bottomAnchor constant:6],
+        [kValue.centerXAnchor constraintEqualToAnchor:rightCol.centerXAnchor],
+
+        [viewBtn.topAnchor constraintEqualToAnchor:table.bottomAnchor constant:30],
+        [viewBtn.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:25],
+        [viewBtn.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-25],
+        [viewBtn.heightAnchor constraintEqualToConstant:52],
+
+        [laterBtn.topAnchor constraintEqualToAnchor:viewBtn.bottomAnchor constant:15],
+        [laterBtn.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:25],
+        [laterBtn.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-25],
+        [laterBtn.heightAnchor constraintEqualToConstant:52],
+
+        [laterBtn.bottomAnchor constraintEqualToAnchor:popup.bottomAnchor constant:-30],
+    ]];
+
+    // 填充数值（Archive/Keep + bytes）
+    [self sw_updateExitPopupNumbers];
+
+    [UIView animateWithDuration:0.18 animations:^{
+        mask.alpha = 1.0;
+        popup.alpha = 1.0;
+        popup.transform = CGAffineTransformIdentity;
+    }];
+}
+
+- (void)sw_updateExitPopupNumbers {
+    SwipeManager *mgr = [SwipeManager shared];
+
+    NSUInteger archived = [mgr archivedCountInModule:self.module];
+
+    NSUInteger kept = 0;
+    SEL sel = NSSelectorFromString(@"keptCountInModule:");
+    if ([mgr respondsToSelector:sel]) {
+        NSUInteger (*func)(id, SEL, id) = (void *)[mgr methodForSelector:sel];
+        kept = func(mgr, sel, self.module);
+    } else {
+        NSUInteger processed = [mgr processedCountInModule:self.module];
+        kept = (processed >= archived) ? (processed - archived) : 0;
+    }
+
+    self.sw_exitArchiveValue.text = [NSString stringWithFormat:@"%lu", (unsigned long)archived];
+    self.sw_exitKeepValue.text    = [NSString stringWithFormat:@"%lu", (unsigned long)kept];
+
+    uint64_t totalBytes = (uint64_t)[[SwipeManager shared] totalArchivedBytesCached];
+    NSString *sizeStr = SWHumanBytesNoSpace(totalBytes);
+    NSString *btnTitle = [NSString stringWithFormat:@"%@ (%@)", NSLocalizedString(@"View Archived Files", nil), sizeStr];
+    [self.sw_exitViewArchivedBtn setTitle:btnTitle forState:UIControlStateNormal];
+}
+
+- (void)sw_exitMaskTapped {
+    // 只关闭弹窗，不返回（避免误触就退出）
+    [self sw_dismissExitPopupThen:nil];
+}
+
+- (void)sw_exitViewArchivedTapped {
+    __weak typeof(self) ws = self;
+    [self sw_dismissExitPopupThen:^{
+        __strong typeof(ws) self = ws;
+        if (!self) return;
+        UINavigationController *nav = self.navigationController ?: [self sw_currentNav];
+        if (!nav) return;
+        ASArchivedFilesViewController *vc = [ASArchivedFilesViewController new];
+        [nav pushViewController:vc animated:YES];
+    }];
+}
+
+- (void)sw_exitLaterTapped {
+    __weak typeof(self) ws = self;
+    [self sw_dismissExitPopupThen:^{
+        __strong typeof(ws) self = ws;
+        if (!self) return;
+        UINavigationController *nav = self.navigationController ?: [self sw_currentNav];
+        if (!nav) return;
+        [nav popViewControllerAnimated:YES];
+    }];
+}
+
+- (void)sw_dismissExitPopupThen:(void(^)(void))completion {
+    if (!self.sw_exitPopup) { if (completion) completion(); return; }
+
+    UIView *mask = self.sw_exitMask;
+    UIView *popup = self.sw_exitPopup;
+
+    [UIView animateWithDuration:0.18 animations:^{
+        mask.alpha = 0.0;
+        popup.alpha = 0.0;
+        popup.transform = CGAffineTransformMakeScale(0.98, 0.98);
+    } completion:^(__unused BOOL finished) {
+        [popup removeFromSuperview];
+        [mask removeFromSuperview];
+        self.sw_exitPopup = nil;
+        self.sw_exitMask = nil;
+        self.sw_exitArchiveValue = nil;
+        self.sw_exitKeepValue = nil;
+        self.sw_exitViewArchivedBtn = nil;
+
+        // 解除锁（如果此时没 pop）
+        [self sw_unlockAction];
+
+        if (completion) completion();
+    }];
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
+    if (gestureRecognizer.view == self.sw_exitMask && self.sw_exitPopup) {
+        CGPoint p = [touch locationInView:self.sw_exitMask];
+        if (CGRectContainsPoint(self.sw_exitPopup.frame, p)) return NO;
+    }
+    return YES;
+}
+
 #pragma mark - Buttons (Undo / Sort / Nav)
 
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
+    if (gestureRecognizer == self.navigationController.interactivePopGestureRecognizer) {
+        if (self.cardAnimating) return NO;
+
+        if (self.sw_hasOperated) {
+            [self sw_showExitPopup];
+            return NO;
+        }
+    }
+    return YES;
+}
+
 - (void)onBack {
-    UINavigationController *nav = [self sw_currentNav];
+    if (self.cardAnimating) return;
+
+    if (self.sw_hasOperated) {
+        [self sw_showExitPopup];
+        return;
+    }
+
+    UINavigationController *nav = self.navigationController ?: [self sw_currentNav];
     if (!nav) return;
     [nav popViewControllerAnimated:YES];
 }
@@ -1473,11 +1780,12 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 - (void)undoTapped {
     if (self.cardAnimating) return;
     if (self.sw_actionLocked) return;
+    self.sw_hasOperated = YES;
 
     NSString *undoneAid = [[SwipeManager shared] undoLastActionAssetIDInModuleID:self.module.moduleID];
     if (undoneAid.length == 0) return;
 
-    // ✅ 撤回后：强制按 manager 最新应处理顺序刷新，并把 undone 置顶（用户感知更强）
+    // 撤回后：强制按 manager 最新应处理顺序刷新，并把 undone 置顶
     [self sw_forceRebuildFromManagerAnimated:YES keepFocusTop:undoneAid];
 }
 
@@ -1575,7 +1883,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     // header
     UILabel *hdr = [UILabel new];
     hdr.translatesAutoresizingMaskIntoConstraints = NO;
-    hdr.text = @"Sort by";
+    hdr.text = NSLocalizedString(@"Sort by", nil);
     hdr.font = SWFont(16, UIFontWeightRegular);
     hdr.textColor = SWHexRGBA(0xEBEBF599);
     [panel addSubview:hdr];
@@ -1586,17 +1894,16 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     [panel addSubview:line];
 
     BOOL asc = self.module.sortAscending;
-    UIView *rowLatest = [self sw_sortRowWithTitle:@"Latest" selected:(!asc) action:@selector(sw_sortPickLatest)];
-    UIView *rowOldest = [self sw_sortRowWithTitle:@"Oldest" selected:(asc)  action:@selector(sw_sortPickOldest)];
+    UIView *rowLatest = [self sw_sortRowWithTitle:NSLocalizedString(@"Latest", nil) selected:(!asc) action:@selector(sw_sortPickLatest)];
+    UIView *rowOldest = [self sw_sortRowWithTitle:NSLocalizedString(@"Oldest", nil) selected:(asc)  action:@selector(sw_sortPickOldest)];
     [panel addSubview:rowLatest];
     [panel addSubview:rowOldest];
 
-    // ✅ 先算 panel frame（锚点：sortIconBtn 上方）
     CGRect anchor = [self.sortIconBtn convertRect:self.sortIconBtn.bounds toView:self.view];
     CGFloat panelW = 220;
     CGFloat panelH = 44 + 52 + 52;
 
-    CGFloat x = CGRectGetMaxX(anchor) - panelW;                 // 右对齐 sort 图标
+    CGFloat x = CGRectGetMaxX(anchor) - panelW;
     x = MIN(MAX(12, x), self.view.bounds.size.width - panelW - 12);
 
     CGFloat y = CGRectGetMinY(anchor) - panelH - 8;
@@ -1643,7 +1950,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     if (latest) self.module = latest;
 
     // 2) 重新拿“排序后的展示数组”
-    // ⚠️ 关键：不要依赖 idsChanged；排序后也要强制用 manager/module 的最新顺序覆盖 allAssetIDs
     NSArray<NSString *> *newAll = self.module.assetIDs ?: @[];
     self.allAssetIDs = newAll;
 
@@ -1684,11 +1990,19 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     // 顶部 UI
     [self updateTopUIFromManager];
 
-    // Done
     BOOL done = (self.unprocessedIDs.count == 0);
     [self showDoneState:done];
+
     if (done) {
         for (SwipeCardView *c in self.cards) { c.hidden = YES; c.userInteractionEnabled = NO; }
+    } else {
+        [self sw_prepare3CardsIfNeeded];
+
+        [self.view layoutIfNeeded];
+
+        [self sw_applyTop3CardsAnimated:NO];
+        [self sw_refreshVisibleThumbCells];
+        [self scrollThumbsToTopIfNeededAnimated:animated];
     }
 
     [UIView performWithoutAnimation:^{
@@ -1910,10 +2224,12 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         }
         card.hidden = NO;
 
-        if (![card.assetID isEqualToString:aid]) {
+        if (![card.assetID isEqualToString:aid] || card.imageView.image == nil) {
             card.assetID = aid;
             card.imageView.image = nil;
-            [self loadImageForAssetID:aid intoImageView:card.imageView targetSize:card.bounds.size];
+            [self loadImageForAssetID:aid
+                        intoImageView:card.imageView
+                           targetSize:card.bounds.size];
         }
 
         [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:card];
@@ -1956,11 +2272,9 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 - (void)sw_prepare3CardsIfNeeded {
     if (self.cards.count == 3) return;
 
-    // 先清理（仅首次或你之前已重建过）
     for (UIView *v in self.cardsHost.subviews) [v removeFromSuperview];
     [self.cards removeAllObjects];
 
-    // 添加顺序：bottom -> mid -> top（z 叠放正确）
     SwipeCardView *bottom = [[SwipeCardView alloc] initWithFrame:SWCardFrameForIndex(2)];
     SwipeCardView *mid    = [[SwipeCardView alloc] initWithFrame:SWCardFrameForIndex(1)];
     SwipeCardView *top    = [[SwipeCardView alloc] initWithFrame:SWCardFrameForIndex(0)];
@@ -1971,7 +2285,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     [self.cardsHost addSubview:mid];
     [self.cardsHost addSubview:top];
 
-    // 固定数组语义：0=top, 1=mid, 2=bottom
     [self.cards addObject:top];
     [self.cards addObject:mid];
     [self.cards addObject:bottom];
@@ -1986,7 +2299,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     NSString *aid = self.allAssetIDs[indexPath.item];
     SwipeAssetStatus st = [[SwipeManager shared] statusForAssetID:aid];
-    if (st != SwipeAssetStatusUnknown) return; // 只允许跳到未处理
+    if (st != SwipeAssetStatusUnknown) return;
 
     self.focusAssetID = aid;
     [[SwipeManager shared] setCurrentUnprocessedAssetID:aid forModuleID:self.module.moduleID];
@@ -2002,7 +2315,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     NSIndexPath *ip = [NSIndexPath indexPathForItem:(NSInteger)idx inSection:0];
 
-    // 关键：确保 reload/layout 完成后再滚
     [self.thumbs layoutIfNeeded];
     dispatch_async(dispatch_get_main_queue(), ^{
         NSInteger items = [self.thumbs numberOfItemsInSection:0];
@@ -2021,7 +2333,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     PHAsset *a = [self.assetCache objectForKey:assetID];
     if (a) return a;
 
-    // 优先用 manager 的缓存（你已有）
     if ([[SwipeManager shared] respondsToSelector:@selector(assetForID:)]) {
         a = [[SwipeManager shared] assetForID:assetID];
         if (a) {

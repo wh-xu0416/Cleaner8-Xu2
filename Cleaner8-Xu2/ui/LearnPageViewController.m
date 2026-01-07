@@ -1,4 +1,5 @@
 #import "LearnPageViewController.h"
+#import "Common.h"
 
 #pragma mark - Cell (one page = one big image centered)
 
@@ -18,7 +19,6 @@
         _imgView.clipsToBounds = YES;
         [self.contentView addSubview:_imgView];
 
-        // 目标尺寸 402x402；小屏幕时允许自动缩小（优先级 999）
         NSLayoutConstraint *w = [_imgView.widthAnchor constraintEqualToConstant:402];
         w.priority = 999;
         NSLayoutConstraint *h = [_imgView.heightAnchor constraintEqualToConstant:402];
@@ -61,8 +61,8 @@
 @property (nonatomic, strong) UILabel *titleLabel;        // 浮在 ic_qp 中心
 @property (nonatomic, strong) UILabel *descriptionLabel;  // 说明文字（居中）
 
-@property (nonatomic, strong) UICollectionView *collectionView; // 一屏一张，分页滑动
-@property (nonatomic, strong) UIButton *nextButton;              // 底部贴边（不留底部距离）
+@property (nonatomic, strong) UICollectionView *collectionView;
+@property (nonatomic, strong) UIButton *nextButton;
 
 @property (nonatomic, strong) NSArray<NSString *> *instructions;
 @property (nonatomic, strong) NSArray<NSString *> *imageNames;
@@ -76,11 +76,11 @@ static NSString * const kCellId = @"LearnBigImageCell";
 - (instancetype)init {
     if ((self = [super init])) {
         _instructions = @[
-            @"1、Open The “Photos\" APP",
-            @"2、Open The “Photos\" APP",
-            @"3、Tap the \"Select\" button in the upper right corner",
-            @"4、Click the \"Delete All\" Button on the Top Right Corner",
-            @"5、Next, tap the\n\"Delete From All Devices\" Button"
+            L(@"1、Open The “Photos\" APP"),
+            L(@"2、Open The “Photos\" APP"),
+            L(@"3、Tap the \"Select\" button in the upper right corner"),
+            L(@"4、Click the \"Delete All\" Button on the Top Right Corner"),
+            L(@"5、Next, tap the\n\"Delete From All Devices\" Button")
         ];
         _imageNames = @[@"ic_learn_1", @"ic_learn_2", @"ic_learn_3", @"ic_learn_4", @"ic_learn_5"];
         _currentIndex = 0;
@@ -110,7 +110,6 @@ static NSString * const kCellId = @"LearnBigImageCell";
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
 
-    // 让每一页宽度 = collectionView 的宽度，分页丝滑对齐
     UICollectionViewFlowLayout *layout = (UICollectionViewFlowLayout *)self.collectionView.collectionViewLayout;
     CGSize size = self.collectionView.bounds.size;
     if (!CGSizeEqualToSize(layout.itemSize, size)) {
@@ -126,14 +125,12 @@ static NSString * const kCellId = @"LearnBigImageCell";
 - (void)buildUI {
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
 
-    // 全屏背景（延伸到状态栏 & 底部导航区域）
     self.bgImageView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ic_learn_bg"]];
     self.bgImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.bgImageView.contentMode = UIViewContentModeScaleAspectFill;
     self.bgImageView.clipsToBounds = YES;
     [self.view addSubview:self.bgImageView];
 
-    // TopBar（只放返回按钮；背景继续延伸）
     self.topBar = [[UIView alloc] init];
     self.topBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.topBar.backgroundColor = UIColor.clearColor;
@@ -145,23 +142,20 @@ static NSString * const kCellId = @"LearnBigImageCell";
     [self.backButton addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
     [self.topBar addSubview:self.backButton];
 
-    // ic_qp 居中（342x115）
     self.qpImageView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ic_qp"]];
     self.qpImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.qpImageView.contentMode = UIViewContentModeScaleAspectFit;
     self.qpImageView.userInteractionEnabled = YES;
     [self.view addSubview:self.qpImageView];
 
-    // ic_book 右上角，往上偏移（不再往下）
     self.bookImageView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ic_book"]];
     self.bookImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.bookImageView.contentMode = UIViewContentModeScaleAspectFit;
     [self.view addSubview:self.bookImageView];
 
-    // 标题文字浮在 ic_qp 中心
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.text = @"How to empty\n\"Recently Deleted\" album?";
+    self.titleLabel.text = L(@"How to empty\n\"Recently Deleted\" album?");
     self.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightSemibold];
     self.titleLabel.textColor = UIColor.blackColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -173,7 +167,6 @@ static NSString * const kCellId = @"LearnBigImageCell";
     self.descContainer.backgroundColor = UIColor.clearColor;
     [self.view addSubview:self.descContainer];
 
-    // 说明文字（最多两行，居中显示在容器内）
     self.descriptionLabel = [[UILabel alloc] init];
     self.descriptionLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.descriptionLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightSemibold];
@@ -181,12 +174,10 @@ static NSString * const kCellId = @"LearnBigImageCell";
     self.descriptionLabel.textAlignment = NSTextAlignmentCenter;
     self.descriptionLabel.numberOfLines = 2;
     self.descriptionLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    // 关键：不要让 label “撑开”容器
     [self.descriptionLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisVertical];
 
     [self.descContainer addSubview:self.descriptionLabel];
     
-    // 下方大图：一屏一张，分页左右滑（每张目标 402x402）
     UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
     layout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
     layout.minimumLineSpacing = 0;
@@ -202,10 +193,9 @@ static NSString * const kCellId = @"LearnBigImageCell";
     [self.collectionView registerClass:LearnBigImageCell.class forCellWithReuseIdentifier:kCellId];
     [self.view addSubview:self.collectionView];
 
-    // 底部按钮：不留底部距离
     self.nextButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.nextButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.nextButton setTitle:@"Next" forState:UIControlStateNormal];
+    [self.nextButton setTitle:NSLocalizedString(@"Next", nil) forState:UIControlStateNormal];
     self.nextButton.backgroundColor = [self brandBlue];
     self.nextButton.layer.cornerRadius = 35;
     self.nextButton.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
@@ -216,13 +206,11 @@ static NSString * const kCellId = @"LearnBigImageCell";
 
     // Constraints
     [NSLayoutConstraint activateConstraints:@[
-        // BG full screen
         [self.bgImageView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.bgImageView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.bgImageView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.bgImageView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
-        // TopBar
         [self.topBar.topAnchor constraintEqualToAnchor:safe.topAnchor],
         [self.topBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.topBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -233,25 +221,21 @@ static NSString * const kCellId = @"LearnBigImageCell";
         [self.backButton.widthAnchor constraintEqualToConstant:24],
         [self.backButton.heightAnchor constraintEqualToConstant:24],
 
-        // ic_qp centered horizontally
         [self.qpImageView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.qpImageView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:60],
         [self.qpImageView.widthAnchor constraintEqualToConstant:342],
         [self.qpImageView.heightAnchor constraintEqualToConstant:115],
 
-        // title floats in qp center
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.qpImageView.centerXAnchor constant:-20],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.qpImageView.centerYAnchor constant:-10],
         [self.titleLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.qpImageView.leadingAnchor constant:12],
         [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.qpImageView.trailingAnchor constant:-12],
 
-        // book top-right and shifted UP
         [self.bookImageView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-39],
-        [self.bookImageView.topAnchor constraintEqualToAnchor:self.qpImageView.topAnchor constant:-30], // 往上偏移
+        [self.bookImageView.topAnchor constraintEqualToAnchor:self.qpImageView.topAnchor constant:-30],
         [self.bookImageView.widthAnchor constraintEqualToConstant:88],
         [self.bookImageView.heightAnchor constraintEqualToConstant:73],
 
-        // Next button bottom = 0 (no spacing)
         [self.nextButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:15],
         [self.nextButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-15],
         [self.nextButton.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
@@ -265,7 +249,6 @@ static NSString * const kCellId = @"LearnBigImageCell";
         [self.descriptionLabel.trailingAnchor constraintEqualToAnchor:self.descContainer.trailingAnchor],
         [self.descriptionLabel.centerYAnchor constraintEqualToAnchor:self.descContainer.centerYAnchor],
 
-        // collection view between desc and button
         [self.collectionView.topAnchor constraintEqualToAnchor:self.descContainer.bottomAnchor constant:15],
         [self.collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -287,10 +270,8 @@ static NSString * const kCellId = @"LearnBigImageCell";
 }
 
 - (void)updateStepUIAnimated:(BOOL)animated {
-    // 文案切换
     self.descriptionLabel.text = self.instructions[self.currentIndex];
 
-    // 翻页到对应大图
     if (self.currentIndex < self.imageNames.count) {
         NSIndexPath *idx = [NSIndexPath indexPathForItem:self.currentIndex inSection:0];
         [self.collectionView scrollToItemAtIndexPath:idx
@@ -311,7 +292,7 @@ static NSString * const kCellId = @"LearnBigImageCell";
     return cell;
 }
 
-#pragma mark - UIScrollViewDelegate (手势滑动后同步文案/索引)
+#pragma mark - UIScrollViewDelegate
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
     if (scrollView != self.collectionView) return;

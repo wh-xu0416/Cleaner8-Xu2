@@ -2,6 +2,7 @@
 #import "UIViewController+ASPrivateBackground.h"
 #import "UIViewController+ASRootNav.h"
 #import "ASColors.h"
+#import "Common.h"
 #import "ASPasscodeManager.h"
 #import "SetPasswordViewController.h"
 #import "PrivateListViewController.h"
@@ -45,7 +46,7 @@
 
         UILabel *add = [UILabel new];
         add.translatesAutoresizingMaskIntoConstraints = NO;
-        add.text = @"Add";
+        add.text = NSLocalizedString(@"Add", nil);
         add.textColor = UIColor.whiteColor;
         add.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
         [self.pill addSubview:add];
@@ -142,7 +143,7 @@
 
     self.navTitle = [UILabel new];
     self.navTitle.translatesAutoresizingMaskIntoConstraints = NO;
-    self.navTitle.text = @"Private";
+    self.navTitle.text = NSLocalizedString(@"Private", nil);
     self.navTitle.textColor = UIColor.blackColor;
     self.navTitle.font = [UIFont systemFontOfSize:34 weight:UIFontWeightMedium];
     [bar addSubview:self.navTitle];
@@ -177,7 +178,7 @@
 
     UILabel *desc = [UILabel new];
     desc.translatesAutoresizingMaskIntoConstraints = NO;
-    desc.text = @"Add Photos & Videos to Protected";
+    desc.text = NSLocalizedString(@"Add Photos & Videos to Protected", nil);
     desc.textColor = UIColor.blackColor;
     desc.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
     desc.textAlignment = NSTextAlignmentCenter;
@@ -195,8 +196,8 @@
     ]];
 
     // cards
-    self.photoCard = [[ASPrivateEntryCard alloc] initWithIcon:@"ic_photo_permission_not" title:@"Secret Photos"];
-    self.videoCard = [[ASPrivateEntryCard alloc] initWithIcon:@"ic_video_lock" title:@"Secret Videos"];
+    self.photoCard = [[ASPrivateEntryCard alloc] initWithIcon:@"ic_photo_permission_not" title:NSLocalizedString(@"Secret Photos", nil)];
+    self.videoCard = [[ASPrivateEntryCard alloc] initWithIcon:@"ic_video_lock" title:NSLocalizedString(@"Secret Videos", nil)];
     [self.view addSubview:self.photoCard];
     [self.view addSubview:self.videoCard];
 
@@ -279,8 +280,8 @@
 
 #pragma mark - Navigation
 
-- (void)openPhotos { [self openListWithType:0 title:@"Secret Photos"]; }
-- (void)openVideos { [self openListWithType:1 title:@"Secret Videos"]; }
+- (void)openPhotos { [self openListWithType:0 title:NSLocalizedString(@"Secret Photos", nil)]; }
+- (void)openVideos { [self openListWithType:1 title:NSLocalizedString(@"Secret Videos", nil)]; }
 
 - (void)openListWithType:(NSInteger)type title:(NSString *)title {
     UINavigationController *nav = [self as_rootNav];
@@ -299,7 +300,7 @@
 
         __weak typeof(nav) weakNav = nav;
         vc.onSuccess = ^{
-            // 关键：验证成功后，用 rootNav 继续 push 列表
+            // 验证成功后，用 rootNav 继续 push 列表
             // 此时密码页还在栈顶，先 pop 掉它再 push
             [weakNav popViewControllerAnimated:NO];
             pushList();

@@ -1,4 +1,5 @@
 #import "ASPrivateMediaStore.h"
+#import "Common.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 @interface ASPrivateMediaStore ()
@@ -30,7 +31,7 @@
 }
 
 - (NSURL *)dirForType:(ASPrivateMediaType)type {
-    NSString *name = (type == ASPrivateMediaTypePhoto) ? @"Photos" : @"Videos";
+    NSString *name = (type == ASPrivateMediaTypePhoto) ? NSLocalizedString(@"Photos", nil) : NSLocalizedString(@"Videos", nil);
     NSURL *dir = [[self rootDir] URLByAppendingPathComponent:name isDirectory:YES];
     if (![self.fm fileExistsAtPath:dir.path]) {
         [self.fm createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:nil];

@@ -3,6 +3,7 @@
 #import "DuplicateContactsViewController.h"
 #import "BackupContactsViewController.h"
 #import "ASCustomNavBar.h"
+#import "Common.h"
 #import "ContactsManager.h"
 #import <Contacts/Contacts.h>
 
@@ -42,7 +43,6 @@ static inline UIColor *ASAccent(void) {
 @property (nonatomic, strong) UIControl *cardBackups;
 @property (nonatomic, strong) UIControl *cardAll;
 
-// subtitle labels (for counts)
 @property (nonatomic, strong) UILabel *subDuplicate;
 @property (nonatomic, strong) UILabel *subIncomplete;
 @property (nonatomic, strong) UILabel *subBackups;
@@ -148,7 +148,6 @@ static inline UIColor *ASAccent(void) {
     return [CNContactStore authorizationStatusForEntityType:CNEntityTypeContacts];
 }
 
-// iOS 18+ 才有 Contacts Limited（如果你项目 SDK 没到 iOS 18，这段不会编译进来）
 - (BOOL)isContactsLimitedStatus:(CNAuthorizationStatus)status {
 #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 180000
     if (@available(iOS 18.0, *)) {
@@ -235,7 +234,7 @@ static inline UIColor *ASAccent(void) {
 #pragma mark - Nav
 
 - (void)setupNavBar {
-    self.navBar = [[ASCustomNavBar alloc] initWithTitle:@"Contact"];
+    self.navBar = [[ASCustomNavBar alloc] initWithTitle:NSLocalizedString(@"Contact", nil)];
 
     __weak typeof(self) weakSelf = self;
     self.navBar.onBack = ^{
@@ -256,19 +255,19 @@ static inline UIColor *ASAccent(void) {
 #pragma mark - Cards UI
 
 - (void)buildCards {
-    self.cardDuplicate = [self buildCardWithTitle:@"Duplicate Contacts"
+    self.cardDuplicate = [self buildCardWithTitle:NSLocalizedString(@"Duplicate Contacts", nil)
                                       subtitleLab:&_subDuplicate
                                           action:@selector(tapDuplicate)];
 
-    self.cardIncomplete = [self buildCardWithTitle:@"Incomplete Contacts"
+    self.cardIncomplete = [self buildCardWithTitle:NSLocalizedString(@"Incomplete Contacts", nil)
                                        subtitleLab:&_subIncomplete
                                            action:@selector(tapIncomplete)];
 
-    self.cardBackups = [self buildCardWithTitle:@"Backups"
+    self.cardBackups = [self buildCardWithTitle:NSLocalizedString(@"Backups", nil)
                                     subtitleLab:&_subBackups
                                         action:@selector(tapBackups)];
 
-    self.cardAll = [self buildCardWithTitle:@"All Contacts"
+    self.cardAll = [self buildCardWithTitle:NSLocalizedString(@"All Contacts", nil)
                                 subtitleLab:&_subAll
                                     action:@selector(tapAll)];
 
@@ -363,14 +362,14 @@ static inline UIColor *ASAccent(void) {
 
     UILabel *tip = [UILabel new];
     tip.translatesAutoresizingMaskIntoConstraints = NO;
-    tip.text = @"Contacts Access Is Limited.";
+    tip.text = NSLocalizedString(@"Contacts Access Is Limited.", nil);
     tip.textColor = UIColor.whiteColor;
     tip.font = ASFont(15, UIFontWeightMedium);
     [bar addSubview:tip];
 
     UILabel *settingTextLab = [UILabel new];
     settingTextLab.translatesAutoresizingMaskIntoConstraints = NO;
-    settingTextLab.text = @"Setting";
+    settingTextLab.text = NSLocalizedString(@"Setting", nil);
     settingTextLab.textColor = ASAccent();
     settingTextLab.font = ASFont(15, UIFontWeightMedium);
 
@@ -428,7 +427,7 @@ static inline UIColor *ASAccent(void) {
 
     UILabel *t1 = [UILabel new];
     t1.translatesAutoresizingMaskIntoConstraints = NO;
-    t1.text = @"Allow Contacts Access";
+    t1.text = NSLocalizedString(@"Allow Contacts Access", nil);
     t1.textColor = UIColor.blackColor;
     t1.font = ASFont(20, UIFontWeightMedium);
     t1.textAlignment = NSTextAlignmentCenter;
@@ -436,7 +435,7 @@ static inline UIColor *ASAccent(void) {
 
     UILabel *t2 = [UILabel new];
     t2.translatesAutoresizingMaskIntoConstraints = NO;
-    t2.text = @"To manage duplicates, incomplete contacts,\nand backups, please allow access to your contacts.";
+    t2.text = NSLocalizedString(@"To manage duplicates, incomplete contacts,\nand backups, please allow access to your contacts.", nil);
     t2.textColor = ASRGB(102, 102, 102);
     t2.font = ASFont(13, UIFontWeightRegular);
     t2.numberOfLines = 0;
@@ -448,7 +447,7 @@ static inline UIColor *ASAccent(void) {
     btn.backgroundColor = ASBlue();
     btn.layer.cornerRadius = 35;
     btn.layer.masksToBounds = YES;
-    [btn setTitle:@"Go to Settings" forState:UIControlStateNormal];
+    [btn setTitle:NSLocalizedString(@"Go to Settings", nil) forState:UIControlStateNormal];
     [btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     btn.titleLabel.font = ASFont(20, UIFontWeightRegular);
     btn.contentEdgeInsets = UIEdgeInsetsMake(23, 0, 23, 0);
@@ -502,17 +501,17 @@ static inline UIColor *ASAccent(void) {
         weakSelf.isRefreshing = NO;
 
         if (error) {
-            weakSelf.subDuplicate.text  = @"0 Duplicate Contacts";
-            weakSelf.subIncomplete.text = @"0 Incomplete Contacts";
-            weakSelf.subAll.text        = @"0 All Contacts";
-            weakSelf.subBackups.text    = [NSString stringWithFormat:@"%lu Backups", (unsigned long)backupCount];
+            weakSelf.subDuplicate.text  = NSLocalizedString(@"0 Duplicate Contacts", nil);
+            weakSelf.subIncomplete.text = NSLocalizedString(@"0 Incomplete Contacts", nil);
+            weakSelf.subAll.text        = NSLocalizedString(@"0 All Contacts", nil);
+            weakSelf.subBackups.text    = [NSString stringWithFormat:NSLocalizedString(@"%lu Backups", nil), (unsigned long)backupCount];
             return;
         }
 
-        weakSelf.subDuplicate.text  = [NSString stringWithFormat:@"%lu Duplicate Contacts", (unsigned long)duplicateCount];
-        weakSelf.subIncomplete.text = [NSString stringWithFormat:@"%lu Incomplete Contacts", (unsigned long)incompleteCount];
-        weakSelf.subBackups.text    = [NSString stringWithFormat:@"%lu Backups", (unsigned long)backupCount];
-        weakSelf.subAll.text        = [NSString stringWithFormat:@"%lu All Contacts", (unsigned long)allCount];
+        weakSelf.subDuplicate.text  = [NSString stringWithFormat:NSLocalizedString(@"%lu Duplicate Contacts", nil), (unsigned long)duplicateCount];
+        weakSelf.subIncomplete.text = [NSString stringWithFormat:NSLocalizedString(@"%lu Incomplete Contacts", nil), (unsigned long)incompleteCount];
+        weakSelf.subBackups.text    = [NSString stringWithFormat:NSLocalizedString(@"%lu Backups", nil), (unsigned long)backupCount];
+        weakSelf.subAll.text        = [NSString stringWithFormat:NSLocalizedString(@"%lu All Contacts", nil), (unsigned long)allCount];
     }];
 }
 

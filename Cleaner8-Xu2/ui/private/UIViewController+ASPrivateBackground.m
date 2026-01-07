@@ -44,7 +44,6 @@ static const void *kASGradientKey = &kASGradientKey;
     CAGradientLayer *g = objc_getAssociatedObject(self, kASGradientKey);
     if (!bg || !g) return;
 
-    // 渐变只覆盖顶部 402 高度
     CGFloat width = self.view.bounds.size.width;
     g.frame = CGRectMake(0, 0, width, 402.0);
 }

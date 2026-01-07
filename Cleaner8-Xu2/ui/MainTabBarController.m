@@ -5,6 +5,7 @@
 #import "PrivateViewController.h"
 #import "SwipeViewController.h"
 #import "MoreViewController.h"
+#import "Common.h"
 #import "SwipeManager.h"
 
 @interface MainTabBarController ()
@@ -32,21 +33,21 @@ UIGestureRecognizerDelegate
     [super viewDidLoad];
 
     self.viewControllers = @[
-        [self navWithVC:[HomeViewController new]   title:@"Cleaner" image:@""],
-        [self navWithVC:[VideoViewController new]  title:@"Compress" image:@""],
-        [self navWithVC:[SwipeViewController new]  title:@"Swipe" image:@""],
-        [self navWithVC:[PrivateViewController new]title:@"Private" image:@""],
-        [self navWithVC:[MoreViewController new]   title:@"More" image:@""],
+        [self navWithVC:[HomeViewController new]   title:NSLocalizedString(@"Cleaner", nil) image:@""],
+        [self navWithVC:[VideoViewController new]  title:NSLocalizedString(@"Compress", nil) image:@""],
+        [self navWithVC:[SwipeViewController new]  title:NSLocalizedString(@"Swipe", nil) image:@""],
+        [self navWithVC:[PrivateViewController new]title:NSLocalizedString(@"Private", nil) image:@""],
+        [self navWithVC:[MoreViewController new]   title:NSLocalizedString(@"More", nil) image:@""],
     ];
 
     self.tabBar.hidden = YES;
 
     self.floatingTab = [[ASFloatingTabBar alloc] initWithItems:@[
-        [ASFloatingTabBarItem itemWithTitle:@"Cleaner" normal:@"ic_cleaner_n" selected:@"ic_cleaner_s"],
-        [ASFloatingTabBarItem itemWithTitle:@"Compress" normal:@"ic_video_n"  selected:@"ic_video_s"],
-        [ASFloatingTabBarItem itemWithTitle:@"Swipe" normal:@"ic_swipe_n" selected:@"ic_swipe_s"],
-        [ASFloatingTabBarItem itemWithTitle:@"Private" normal:@"ic_private_n" selected:@"ic_private_s"],
-        [ASFloatingTabBarItem itemWithTitle:@"More" normal:@"ic_more_n" selected:@"ic_more_s"],
+        [ASFloatingTabBarItem itemWithTitle:NSLocalizedString(@"Cleaner", nil) normal:@"ic_cleaner_n" selected:@"ic_cleaner_s"],
+        [ASFloatingTabBarItem itemWithTitle:NSLocalizedString(@"Compress", nil) normal:@"ic_video_n"  selected:@"ic_video_s"],
+        [ASFloatingTabBarItem itemWithTitle:NSLocalizedString(@"Swipe", nil) normal:@"ic_swipe_n" selected:@"ic_swipe_s"],
+        [ASFloatingTabBarItem itemWithTitle:NSLocalizedString(@"Private", nil) normal:@"ic_private_n" selected:@"ic_private_s"],
+        [ASFloatingTabBarItem itemWithTitle:NSLocalizedString(@"More", nil) normal:@"ic_more_n" selected:@"ic_more_s"],
     ]];
 
     __weak typeof(self) weakSelf = self;

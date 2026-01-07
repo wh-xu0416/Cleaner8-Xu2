@@ -763,7 +763,7 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
     NSArray *parts = [s componentsSeparatedByCharactersInSet:remove];
     NSString *key = [parts componentsJoinedByString:@""];
 
-    return key; // 例如：张三 / zhangsan / acmeinc
+    return key;
 }
 
 - (NSString *)_normalizePhone:(NSString *)raw {
@@ -774,7 +774,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
         if (ch >= '0' && ch <= '9') [digits appendFormat:@"%c", ch];
     }
 
-    // 可选：如果带国家码，很多情况下取后11位更符合国内手机号重复判断
     if (digits.length > 11) {
         return [digits substringFromIndex:digits.length - 11];
     }
@@ -835,7 +834,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
             } else if (mode == CMDuplicateModePhone) {
                 outGroups = phoneGroups;
             } else if (mode == CMDuplicateModeNameOrPhone) {
-                // 并集：把两类组拼在一起（注意：这不是“按人合并”的并集，而是“分组并集”）
                 outGroups = [nameGroups arrayByAddingObjectsFromArray:phoneGroups];
             } else { // CMDuplicateModeAll
                 outGroups = [nameGroups arrayByAddingObjectsFromArray:phoneGroups];
@@ -878,7 +876,7 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
             }
         }
 
-        // ✅ 用 primary 做 update（不新建联系人）
+        // 用 primary 做 update（不新建联系人）
         CNMutableContact *merged = [primary mutableCopy];
 
         // 用“字符串”做去重（可选，但很实用）
@@ -957,10 +955,10 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
 
         CNSaveRequest *req = [[CNSaveRequest alloc] init];
 
-        // ✅ 更新 primary
+        // 更新 primary
         [req updateContact:merged];
 
-        // ✅ 删除非 primary
+        // 删除非 primary
         for (CNContact *c in contacts) {
             if ([c.identifier isEqualToString:primary.identifier]) continue;
             [req deleteContact:[c mutableCopy]];
