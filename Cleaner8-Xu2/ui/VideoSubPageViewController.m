@@ -135,6 +135,11 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
         [_cardContainer addSubview:_whiteContent];
 
         _titleLabel = [UILabel new];
+        _titleLabel.numberOfLines = 1;
+        _titleLabel.lineBreakMode = NSLineBreakByClipping; 
+        _titleLabel.adjustsFontSizeToFitWidth = YES;
+        _titleLabel.minimumScaleFactor = 0.75;
+        _titleLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
         _titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
         _titleLabel.textColor = UIColor.blackColor;
         [_whiteContent addSubview:_titleLabel];

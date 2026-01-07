@@ -764,7 +764,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
         _badgeBtn.titleLabel.adjustsFontSizeToFitWidth = NO;
 
         _badgeBtn.backgroundColor = kBadgeBlue();
-        _badgeBtn.layer.cornerRadius = 25;
+        _badgeBtn.layer.cornerRadius = 23;
         _badgeBtn.clipsToBounds = YES;
 
         _badgeBtn.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
