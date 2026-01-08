@@ -27,6 +27,7 @@ UIGestureRecognizerDelegate
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    NSLog(@"UIScreen bounds = %@", NSStringFromCGSize(UIScreen.mainScreen.bounds.size));
 
     self.viewControllers = @[
         [self navWithVC:[VideoViewController new]    title:@"Home" image:@""],

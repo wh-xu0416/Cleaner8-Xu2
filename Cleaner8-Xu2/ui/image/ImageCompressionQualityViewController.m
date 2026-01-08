@@ -2,6 +2,28 @@
 #import "ImageCompressionProgressViewController.h"
 #import <Photos/Photos.h>
 
+#pragma mark - Scale (Design based on iPhone Pro)
+
+static const CGFloat kASDesignBaseWidth = 402;
+
+static inline CGFloat ASScreenMinSide(void) {
+    CGSize sz = UIScreen.mainScreen.bounds.size;
+    return MIN(sz.width, sz.height);
+}
+
+static inline CGFloat ASScaleDown(void) {
+    CGFloat s = ASScreenMinSide() / kASDesignBaseWidth;
+    return MIN(1.0, s);
+}
+
+static inline CGFloat ASV(CGFloat v) { return ceil(v * ASScaleDown()); }
+
+static inline CGFloat ASVR(CGFloat v) { return v * ASScaleDown(); }
+
+static inline CGFloat ASClamp(CGFloat v, CGFloat lo, CGFloat hi) {
+    return MIN(MAX(v, lo), hi);
+}
+
 #pragma mark - Helpers
 
 static uint64_t ASAssetFileSize(PHAsset *asset) {
@@ -23,8 +45,9 @@ static inline UIColor *ASBlue(void) {
 static inline UIColor *ASSelectCardBG(void) {
     return [UIColor colorWithRed:221/255.0 green:229/255.0 blue:247/255.0 alpha:1.0];
 }
-static inline UIFont *ASSB(CGFloat s) { return [UIFont systemFontOfSize:s weight:UIFontWeightSemibold]; }
-static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight:UIFontWeightRegular]; }
+
+static inline UIFont *ASSB(CGFloat s) { return [UIFont systemFontOfSize:round(s * ASScaleDown()) weight:UIFontWeightSemibold]; }
+static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s * ASScaleDown()) weight:UIFontWeightRegular];  }
 
 static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     switch (q) {
@@ -34,7 +57,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     }
 }
 
-#pragma mark - Grid cell with minus (80x80)
+#pragma mark - Grid cell with minus (scaled)
 
 @interface ASMinusCell : UICollectionViewCell
 @property (nonatomic, strong) UIImageView *iv;
@@ -47,7 +70,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
 
-        // ✅ 不裁剪：允许按钮突出
         self.clipsToBounds = NO;
         self.layer.masksToBounds = NO;
         self.contentView.clipsToBounds = NO;
@@ -55,7 +77,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
         self.iv = [UIImageView new];
         self.iv.contentMode = UIViewContentModeScaleAspectFill;
-        self.iv.layer.cornerRadius = 16;
+        self.iv.layer.cornerRadius = ASClamp(ASVR(16), 14, 16);
         self.iv.layer.masksToBounds = YES;
         self.iv.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1];
         self.iv.translatesAutoresizingMaskIntoConstraints = NO;
@@ -64,17 +86,18 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         self.minusBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         self.minusBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
-        self.minusBtn.layer.cornerRadius = 12;
+        CGFloat delSize = ASClamp(ASV(24), 22, 24);
+        self.minusBtn.layer.cornerRadius = delSize / 2.0;
         self.minusBtn.layer.masksToBounds = YES;
 
-        // ✅ ic_delete 22x22 原尺寸显示
         UIImage *delImg = [[UIImage imageNamed:@"ic_delete"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         [self.minusBtn setImage:delImg forState:UIControlStateNormal];
         self.minusBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
 
         self.minusBtn.layer.zPosition = 1000;
-
         [self.contentView addSubview:self.minusBtn];
+
+        CGFloat offset = ASClamp(ASV(8), 6, 8);
 
         [NSLayoutConstraint activateConstraints:@[
             [self.iv.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
@@ -82,10 +105,10 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
             [self.iv.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.iv.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            [self.minusBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-8],
-            [self.minusBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:8],
-            [self.minusBtn.widthAnchor constraintEqualToConstant:24],
-            [self.minusBtn.heightAnchor constraintEqualToConstant:24],
+            [self.minusBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-offset],
+            [self.minusBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:offset],
+            [self.minusBtn.widthAnchor constraintEqualToConstant:delSize],
+            [self.minusBtn.heightAnchor constraintEqualToConstant:delSize],
         ]];
     }
     return self;
@@ -99,7 +122,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
 @end
 
-#pragma mark - Option Row (same layout/style as Video)
+#pragma mark - Option Row (scaled)
 
 @interface ASImageQualityRow : UIControl
 @property (nonatomic) ASImageCompressionQuality quality;
@@ -125,7 +148,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     if (self = [super initWithFrame:CGRectZero]) {
         self.quality = q;
         self.backgroundColor = UIColor.whiteColor;
-        self.layer.cornerRadius = 16;
+        self.layer.cornerRadius = ASClamp(ASVR(16), 14, 16);
         self.layer.masksToBounds = YES;
 
         self.radioIcon = [UIImageView new];
@@ -163,22 +186,25 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         self.percentLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.sizeLabel.translatesAutoresizingMaskIntoConstraints = NO;
 
-        [self as_applyRowLayout_PaddingH15_V12_ContentCenter];
+        [self as_applyRowLayout_Scaled];
         [self applySelectedState:NO];
     }
     return self;
 }
 
-- (void)as_applyRowLayout_PaddingH15_V12_ContentCenter {
+- (void)as_applyRowLayout_Scaled {
     self.pad = [UIView new];
     self.pad.translatesAutoresizingMaskIntoConstraints = NO;
-    self.pad.userInteractionEnabled = NO; // ✅ 防止抢点击
+    self.pad.userInteractionEnabled = NO;
     [self addSubview:self.pad];
 
-    self.padL = [self.pad.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:17];
-    self.padR = [self.pad.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-17];
-    self.padT = [self.pad.topAnchor constraintEqualToAnchor:self.topAnchor constant:14];
-    self.padB = [self.pad.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-14];
+    CGFloat padH = ASClamp(ASV(17), 14, 17);
+    CGFloat padV = ASClamp(ASV(14), 12, 14);
+
+    self.padL = [self.pad.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:padH];
+    self.padR = [self.pad.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-padH];
+    self.padT = [self.pad.topAnchor constraintEqualToAnchor:self.topAnchor constant:padV];
+    self.padB = [self.pad.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-padV];
     [NSLayoutConstraint activateConstraints:@[self.padL, self.padR, self.padT, self.padB]];
 
     UIView *leftGroup = [UIView new];
@@ -196,7 +222,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     h.axis = UILayoutConstraintAxisHorizontal;
     h.alignment = UIStackViewAlignmentCenter;
     h.distribution = UIStackViewDistributionFill;
-    h.spacing = 12;
+    h.spacing = ASClamp(ASV(12), 10, 12);
     h.translatesAutoresizingMaskIntoConstraints = NO;
     h.userInteractionEnabled = NO;
     [self.pad addSubview:h];
@@ -231,18 +257,20 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.percentLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.sizeLabel.translatesAutoresizingMaskIntoConstraints = NO;
 
+    CGFloat radio = ASClamp(ASV(24), 22, 24);
+
     [NSLayoutConstraint activateConstraints:@[
         [self.radioIcon.leadingAnchor constraintEqualToAnchor:leftGroup.leadingAnchor],
         [self.radioIcon.centerYAnchor constraintEqualToAnchor:leftGroup.centerYAnchor],
-        [self.radioIcon.widthAnchor constraintEqualToConstant:24],
-        [self.radioIcon.heightAnchor constraintEqualToConstant:24],
+        [self.radioIcon.widthAnchor constraintEqualToConstant:radio],
+        [self.radioIcon.heightAnchor constraintEqualToConstant:radio],
 
-        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.radioIcon.trailingAnchor constant:14],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.radioIcon.trailingAnchor constant:ASClamp(ASV(14), 12, 14)],
         [self.titleLabel.topAnchor constraintEqualToAnchor:leftGroup.topAnchor],
         [self.titleLabel.trailingAnchor constraintEqualToAnchor:leftGroup.trailingAnchor],
 
         [self.subLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
-        [self.subLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:4],
+        [self.subLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:ASClamp(ASV(4), 3, 4)],
         [self.subLabel.trailingAnchor constraintEqualToAnchor:leftGroup.trailingAnchor],
         [self.subLabel.bottomAnchor constraintEqualToAnchor:leftGroup.bottomAnchor],
     ]];
@@ -255,7 +283,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         [self.percentLabel.leadingAnchor constraintEqualToAnchor:rightGroup.leadingAnchor],
         [self.percentLabel.trailingAnchor constraintEqualToAnchor:rightGroup.trailingAnchor],
 
-        [self.sizeLabel.topAnchor constraintEqualToAnchor:self.percentLabel.bottomAnchor constant:4],
+        [self.sizeLabel.topAnchor constraintEqualToAnchor:self.percentLabel.bottomAnchor constant:ASClamp(ASV(4), 3, 4)],
         [self.sizeLabel.leadingAnchor constraintEqualToAnchor:rightGroup.leadingAnchor],
         [self.sizeLabel.trailingAnchor constraintEqualToAnchor:rightGroup.trailingAnchor],
         [self.sizeLabel.bottomAnchor constraintEqualToAnchor:rightGroup.bottomAnchor],
@@ -370,9 +398,22 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 #pragma mark - UI
 
 - (void)buildUI {
-    CGFloat side = 20;
+    // ===== 统一缩放常量（保持布局一致，只等比缩小）=====
+    CGFloat side = ASClamp(ASV(20), 14, 20);
 
-    // 背景渐变（不变）
+    CGFloat headerH = ASClamp(ASV(56), 50, 56);
+
+    CGFloat compressH = ASClamp(ASV(70), 64, 70);
+
+    CGFloat gridItem = ASClamp(ASV(80), 68, 80);
+    CGFloat gridGap  = ASClamp(ASV(10), 8, 10);
+    CGFloat gridSide = gridItem * 3 + gridGap * 2; // ✅ 始终保持 3x3 布局，只缩小尺寸
+
+    CGFloat rowH = ASClamp(ASV(74), 66, 74);
+
+    CGFloat arrowS = ASClamp(ASV(29), 24, 29);
+
+    // 背景渐变
     self.bgGradient = [CAGradientLayer layer];
     self.bgGradient.colors = @[
         (id)[UIColor colorWithRed:229/255.0 green:241/255.0 blue:251/255.0 alpha:1].CGColor,
@@ -382,13 +423,13 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.bgGradient.endPoint   = CGPointMake(0.5, 1.0);
     [self.view.layer insertSublayer:self.bgGradient atIndex:0];
 
-    // 底部按钮（固定，不变）
+    // 底部按钮（高度缩放，点击区域仍够大）
     self.compressBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.compressBtn setTitle:@"Compress" forState:UIControlStateNormal];
     self.compressBtn.titleLabel.font = ASRG(20);
     [self.compressBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.compressBtn.backgroundColor = ASBlue();
-    self.compressBtn.layer.cornerRadius = 35;
+    self.compressBtn.layer.cornerRadius = compressH / 2.0;
     self.compressBtn.layer.masksToBounds = YES;
     [self.compressBtn addTarget:self action:@selector(onCompress) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.compressBtn];
@@ -427,15 +468,14 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.scrollContentView.backgroundColor = UIColor.clearColor;
     [self.scrollView addSubview:self.scrollContentView];
 
-    // ===== 原来的“内容区域”开始：都加到 scrollContentView 上 =====
-
+    // 内容区
     UIView *preview = [UIView new];
     preview.translatesAutoresizingMaskIntoConstraints = NO;
     [self.scrollContentView addSubview:preview];
 
     UICollectionViewFlowLayout *lay = [UICollectionViewFlowLayout new];
-    lay.minimumLineSpacing = 10;
-    lay.minimumInteritemSpacing = 10;
+    lay.minimumLineSpacing = gridGap;
+    lay.minimumInteritemSpacing = gridGap;
     lay.sectionInset = UIEdgeInsetsZero;
 
     self.grid = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:lay];
@@ -474,12 +514,12 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     baStack.axis = UILayoutConstraintAxisHorizontal;
     baStack.alignment = UIStackViewAlignmentCenter;
     baStack.distribution = UIStackViewDistributionFill;
-    baStack.spacing = 17;
+    baStack.spacing = ASClamp(ASV(17), 14, 17);
     baStack.translatesAutoresizingMaskIntoConstraints = NO;
     [ba addSubview:baStack];
 
-    [self.arrowView.widthAnchor constraintEqualToConstant:29].active = YES;
-    [self.arrowView.heightAnchor constraintEqualToConstant:29].active = YES;
+    [self.arrowView.widthAnchor constraintEqualToConstant:arrowS].active = YES;
+    [self.arrowView.heightAnchor constraintEqualToConstant:arrowS].active = YES;
 
     self.saveLabel = [UILabel new];
     self.saveLabel.font = ASRG(16);
@@ -491,7 +531,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     // Select card
     self.selectCard = [UIView new];
     self.selectCard.backgroundColor = ASSelectCardBG();
-    self.selectCard.layer.cornerRadius = 22;
+    self.selectCard.layer.cornerRadius = ASClamp(ASVR(22), 18, 22);
     self.selectCard.layer.masksToBounds = YES;
     self.selectCard.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -503,7 +543,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
     self.whiteBox = [UIView new];
     self.whiteBox.backgroundColor = UIColor.whiteColor;
-    self.whiteBox.layer.cornerRadius = 16;
+    self.whiteBox.layer.cornerRadius = ASClamp(ASVR(16), 14, 16);
     self.whiteBox.layer.masksToBounds = YES;
     self.whiteBox.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -526,22 +566,17 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
     UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[self.rowSmall, self.rowMedium, self.rowLarge]];
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 5;
+    stack.spacing = ASClamp(ASV(5), 4, 5);
     stack.alignment = UIStackViewAlignmentFill;
     stack.distribution = UIStackViewDistributionFill;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     [self.whiteBox addSubview:stack];
 
-    CGFloat gridItem = 80;
-    CGFloat gridGap = 10;
-    CGFloat gridSide = gridItem * 3 + gridGap * 2;
-    CGFloat headerH = 56;
-
     [NSLayoutConstraint activateConstraints:@[
         [self.compressBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [self.compressBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
         [self.compressBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:0],
-        [self.compressBtn.heightAnchor constraintEqualToConstant:70],
+        [self.compressBtn.heightAnchor constraintEqualToConstant:compressH],
 
         [header.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [header.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -565,15 +600,13 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         [self.scrollContentView.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
         [self.scrollContentView.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
         [self.scrollContentView.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor],
-
         [self.scrollContentView.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
 
         // preview
-        [preview.topAnchor constraintEqualToAnchor:self.scrollContentView.topAnchor constant:10],
+        [preview.topAnchor constraintEqualToAnchor:self.scrollContentView.topAnchor constant:ASClamp(ASV(10), 8, 10)],
         [preview.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
         [preview.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
 
-        // grid centered in preview
         [self.grid.centerXAnchor constraintEqualToAnchor:preview.centerXAnchor],
         [self.grid.topAnchor constraintEqualToAnchor:preview.topAnchor],
         [self.grid.bottomAnchor constraintEqualToAnchor:preview.bottomAnchor],
@@ -581,43 +614,43 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         [self.grid.heightAnchor constraintEqualToConstant:gridSide],
 
         // before/after
-        [ba.topAnchor constraintEqualToAnchor:preview.bottomAnchor constant:10],
+        [ba.topAnchor constraintEqualToAnchor:preview.bottomAnchor constant:ASClamp(ASV(10), 8, 10)],
         [ba.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
         [ba.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
-        [ba.heightAnchor constraintEqualToConstant:34],
+        [ba.heightAnchor constraintEqualToConstant:ASClamp(ASV(34), 30, 34)],
 
         [baStack.centerXAnchor constraintEqualToAnchor:ba.centerXAnchor],
         [baStack.centerYAnchor constraintEqualToAnchor:ba.centerYAnchor],
         [baStack.leadingAnchor constraintGreaterThanOrEqualToAnchor:ba.leadingAnchor],
         [baStack.trailingAnchor constraintLessThanOrEqualToAnchor:ba.trailingAnchor],
 
-        [self.saveLabel.topAnchor constraintEqualToAnchor:ba.bottomAnchor constant:4],
+        [self.saveLabel.topAnchor constraintEqualToAnchor:ba.bottomAnchor constant:ASClamp(ASV(4), 3, 4)],
         [self.saveLabel.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
         [self.saveLabel.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
 
         // select card
-        [self.selectCard.topAnchor constraintEqualToAnchor:self.saveLabel.bottomAnchor constant:15],
+        [self.selectCard.topAnchor constraintEqualToAnchor:self.saveLabel.bottomAnchor constant:ASClamp(ASV(15), 12, 15)],
         [self.selectCard.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
         [self.selectCard.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
 
-        [self.selectTitle.topAnchor constraintEqualToAnchor:self.selectCard.topAnchor constant:13],
-        [self.selectTitle.leadingAnchor constraintEqualToAnchor:self.selectCard.leadingAnchor constant:18],
+        [self.selectTitle.topAnchor constraintEqualToAnchor:self.selectCard.topAnchor constant:ASClamp(ASV(13), 11, 13)],
+        [self.selectTitle.leadingAnchor constraintEqualToAnchor:self.selectCard.leadingAnchor constant:ASClamp(ASV(18), 16, 18)],
 
-        [self.whiteBox.topAnchor constraintEqualToAnchor:self.selectTitle.bottomAnchor constant:11],
+        [self.whiteBox.topAnchor constraintEqualToAnchor:self.selectTitle.bottomAnchor constant:ASClamp(ASV(11), 9, 11)],
         [self.whiteBox.leadingAnchor constraintEqualToAnchor:self.selectCard.leadingAnchor constant:0],
         [self.whiteBox.trailingAnchor constraintEqualToAnchor:self.selectCard.trailingAnchor constant:0],
         [self.whiteBox.bottomAnchor constraintEqualToAnchor:self.selectCard.bottomAnchor constant:0],
 
-        [stack.topAnchor constraintEqualToAnchor:self.whiteBox.topAnchor constant:5],
-        [stack.leadingAnchor constraintEqualToAnchor:self.whiteBox.leadingAnchor constant:15],
-        [stack.trailingAnchor constraintEqualToAnchor:self.whiteBox.trailingAnchor constant:-15],
-        [stack.bottomAnchor constraintEqualToAnchor:self.whiteBox.bottomAnchor constant:-5],
+        [stack.topAnchor constraintEqualToAnchor:self.whiteBox.topAnchor constant:ASClamp(ASV(5), 4, 5)],
+        [stack.leadingAnchor constraintEqualToAnchor:self.whiteBox.leadingAnchor constant:ASClamp(ASV(15), 12, 15)],
+        [stack.trailingAnchor constraintEqualToAnchor:self.whiteBox.trailingAnchor constant:-ASClamp(ASV(15), 12, 15)],
+        [stack.bottomAnchor constraintEqualToAnchor:self.whiteBox.bottomAnchor constant:-ASClamp(ASV(5), 4, 5)],
 
-        [self.rowSmall.heightAnchor constraintEqualToConstant:74],
-        [self.rowMedium.heightAnchor constraintEqualToConstant:74],
-        [self.rowLarge.heightAnchor constraintEqualToConstant:74],
+        [self.rowSmall.heightAnchor constraintEqualToConstant:rowH],
+        [self.rowMedium.heightAnchor constraintEqualToConstant:rowH],
+        [self.rowLarge.heightAnchor constraintEqualToConstant:rowH],
 
-        [self.selectCard.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-16],
+        [self.selectCard.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-ASClamp(ASV(16), 14, 16)],
     ]];
 }
 
@@ -724,9 +757,10 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     opt.networkAccessAllowed = YES;
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
 
-    // 80x80 cell，给个稍大 targetSize 避免糊
+    // targetSize 可保持大一点避免糊；也可按缩放略调
+    CGFloat t = ASClamp(ASV(360), 300, 360);
     [[PHImageManager defaultManager] requestImageForAsset:a
-                                              targetSize:CGSizeMake(360, 360)
+                                              targetSize:CGSizeMake(t, t)
                                              contentMode:PHImageContentModeAspectFill
                                                  options:opt
                                            resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
@@ -738,7 +772,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
     [cell.minusBtn removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
     [cell.minusBtn addTarget:self action:@selector(onRemoveBtn:) forControlEvents:UIControlEventTouchUpInside];
-    
+
     return cell;
 }
 
@@ -753,7 +787,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
     [self.assets removeObjectAtIndex:i];
 
-    // ✅ 关键：每次删除都回传最新选择
+    // ✅ 删除就回传最新选择
     [self notifySelectionChanged];
 
     if (self.assets.count == 0) {
@@ -783,8 +817,9 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 - (CGSize)collectionView:(UICollectionView *)collectionView
                   layout:(UICollectionViewLayout*)collectionViewLayout
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    // ✅ 固定 80x80
-    return CGSizeMake(80, 80);
+    // ✅ 固定 3x3 布局，仅缩小 item 尺寸
+    CGFloat item = ASClamp(ASV(80), 68, 80);
+    return CGSizeMake(item, item);
 }
 
 @end

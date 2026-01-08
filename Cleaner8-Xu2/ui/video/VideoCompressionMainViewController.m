@@ -3,6 +3,17 @@
 #import <UIKit/UIKit.h>
 #import <Photos/Photos.h>
 
+#pragma mark - ===== 402宽设计稿：只缩小不放大（竖屏） =====
+// 如果项目里已有同名函数/宏，请删除这一段，保留全局那份即可
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
 #pragma mark - Helpers
 static NSString * const kASVidSizeCachePlist = @"as_vid_size_cache_v2.plist";
 
@@ -59,7 +70,7 @@ static NSString *ASDurationText(NSTimeInterval duration) {
         self.backgroundColor = UIColor.clearColor;
 
         _titleLabel = [UILabel new];
-        _titleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightSemibold];
+        _titleLabel.font = ASFontS(22, UIFontWeightSemibold);
         _titleLabel.textColor = UIColor.blackColor;
         _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         [self addSubview:_titleLabel];
@@ -67,7 +78,7 @@ static NSString *ASDurationText(NSTimeInterval duration) {
         [NSLayoutConstraint activateConstraints:@[
             [_titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:0],
             [_titleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:0],
-            [_titleLabel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-10],
+            [_titleLabel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-AS(10)],
         ]];
     }
     return self;
@@ -102,7 +113,7 @@ static NSString *ASDurationText(NSTimeInterval duration) {
     if (self = [super initWithFrame:frame]) {
 
         self.contentView.backgroundColor = UIColor.whiteColor;
-        self.contentView.layer.cornerRadius = 22;
+        self.contentView.layer.cornerRadius = AS(22);
         self.contentView.layer.masksToBounds = YES;
 
         _thumbView = [UIImageView new];
@@ -123,15 +134,15 @@ static NSString *ASDurationText(NSTimeInterval duration) {
         _savePill.showsTouchWhenHighlighted = NO;
         _savePill.backgroundColor = ASBlue();
 
-        _savePill.layer.cornerRadius = 26;
+        _savePill.layer.cornerRadius = AS(26); // 最终会在 layoutSubviews 里用高度/2 覆盖
         _savePill.layer.masksToBounds = YES;
 
-        _savePill.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+        _savePill.titleLabel.font = ASFontS(12, UIFontWeightMedium);
         [_savePill setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
 
         _savePill.userInteractionEnabled = NO;
 
-        _savePill.contentEdgeInsets = UIEdgeInsetsMake(8, 10, 8, 12);
+        _savePill.contentEdgeInsets = ASEdgeInsets(8, 10, 8, 12);
 
         [_savePill setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
         [_savePill setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
@@ -142,10 +153,9 @@ static NSString *ASDurationText(NSTimeInterval duration) {
         UIImage *todo = [[UIImage imageNamed:@"ic_more"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         [_savePill setImage:todo forState:UIControlStateNormal];
         _savePill.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
-        _savePill.imageEdgeInsets = UIEdgeInsetsMake(0, 6, 0, -6);
+        _savePill.imageEdgeInsets = UIEdgeInsetsMake(0, AS(6), 0, -AS(6));
 
         [self.contentView addSubview:_savePill];
-
 
         [NSLayoutConstraint activateConstraints:@[
             [_thumbView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
@@ -153,16 +163,16 @@ static NSString *ASDurationText(NSTimeInterval duration) {
             [_thumbView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
             [_thumbView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            [_playIcon.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:10],
-            [_playIcon.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:10],
-            [_playIcon.widthAnchor constraintEqualToConstant:24],
-            [_playIcon.heightAnchor constraintEqualToConstant:24],
+            [_playIcon.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:AS(10)],
+            [_playIcon.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:AS(10)],
+            [_playIcon.widthAnchor constraintEqualToConstant:AS(24)],
+            [_playIcon.heightAnchor constraintEqualToConstant:AS(24)],
 
             [_savePill.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
-            [_savePill.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-14],
-            [_savePill.heightAnchor constraintEqualToConstant:36],
+            [_savePill.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-AS(14)],
+            [_savePill.heightAnchor constraintEqualToConstant:AS(36)],
         ]];
-        
+
         self.requestId = PHInvalidImageRequestID;
         self.thumbView.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1.0];
     }
@@ -324,7 +334,7 @@ UICollectionViewDataSourcePrefetching
     [self updateThumbTargetSizeIfNeeded];
 
     if (@available(iOS 11.0, *)) {
-        CGFloat bottom = self.view.safeAreaInsets.bottom; // TabBar 高度
+        CGFloat bottom = self.view.safeAreaInsets.bottom; // TabBar / Home indicator
         UIEdgeInsets insets = self.collectionView.contentInset;
         insets.bottom = bottom; // 只留 safeArea，不多留“空白”
         self.collectionView.contentInset = insets;
@@ -336,7 +346,7 @@ UICollectionViewDataSourcePrefetching
 
 - (void)setupHeaderAndCardUI {
 
-    CGFloat sideInset = 20;
+    CGFloat sideInset = AS(20);
 
     // Blue header
     self.blueHeader = [UIView new];
@@ -349,13 +359,17 @@ UICollectionViewDataSourcePrefetching
     UIImage *backImg = [[UIImage imageNamed:@"ic_return_white"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.backBtn setImage:backImg forState:UIControlStateNormal];
 
+    self.backBtn.contentEdgeInsets = ASEdgeInsets(10, 10, 10, 10);
+    self.backBtn.adjustsImageWhenHighlighted = NO;
+
     [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
+
     [self.blueHeader addSubview:self.backBtn];
 
     self.headerTitle = [UILabel new];
     self.headerTitle.text = @"Video Compression";
-    self.headerTitle.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
+    self.headerTitle.font = ASFontS(24, UIFontWeightSemibold);
     self.headerTitle.textColor = UIColor.whiteColor;
     self.headerTitle.textAlignment = NSTextAlignmentCenter;
     self.headerTitle.translatesAutoresizingMaskIntoConstraints = NO;
@@ -363,7 +377,7 @@ UICollectionViewDataSourcePrefetching
 
     self.headerTotal = [UILabel new];
     self.headerTotal.text = @"--";
-    self.headerTotal.font = [UIFont systemFontOfSize:34 weight:UIFontWeightSemibold];
+    self.headerTotal.font = ASFontS(34, UIFontWeightSemibold);
     self.headerTotal.textColor = UIColor.whiteColor;
     self.headerTotal.textAlignment = NSTextAlignmentCenter;
     self.headerTotal.translatesAutoresizingMaskIntoConstraints = NO;
@@ -371,7 +385,7 @@ UICollectionViewDataSourcePrefetching
 
     self.headerSubtitle = [UILabel new];
     self.headerSubtitle.text = @"Total storage space saved by compressed videos --";
-    self.headerSubtitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
+    self.headerSubtitle.font = ASFontS(12, UIFontWeightRegular);
     self.headerSubtitle.textColor = [[UIColor whiteColor] colorWithAlphaComponent:1];
     self.headerSubtitle.textAlignment = NSTextAlignmentCenter;
     self.headerSubtitle.translatesAutoresizingMaskIntoConstraints = NO;
@@ -381,7 +395,7 @@ UICollectionViewDataSourcePrefetching
     self.card = [UIView new];
     self.card.backgroundColor = UIColor.whiteColor;
     self.card.translatesAutoresizingMaskIntoConstraints = NO;
-    self.card.layer.cornerRadius = 16;
+    self.card.layer.cornerRadius = AS(16);
     self.card.layer.masksToBounds = YES;
     if (@available(iOS 11.0, *)) {
         self.card.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
@@ -411,7 +425,7 @@ UICollectionViewDataSourcePrefetching
 
     self.filterStack = [[UIStackView alloc] initWithArrangedSubviews:self.filterButtons];
     self.filterStack.axis = UILayoutConstraintAxisHorizontal;
-    self.filterStack.spacing = 12;
+    self.filterStack.spacing = AS(12);
     self.filterStack.alignment = UIStackViewAlignmentCenter;
     self.filterStack.distribution = UIStackViewDistributionFill;
     self.filterStack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -419,13 +433,13 @@ UICollectionViewDataSourcePrefetching
 
     [NSLayoutConstraint activateConstraints:@[
         // ✅ 筛选栏离白卡顶部 20
-        [self.filterScroll.topAnchor constraintEqualToAnchor:self.card.topAnchor constant:20],
+        [self.filterScroll.topAnchor constraintEqualToAnchor:self.card.topAnchor constant:AS(20)],
         [self.filterScroll.leadingAnchor constraintEqualToAnchor:self.card.leadingAnchor],
         [self.filterScroll.trailingAnchor constraintEqualToAnchor:self.card.trailingAnchor],
 
         // content
-        [self.filterStack.leadingAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.leadingAnchor constant:20],
-        [self.filterStack.trailingAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.trailingAnchor constant:-20],
+        [self.filterStack.leadingAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.leadingAnchor constant:AS(20)],
+        [self.filterStack.trailingAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.trailingAnchor constant:-AS(20)],
         [self.filterStack.topAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.topAnchor],
         [self.filterStack.bottomAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.bottomAnchor],
 
@@ -459,36 +473,34 @@ UICollectionViewDataSourcePrefetching
         [self.blueHeader.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
 
         // back
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:6],
-        [self.backBtn.topAnchor constraintEqualToAnchor:self.blueHeader.safeAreaLayoutGuide.topAnchor constant:10],
-        [self.backBtn.widthAnchor constraintEqualToConstant:44],
-        [self.backBtn.heightAnchor constraintEqualToConstant:44],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:AS(6)],
+        [self.backBtn.topAnchor constraintEqualToAnchor:self.blueHeader.safeAreaLayoutGuide.topAnchor constant:AS(10)],
+        [self.backBtn.widthAnchor constraintEqualToConstant:AS(44)],
+        [self.backBtn.heightAnchor constraintEqualToConstant:AS(44)],
 
         [self.headerTitle.centerXAnchor constraintEqualToAnchor:self.blueHeader.centerXAnchor],
         [self.headerTitle.centerYAnchor constraintEqualToAnchor:self.backBtn.centerYAnchor],
 
         [self.headerTotal.centerXAnchor constraintEqualToAnchor:self.blueHeader.centerXAnchor],
-        [self.headerTotal.topAnchor constraintEqualToAnchor:self.headerTitle.bottomAnchor constant:18],
+        [self.headerTotal.topAnchor constraintEqualToAnchor:self.headerTitle.bottomAnchor constant:AS(18)],
 
         [self.headerSubtitle.centerXAnchor constraintEqualToAnchor:self.blueHeader.centerXAnchor],
-        [self.headerSubtitle.topAnchor constraintEqualToAnchor:self.headerTotal.bottomAnchor constant:10],
+        [self.headerSubtitle.topAnchor constraintEqualToAnchor:self.headerTotal.bottomAnchor constant:AS(10)],
         [self.headerSubtitle.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:sideInset],
         [self.headerSubtitle.trailingAnchor constraintEqualToAnchor:self.blueHeader.trailingAnchor constant:-sideInset],
 
         // ✅ 白卡离上面文字 30
-        [self.card.topAnchor constraintEqualToAnchor:self.headerSubtitle.bottomAnchor constant:30],
+        [self.card.topAnchor constraintEqualToAnchor:self.headerSubtitle.bottomAnchor constant:AS(30)],
 
         // header 刚好到白卡顶部（保证白卡圆角“露出来”）
-        [self.blueHeader.bottomAnchor constraintEqualToAnchor:self.card.topAnchor constant:22],
+        [self.blueHeader.bottomAnchor constraintEqualToAnchor:self.card.topAnchor constant:AS(22)],
 
         [self.card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-
-        // ✅ 底部不盖住列表：卡片到底用 safeArea（避免盖住底部导航/TabBar）
         [self.card.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
         // ✅ 列表离筛选 20
-        [self.collectionView.topAnchor constraintEqualToAnchor:self.filterScroll.bottomAnchor constant:20],
+        [self.collectionView.topAnchor constraintEqualToAnchor:self.filterScroll.bottomAnchor constant:AS(20)],
         [self.collectionView.leadingAnchor constraintEqualToAnchor:self.card.leadingAnchor],
         [self.collectionView.trailingAnchor constraintEqualToAnchor:self.card.trailingAnchor],
         [self.collectionView.bottomAnchor constraintEqualToAnchor:self.card.bottomAnchor],
@@ -501,15 +513,13 @@ UICollectionViewDataSourcePrefetching
     ASPillButton *b = [ASPillButton new];
     [b setTitle:title forState:UIControlStateNormal];
 
-    b.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightRegular];
-
-    b.contentEdgeInsets = UIEdgeInsetsMake(7, 15, 7, 15);
+    b.titleLabel.font = ASFontS(17, UIFontWeightRegular);
+    b.contentEdgeInsets = ASEdgeInsets(7, 15, 7, 15);
 
     b.tag = tag;
     [b addTarget:self action:@selector(onFilterTap:) forControlEvents:UIControlEventTouchUpInside];
     return b;
 }
-
 
 - (void)updateFilterButtonStyles {
     for (UIButton *b in self.filterButtons) {
@@ -529,8 +539,8 @@ UICollectionViewDataSourcePrefetching
 - (UICollectionViewLayout *)buildLayout {
     if (@available(iOS 13.0, *)) {
 
-        CGFloat cardW = 150.0;
-        CGFloat cardH = 200.0;
+        CGFloat cardW = AS(150.0);
+        CGFloat cardH = AS(200.0);
 
         NSCollectionLayoutSize *itemSize =
         [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
@@ -546,19 +556,19 @@ UICollectionViewDataSourcePrefetching
         NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
 
         // 卡片间距 10
-        section.interGroupSpacing = 10;
+        section.interGroupSpacing = AS(10);
 
         // 顺滑横滑（不分页）
         section.orthogonalScrollingBehavior = UICollectionLayoutSectionOrthogonalScrollingBehaviorContinuous;
 
         // 卡片左边对齐 20（标题也跟随）
-        section.contentInsets = NSDirectionalEdgeInsetsMake(0, 20, 0, 0);
+        section.contentInsets = NSDirectionalEdgeInsetsMake(0, AS(20), 0, 0);
         section.supplementariesFollowContentInsets = YES;
-        
+
         // header
         NSCollectionLayoutSize *headerSize =
         [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                      heightDimension:[NSCollectionLayoutDimension absoluteDimension:40]];
+                                      heightDimension:[NSCollectionLayoutDimension absoluteDimension:AS(40)]];
         NSCollectionLayoutBoundarySupplementaryItem *header =
         [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize
                                                                                  elementKind:UICollectionElementKindSectionHeader
@@ -570,7 +580,7 @@ UICollectionViewDataSourcePrefetching
 
         UICollectionViewCompositionalLayoutConfiguration *config =
             [UICollectionViewCompositionalLayoutConfiguration new];
-        config.interSectionSpacing = 20;
+        config.interSectionSpacing = AS(20);
         layout.configuration = config;
 
         return layout;
@@ -578,14 +588,14 @@ UICollectionViewDataSourcePrefetching
 
     UICollectionViewFlowLayout *fl = [UICollectionViewFlowLayout new];
     fl.scrollDirection = UICollectionViewScrollDirectionVertical;
-    fl.minimumLineSpacing = 20;
-    fl.itemSize = CGSizeMake(150, 200);
+    fl.minimumLineSpacing = AS(20);
+    fl.itemSize = CGSizeMake(AS(150), AS(200));
     return fl;
 }
 
 - (void)updateThumbTargetSizeIfNeeded {
-    CGFloat cardW = 150.0;
-    CGFloat cardH = 200.0;
+    CGFloat cardW = AS(150.0);
+    CGFloat cardH = AS(200.0);
 
     CGFloat scale = UIScreen.mainScreen.scale;
     CGSize px = CGSizeMake(cardW * scale * 1.8, cardH * scale * 1.8);
@@ -780,8 +790,8 @@ UICollectionViewDataSourcePrefetching
 
     NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full];
     [att addAttribute:NSForegroundColorAttributeName value:[[UIColor whiteColor] colorWithAlphaComponent:0.85] range:NSMakeRange(0, full.length)];
-    [att addAttribute:NSFontAttributeName value:[UIFont systemFontOfSize:12 weight:UIFontWeightRegular] range:NSMakeRange(0, full.length)];
-    [att addAttribute:NSFontAttributeName value:[UIFont systemFontOfSize:12 weight:UIFontWeightSemibold]
+    [att addAttribute:NSFontAttributeName value:ASFontS(12, UIFontWeightRegular) range:NSMakeRange(0, full.length)];
+    [att addAttribute:NSFontAttributeName value:ASFontS(12, UIFontWeightSemibold)
               range:NSMakeRange(prefix.length, savedText.length)];
     [att addAttribute:NSForegroundColorAttributeName value:UIColor.whiteColor
               range:NSMakeRange(prefix.length, savedText.length)];
@@ -858,7 +868,7 @@ UICollectionViewDataSourcePrefetching
 }
 
 - (void)updateVisibleSavePillsOnly {
-    
+
     NSArray<NSIndexPath *> *visible = self.collectionView.indexPathsForVisibleItems;
     for (NSIndexPath *ip in visible) {
         if (ip.section >= self.sections.count) continue;

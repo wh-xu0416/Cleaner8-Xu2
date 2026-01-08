@@ -2,12 +2,29 @@
 #import "ImageCompressionResultViewController.h"
 #import "LivePhotoCoverFrameManager.h"
 
+
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
+#pragma mark - Style helpers
+
 static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; }
 static inline UIColor *ASGrayBG(void){ return [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0]; }
-static inline UIFont *ASSB(CGFloat s){ return [UIFont systemFontOfSize:s weight:UIFontWeightSemibold]; }
-static inline UIFont *ASBD(CGFloat s){ return [UIFont systemFontOfSize:s weight:UIFontWeightBold]; }
-static inline UIFont *ASRG(CGFloat s){ return [UIFont systemFontOfSize:s weight:UIFontWeightRegular]; }
-static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0); return [NSString stringWithFormat:@"%.1fMB",mb]; }
+
+static inline UIFont *ASSB(CGFloat s){ return ASFontS(s, UIFontWeightSemibold); }
+static inline UIFont *ASBD(CGFloat s){ return ASFontS(s, UIFontWeightBold); }
+static inline UIFont *ASRG(CGFloat s){ return ASFontS(s, UIFontWeightRegular); }
+
+static NSString *ASMB1(uint64_t bytes){
+    double mb=(double)bytes/(1024.0*1024.0);
+    return [NSString stringWithFormat:@"%.1fMB",mb];
+}
 
 #pragma mark - Bubble progress view
 
@@ -34,27 +51,29 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
 
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
+
+        CGFloat rTrack = AS(8);
+        CGFloat rBubble = AS(8);
+
         self.track = [UIView new];
         self.track.backgroundColor = [UIColor colorWithWhite:0.86 alpha:1];
-        self.track.layer.cornerRadius = 8;
+        self.track.layer.cornerRadius = rTrack;
         self.track.layer.masksToBounds = YES;
 
         self.fill = [UIView new];
         self.fill.backgroundColor = ASBlue();
-        self.fill.layer.cornerRadius = 8;
+        self.fill.layer.cornerRadius = rTrack;
         self.fill.layer.masksToBounds = YES;
 
         self.icon = [UIImageView new];
         self.icon.contentMode = UIViewContentModeScaleAspectFit;
-
         self.icon.image = [[UIImage imageNamed:@"ic_speed"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         self.icon.tintColor = nil;
-
         self.icon.layer.zPosition = 9999;
 
         self.bubble = [UIView new];
         self.bubble.backgroundColor = ASBlue();
-        self.bubble.layer.cornerRadius = 8;
+        self.bubble.layer.cornerRadius = rBubble;
         self.bubble.layer.masksToBounds = YES;
 
         self.bubbleLabel = [UILabel new];
@@ -77,32 +96,35 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
             v.translatesAutoresizingMaskIntoConstraints = NO;
         }
 
+        CGFloat trackH = AS(16);
+        CGFloat iconS  = AS(28);
+        CGFloat bubbleH = AS(40);
+
         [NSLayoutConstraint activateConstraints:@[
             [self.track.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
             [self.track.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
 
-            // ✅ track 底部贴 bar 底部（用于和左右文案底部对齐）
+            // track 底部贴 bar 底部（用于和左右文案底部对齐）
             [self.track.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:0],
-            [self.track.heightAnchor constraintEqualToConstant:16],
+            [self.track.heightAnchor constraintEqualToConstant:trackH],
 
             [self.fill.leadingAnchor constraintEqualToAnchor:self.track.leadingAnchor],
             [self.fill.topAnchor constraintEqualToAnchor:self.track.topAnchor],
             [self.fill.bottomAnchor constraintEqualToAnchor:self.track.bottomAnchor],
 
             // icon 覆盖在进度条上方（不被裁切）
-            [self.icon.centerYAnchor constraintEqualToAnchor:self.track.centerYAnchor constant:2],
-            [self.icon.widthAnchor constraintEqualToConstant:28],
-            [self.icon.heightAnchor constraintEqualToConstant:28],
+            [self.icon.centerYAnchor constraintEqualToAnchor:self.track.centerYAnchor constant:AS(2)],
+            [self.icon.widthAnchor constraintEqualToConstant:iconS],
+            [self.icon.heightAnchor constraintEqualToConstant:iconS],
 
-            [self.bubble.bottomAnchor constraintEqualToAnchor:self.track.topAnchor constant:-10],
-            // ✅ bubble 高度加大，匹配上下内边距 8
-            [self.bubble.heightAnchor constraintEqualToConstant:40],
+            [self.bubble.bottomAnchor constraintEqualToAnchor:self.track.topAnchor constant:-AS(10)],
+            [self.bubble.heightAnchor constraintEqualToConstant:bubbleH],
 
-            // ✅ bubbleLabel：上下 8，左右 5
-            [self.bubbleLabel.leadingAnchor constraintEqualToAnchor:self.bubble.leadingAnchor constant:5],
-            [self.bubbleLabel.trailingAnchor constraintEqualToAnchor:self.bubble.trailingAnchor constant:-5],
-            [self.bubbleLabel.topAnchor constraintEqualToAnchor:self.bubble.topAnchor constant:8],
-            [self.bubbleLabel.bottomAnchor constraintEqualToAnchor:self.bubble.bottomAnchor constant:-8],
+            // bubbleLabel：上下 8，左右 5
+            [self.bubbleLabel.leadingAnchor constraintEqualToAnchor:self.bubble.leadingAnchor constant:AS(5)],
+            [self.bubbleLabel.trailingAnchor constraintEqualToAnchor:self.bubble.trailingAnchor constant:-AS(5)],
+            [self.bubbleLabel.topAnchor constraintEqualToAnchor:self.bubble.topAnchor constant:AS(8)],
+            [self.bubbleLabel.bottomAnchor constraintEqualToAnchor:self.bubble.bottomAnchor constant:-AS(8)],
         ]];
 
         self.fillW = [self.fill.widthAnchor constraintEqualToConstant:0];
@@ -114,7 +136,6 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
         self.bubbleCX = [self.bubble.centerXAnchor constraintEqualToAnchor:self.track.leadingAnchor constant:0];
         self.bubbleCX.active = YES;
 
-        // ✅ 确保 icon 永远在最上层（覆盖在进度条上方）
         [self bringSubviewToFront:self.icon];
     }
     return self;
@@ -135,10 +156,10 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     CGFloat fill = w * self.progress;
     self.fillW.constant = fill;
 
-    CGFloat iconW = 28;
+    CGFloat iconW = AS(28);
 
     CGFloat bubbleW = [self.bubble systemLayoutSizeFittingSize:UILayoutFittingCompressedSize].width;
-    if (bubbleW <= 0) bubbleW = 60;
+    if (bubbleW <= 0) bubbleW = AS(60);
 
     CGFloat x = fill;
 
@@ -152,10 +173,11 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     CGFloat baseY = CGRectGetMaxY(b);
     CGFloat cx = CGRectGetMidX(b);
 
+    CGFloat a = AS(6);
     UIBezierPath *path = [UIBezierPath bezierPath];
-    [path moveToPoint:CGPointMake(cx - 6, baseY)];
-    [path addLineToPoint:CGPointMake(cx + 6, baseY)];
-    [path addLineToPoint:CGPointMake(cx, baseY + 6)];
+    [path moveToPoint:CGPointMake(cx - a, baseY)];
+    [path addLineToPoint:CGPointMake(cx + a, baseY)];
+    [path addLineToPoint:CGPointMake(cx, baseY + a)];
     [path closePath];
     self.arrow.path = path.CGPath;
 }
@@ -174,7 +196,7 @@ static NSString *ASMB1(uint64_t bytes){ double mb=(double)bytes/(1024.0*1024.0);
     if (self = [super initWithFrame:frame]) {
         self.iv = [UIImageView new];
         self.iv.contentMode = UIViewContentModeScaleAspectFill;
-        self.iv.layer.cornerRadius = 11;
+        self.iv.layer.cornerRadius = AS(11);
         self.iv.layer.masksToBounds = YES;
         self.iv.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1];
         self.iv.translatesAutoresizingMaskIntoConstraints = NO;
@@ -243,7 +265,6 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 @implementation ImageCompressionProgressViewController
 
 - (void)as_dismissPresentedIfNeededThen:(dispatch_block_t)block {
-    // 如果当前正在展示取消确认弹窗（或其他弹窗），先关掉再执行 block
     UIViewController *presented = self.presentedViewController;
     if (presented) {
         [self dismissViewControllerAnimated:NO completion:block];
@@ -254,7 +275,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 
 - (void)as_finishWithSummary:(ASImageCompressionSummary * _Nullable)summary
                        error:(NSError * _Nullable)error
-              failedTitle:(NSString *)failedTitle {
+                 failedTitle:(NSString *)failedTitle {
 
     __weak typeof(self) weakSelf = self;
 
@@ -262,7 +283,6 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || self.didExit) return;
 
-        // ✅ 如果之前在显示取消确认弹窗，这里完成了就当作“取消弹窗作废”
         self.showingCancelAlert = NO;
         self.cancelAlert = nil;
 
@@ -375,9 +395,11 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 #pragma mark - UI
 
 - (void)buildUI {
-    CGFloat side = 20;
-    CGFloat headerH = 56;
-    CGFloat gridSide = 352;
+    CGFloat side    = AS(20);
+    CGFloat headerH = AS(56);
+
+    // 设计稿 gridSide=352、cell=114、gap=5 => 114*3 + 5*2 = 352
+    CGFloat gridSide = AS(352);
 
     UIView *headerBG = [UIView new];
     headerBG.translatesAutoresizingMaskIntoConstraints = NO;
@@ -392,7 +414,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.backBtn setImage:backImg forState:UIControlStateNormal];
-    self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.backBtn.contentEdgeInsets = ASEdgeInsets(10, 10, 10, 10);
     self.backBtn.adjustsImageWhenHighlighted = NO;
     [self.backBtn addTarget:self action:@selector(onCancelTapped) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
@@ -411,12 +433,12 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     self.cancelBtn.titleLabel.font = ASBD(20);
     [self.cancelBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.cancelBtn.backgroundColor = ASBlue();
-    self.cancelBtn.layer.cornerRadius = 35;
+    self.cancelBtn.layer.cornerRadius = AS(35);
     self.cancelBtn.layer.masksToBounds = NO;
     self.cancelBtn.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.18].CGColor;
     self.cancelBtn.layer.shadowOpacity = 1.0;
-    self.cancelBtn.layer.shadowOffset = CGSizeMake(0, 10);
-    self.cancelBtn.layer.shadowRadius = 18;
+    self.cancelBtn.layer.shadowOffset = CGSizeMake(0, AS(10));
+    self.cancelBtn.layer.shadowRadius = AS(18);
     [self.cancelBtn addTarget:self action:@selector(onCancelTapped) forControlEvents:UIControlEventTouchUpInside];
     self.cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.cancelBtn];
@@ -436,7 +458,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     self.topCard = [UIView new];
     self.topCard.backgroundColor = UIColor.whiteColor;
     self.topCard.translatesAutoresizingMaskIntoConstraints = NO;
-    self.topCard.layer.cornerRadius = 34;
+    self.topCard.layer.cornerRadius = AS(34);
     if (@available(iOS 11.0,*)) {
         self.topCard.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
     }
@@ -444,8 +466,8 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     [self.scrollContentView addSubview:self.topCard];
 
     UICollectionViewFlowLayout *lay = [UICollectionViewFlowLayout new];
-    lay.minimumLineSpacing = 5;
-    lay.minimumInteritemSpacing = 5;
+    lay.minimumLineSpacing = AS(5);
+    lay.minimumInteritemSpacing = AS(5);
     lay.sectionInset = UIEdgeInsetsZero;
 
     self.grid = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:lay];
@@ -472,7 +494,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[self.beforeLabel, self.bar, self.afterLabel]];
     row.axis = UILayoutConstraintAxisHorizontal;
     row.alignment = UIStackViewAlignmentBottom;
-    row.spacing = 16;
+    row.spacing = AS(16);
     row.translatesAutoresizingMaskIntoConstraints = NO;
     [self.topCard addSubview:row];
 
@@ -500,17 +522,18 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
         [header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [header.heightAnchor constraintEqualToConstant:headerH],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:6],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:AS(6)],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
-        [self.backBtn.widthAnchor constraintEqualToConstant:44],
-        [self.backBtn.heightAnchor constraintEqualToConstant:44],
+        [self.backBtn.widthAnchor constraintEqualToConstant:AS(44)],
+        [self.backBtn.heightAnchor constraintEqualToConstant:AS(44)],
 
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:header.centerXAnchor],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
-        [self.cancelBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:40],
-        [self.cancelBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-40],
-        [self.cancelBtn.heightAnchor constraintEqualToConstant:70],
-        [self.cancelBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-22],
+
+        [self.cancelBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(40)],
+        [self.cancelBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(40)],
+        [self.cancelBtn.heightAnchor constraintEqualToConstant:AS(70)],
+        [self.cancelBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-AS(22)],
 
         [self.scrollView.topAnchor constraintEqualToAnchor:header.bottomAnchor],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -528,35 +551,35 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
         [self.topCard.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor],
 
         // grid
-        [self.grid.topAnchor constraintEqualToAnchor:self.topCard.topAnchor constant:10],
+        [self.grid.topAnchor constraintEqualToAnchor:self.topCard.topAnchor constant:AS(10)],
         [self.grid.centerXAnchor constraintEqualToAnchor:self.topCard.centerXAnchor],
         [self.grid.widthAnchor constraintEqualToConstant:gridSide],
         [self.grid.heightAnchor constraintEqualToConstant:gridSide],
 
         // row
-        [row.topAnchor constraintEqualToAnchor:self.grid.bottomAnchor constant:30],
+        [row.topAnchor constraintEqualToAnchor:self.grid.bottomAnchor constant:AS(30)],
         [row.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:side],
         [row.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor constant:-side],
 
-        [self.bar.heightAnchor constraintEqualToConstant:60],
-        [self.bar.widthAnchor constraintGreaterThanOrEqualToConstant:150],
+        [self.bar.heightAnchor constraintEqualToConstant:AS(60)],
+        [self.bar.widthAnchor constraintGreaterThanOrEqualToConstant:AS(150)],
 
-        [self.topCard.bottomAnchor constraintEqualToAnchor:row.bottomAnchor constant:46],
+        [self.topCard.bottomAnchor constraintEqualToAnchor:row.bottomAnchor constant:AS(46)],
 
-        [self.tipLabel.topAnchor constraintEqualToAnchor:self.topCard.bottomAnchor constant:40],
-        [self.tipLabel.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:30],
-        [self.tipLabel.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-30],
+        [self.tipLabel.topAnchor constraintEqualToAnchor:self.topCard.bottomAnchor constant:AS(40)],
+        [self.tipLabel.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:AS(30)],
+        [self.tipLabel.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-AS(30)],
 
-        [self.tipLabel.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-28],
+        [self.tipLabel.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-AS(28)],
     ]];
+
     [self.view bringSubviewToFront:header];
 
     dispatch_async(dispatch_get_main_queue(), ^{
         self.cancelBtn.layer.shadowPath =
-        [UIBezierPath bezierPathWithRoundedRect:self.cancelBtn.bounds cornerRadius:35].CGPath;
+        [UIBezierPath bezierPathWithRoundedRect:self.cancelBtn.bounds cornerRadius:AS(35)].CGPath;
     });
 }
-
 
 - (void)updateSizeTexts {
     self.beforeLabel.text = self.totalBeforeBytes ? ASMB1(self.totalBeforeBytes) : @"--";
@@ -583,12 +606,11 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
             });
 
         } completion:^(ASImageCompressionSummary * _Nullable summary, NSError * _Nullable error) {
-            [self as_finishWithSummary:summary error:error failedTitle:@"Convert Failed"];
+            [weakSelf as_finishWithSummary:summary error:error failedTitle:@"Convert Failed"];
         }];
         return;
     }
 
-    // ====== 图片压缩逻辑 ======
     self.manager = [ImageCompressionManager new];
     [self.manager compressAssets:self.assets
                          quality:self.quality
@@ -602,17 +624,16 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
         });
 
     } completion:^(ASImageCompressionSummary * _Nullable summary, NSError * _Nullable error) {
-        [self as_finishWithSummary:summary error:error failedTitle:@"Compress Failed"];
+        [weakSelf as_finishWithSummary:summary error:error failedTitle:@"Compress Failed"];
     }];
 }
 
-#pragma mark - Cancel confirm (back / cancel / swipe all use this)
+#pragma mark - Cancel confirm
 
 - (void)onCancelTapped {
 
     BOOL isRunning = NO;
     if (self.mode == ASProgressModeLiveCover) {
-        // liveManager 创建后就视为正在跑（你如果 liveManager 有 isRunning 更好就用它）
         isRunning = (self.liveManager != nil);
     } else {
         isRunning = self.manager.isRunning;
@@ -661,7 +682,6 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     [self presentViewController:ac animated:YES completion:nil];
 }
 
-
 #pragma mark - Grid
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
@@ -682,7 +702,9 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     opt.synchronous = NO;
 
     CGFloat scale = UIScreen.mainScreen.scale;
-    CGFloat px = 114.0 * scale * 2.0;
+
+    CGFloat cellSide = AS(114);
+    CGFloat px = cellSide * scale * 2.0;
     CGSize target = CGSizeMake(px, px);
 
     [[PHImageManager defaultManager] requestImageForAsset:a
@@ -701,7 +723,8 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 - (CGSize)collectionView:(UICollectionView *)collectionView
                   layout:(UICollectionViewLayout*)collectionViewLayout
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    return CGSizeMake(114, 114);
+    CGFloat s = AS(114);
+    return CGSizeMake(s, s);
 }
 
 @end

@@ -11,6 +11,9 @@ static inline UIColor *ASBlue(void) {
 
 @property (nonatomic, strong) UIImageView *backIconView;
 @property (nonatomic, strong) UIImageView *rightIconView;
+
+// 关键：把可见内容都放到 contentView（高度 44），它贴着 safeArea 顶部
+@property (nonatomic, strong) UIView *contentView;
 @end
 
 @implementation ASCustomNavBar
@@ -18,8 +21,26 @@ static inline UIColor *ASBlue(void) {
 - (instancetype)initWithTitle:(NSString *)title {
     if (self = [super initWithFrame:CGRectZero]) {
         self.backgroundColor = UIColor.whiteColor;
+        self.translatesAutoresizingMaskIntoConstraints = NO;
 
         UILayoutGuide *safe = self.safeAreaLayoutGuide;
+
+        // ------- contentView（高度固定 44，贴 safeArea 顶部）-------
+        self.contentView = [UIView new];
+        self.contentView.translatesAutoresizingMaskIntoConstraints = NO;
+        self.contentView.backgroundColor = UIColor.clearColor;
+        [self addSubview:self.contentView];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [self.contentView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [self.contentView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [self.contentView.topAnchor constraintEqualToAnchor:safe.topAnchor],
+            [self.contentView.heightAnchor constraintEqualToConstant:44.0],
+
+            // 关键：让 self 的底部 = contentView 底部
+            // 这样 self 的总高度 = safeAreaInsets.top + 44
+            [self.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
+        ]];
 
         // back button
         self.backButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -53,6 +74,11 @@ static inline UIColor *ASBlue(void) {
         self.titleLabel.font = [UIFont systemFontOfSize:28 weight:UIFontWeightSemibold];
         self.titleLabel.textColor = [UIColor colorWithWhite:0 alpha:1.0];
 
+        // 建议：长标题在小屏/横屏更稳
+        self.titleLabel.adjustsFontSizeToFitWidth = YES;
+        self.titleLabel.minimumScaleFactor = 0.75;
+        self.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+
         // right button (Home)
         self.rightButton = [UIButton buttonWithType:UIButtonTypeCustom];
         self.rightButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -66,17 +92,18 @@ static inline UIColor *ASBlue(void) {
         UIImage *home = [UIImage imageNamed:@"ic_home"];
         self.rightIconView.image = [home imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
 
-        [self addSubview:self.backButton];
+        // 注意：都加到 contentView（不要加到 self）
+        [self.contentView addSubview:self.backButton];
         [self.backButton addSubview:self.backIconView];
-        [self addSubview:self.titleLabel];
+        [self.contentView addSubview:self.titleLabel];
 
-        [self addSubview:self.rightButton];
+        [self.contentView addSubview:self.rightButton];
         [self.rightButton addSubview:self.rightIconView];
 
         [NSLayoutConstraint activateConstraints:@[
             // back 44x44
-            [self.backButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
-            [self.backButton.topAnchor constraintEqualToAnchor:safe.topAnchor constant:0],
+            [self.backButton.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12],
+            [self.backButton.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.backButton.widthAnchor constraintEqualToConstant:44],
             [self.backButton.heightAnchor constraintEqualToConstant:44],
 
@@ -86,8 +113,8 @@ static inline UIColor *ASBlue(void) {
             [self.backIconView.heightAnchor constraintEqualToConstant:22],
 
             // right 44x44
-            [self.rightButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-12],
-            [self.rightButton.topAnchor constraintEqualToAnchor:safe.topAnchor constant:0],
+            [self.rightButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
+            [self.rightButton.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.rightButton.widthAnchor constraintEqualToConstant:44],
             [self.rightButton.heightAnchor constraintEqualToConstant:44],
 
@@ -97,12 +124,12 @@ static inline UIColor *ASBlue(void) {
             [self.rightIconView.widthAnchor constraintEqualToConstant:24],
             [self.rightIconView.heightAnchor constraintEqualToConstant:24],
 
-            // title 44 high
-            [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-            [self.titleLabel.topAnchor constraintEqualToAnchor:safe.topAnchor constant:0],
+            // title（以 contentView 为基准更准确）
+            [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            [self.titleLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.titleLabel.heightAnchor constraintEqualToConstant:44],
-            [self.titleLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.leadingAnchor constant:72],
-            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-72],
+            [self.titleLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.leadingAnchor constant:72],
+            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-72],
         ]];
 
         self.showRightButton = YES;
@@ -110,10 +137,27 @@ static inline UIColor *ASBlue(void) {
     return self;
 }
 
+#pragma mark - 自适应高度（关键）
+
+- (CGSize)intrinsicContentSize {
+    // 总高度 = safeArea 顶部（刘海/状态栏高度） + 内容高度 44
+    return CGSizeMake(UIViewNoIntrinsicMetric, self.safeAreaInsets.top + 44.0);
+}
+
+- (void)safeAreaInsetsDidChange {
+    [super safeAreaInsetsDidChange];
+    // 旋转/通话状态/分屏等会改变 safeAreaInsets，需要刷新 intrinsic size
+    [self invalidateIntrinsicContentSize];
+}
+
+#pragma mark - Public
+
 - (void)setShowRightButton:(BOOL)showRightButton {
     _showRightButton = showRightButton;
     self.rightButton.hidden = !showRightButton;
 }
+
+#pragma mark - Actions
 
 - (void)backTap {
     if (self.onBack) self.onBack();

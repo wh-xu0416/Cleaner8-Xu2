@@ -1,7 +1,14 @@
 #import "ASTabSegmentView.h"
 
 static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; }
-
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) {
+    return [UIFont systemFontOfSize:round(s * ASScale()) weight:w];
+}
 @interface ASTabSegmentView ()
 @property (nonatomic, strong) UIButton *photosBtn;
 @property (nonatomic, strong) UIButton *videoBtn;
@@ -25,8 +32,8 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
         [_photosBtn setTitle:@"Photos" forState:UIControlStateNormal];
         [_videoBtn  setTitle:@"Video"  forState:UIControlStateNormal];
 
-        _photosBtn.titleLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
-        _videoBtn.titleLabel.font  = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
+        _photosBtn.titleLabel.font = ASFontS(24, UIFontWeightSemibold);
+        _videoBtn.titleLabel.font  = ASFontS(24, UIFontWeightSemibold);
 
         _photosBtn.tag = 0;
         _videoBtn.tag  = 1;
