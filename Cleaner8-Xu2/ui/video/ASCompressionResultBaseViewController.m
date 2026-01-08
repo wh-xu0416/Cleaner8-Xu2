@@ -288,7 +288,8 @@ typedef void(^ASDeleteSheetBlock)(void);
 @property (nonatomic, strong) UIButton *backBtn;
 @property (nonatomic, strong) UIButton *homeBtn;
 
-// preview：视频是 thumb，图片是 static icon
+@property (nonatomic, strong) UIView *headerBG;
+
 @property (nonatomic, strong) UIImageView *thumbView;
 @property (nonatomic, strong) UIImageView *playIcon;
 @property (nonatomic, strong) UIImageView *starFloat;
@@ -481,7 +482,14 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     self.navBar = [UIView new];
     self.navBar.translatesAutoresizingMaskIntoConstraints = NO;
+    self.navBar.backgroundColor = UIColor.clearColor;
     [self.view addSubview:self.navBar];
+
+    self.headerBG = [UIView new];
+    self.headerBG.translatesAutoresizingMaskIntoConstraints = NO;
+    self.headerBG.backgroundColor = UIColor.whiteColor;
+
+    [self.view insertSubview:self.headerBG belowSubview:self.navBar];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
@@ -624,8 +632,12 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     NSMutableArray<NSLayoutConstraint *> *cs = [NSMutableArray array];
 
-    // navBar 固定
     [cs addObjectsFromArray:@[
+        [self.headerBG.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.headerBG.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.headerBG.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.headerBG.bottomAnchor constraintEqualToAnchor:self.navBar.bottomAnchor],
+        
         [self.navBar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [self.navBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.navBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],

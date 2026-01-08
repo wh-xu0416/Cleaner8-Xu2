@@ -378,9 +378,15 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     CGFloat side = 20;
     CGFloat headerH = 56;
     CGFloat gridSide = 352;
-    
+
+    UIView *headerBG = [UIView new];
+    headerBG.translatesAutoresizingMaskIntoConstraints = NO;
+    headerBG.backgroundColor = UIColor.whiteColor;
+    [self.view addSubview:headerBG];
+
     UIView *header = [UIView new];
     header.translatesAutoresizingMaskIntoConstraints = NO;
+    header.backgroundColor = UIColor.clearColor;
     [self.view addSubview:header];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -484,6 +490,11 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     [self.scrollContentView addSubview:self.tipLabel];
 
     [NSLayoutConstraint activateConstraints:@[
+        [headerBG.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [headerBG.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [headerBG.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [headerBG.bottomAnchor constraintEqualToAnchor:header.bottomAnchor],
+
         [header.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [header.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -496,20 +507,16 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:header.centerXAnchor],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
-
-        // cancelBtn 固定底部
         [self.cancelBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:40],
         [self.cancelBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-40],
         [self.cancelBtn.heightAnchor constraintEqualToConstant:70],
         [self.cancelBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-22],
 
-        // scrollView：在 header 和 cancelBtn 之间
         [self.scrollView.topAnchor constraintEqualToAnchor:header.bottomAnchor],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.scrollView.bottomAnchor constraintEqualToAnchor:self.cancelBtn.topAnchor],
 
-        // contentView：绑定 guides + 宽度固定（防横向滚动）
         [self.scrollContentView.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor],
         [self.scrollContentView.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
         [self.scrollContentView.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
@@ -542,6 +549,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 
         [self.tipLabel.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-28],
     ]];
+    [self.view bringSubviewToFront:header];
 
     dispatch_async(dispatch_get_main_queue(), ^{
         self.cancelBtn.layer.shadowPath =

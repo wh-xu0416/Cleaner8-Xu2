@@ -348,8 +348,14 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
     CGFloat previewW = 210;
     CGFloat previewH = 280;
 
+    UIView *headerBG = [UIView new];
+    headerBG.translatesAutoresizingMaskIntoConstraints = NO;
+    headerBG.backgroundColor = UIColor.whiteColor;
+    [self.view addSubview:headerBG];
+
     UIView *header = [UIView new];
     header.translatesAutoresizingMaskIntoConstraints = NO;
+    header.backgroundColor = UIColor.clearColor;
     [self.view addSubview:header];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -455,6 +461,11 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
     [self.scrollContentView addSubview:self.tipLabel];
 
     [NSLayoutConstraint activateConstraints:@[
+        [headerBG.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [headerBG.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [headerBG.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [headerBG.bottomAnchor constraintEqualToAnchor:header.bottomAnchor],
+
         [header.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [header.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -512,6 +523,8 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
         [self.tipLabel.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-30],
         [self.tipLabel.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-28],
     ]];
+
+    [self.view bringSubviewToFront:header];
 
     dispatch_async(dispatch_get_main_queue(), ^{
         self.cancelBtn.layer.shadowPath =
