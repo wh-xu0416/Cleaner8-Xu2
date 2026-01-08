@@ -58,8 +58,8 @@
 @property (nonatomic, strong) UIImageView *qpImageView;
 @property (nonatomic, strong) UIImageView *bookImageView;
 
-@property (nonatomic, strong) UILabel *titleLabel;        // 浮在 ic_qp 中心
-@property (nonatomic, strong) UILabel *descriptionLabel;  // 说明文字（居中）
+@property (nonatomic, strong) UILabel *titleLabel;      
+@property (nonatomic, strong) UILabel *descriptionLabel;
 
 @property (nonatomic, strong) UICollectionView *collectionView;
 @property (nonatomic, strong) UIButton *nextButton;
@@ -263,14 +263,27 @@ static NSString * const kCellId = @"LearnBigImageCell";
 }
 
 - (void)onNext {
+    // 最后一页：OK -> 返回
+    if (self.currentIndex >= (NSInteger)self.instructions.count - 1) {
+        [self.navigationController popViewControllerAnimated:YES];
+        return;
+    }
+
     NSInteger next = self.currentIndex + 1;
     if (next >= self.instructions.count) next = 0;
     self.currentIndex = next;
     [self updateStepUIAnimated:YES];
 }
 
+- (void)updateNextButtonTitle {
+    BOOL isLast = (self.currentIndex >= (NSInteger)self.instructions.count - 1);
+    NSString *t = isLast ? NSLocalizedString(@"OK", nil) : NSLocalizedString(@"Next", nil);
+    [self.nextButton setTitle:t forState:UIControlStateNormal];
+}
+
 - (void)updateStepUIAnimated:(BOOL)animated {
     self.descriptionLabel.text = self.instructions[self.currentIndex];
+    [self updateNextButtonTitle];
 
     if (self.currentIndex < self.imageNames.count) {
         NSIndexPath *idx = [NSIndexPath indexPathForItem:self.currentIndex inSection:0];
@@ -306,6 +319,7 @@ static NSString * const kCellId = @"LearnBigImageCell";
     if (page != self.currentIndex) {
         self.currentIndex = page;
         self.descriptionLabel.text = self.instructions[self.currentIndex];
+        [self updateNextButtonTitle];
     }
 }
 
@@ -322,7 +336,9 @@ static NSString * const kCellId = @"LearnBigImageCell";
     if (page != self.currentIndex) {
         self.currentIndex = page;
         self.descriptionLabel.text = self.instructions[self.currentIndex];
+        [self updateNextButtonTitle];
     }
 }
+
 
 @end

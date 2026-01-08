@@ -4,6 +4,7 @@
 #import "Common.h"
 #import <Contacts/Contacts.h>
 #import <UIKit/UIKit.h>
+#import <ContactsUI/ContactsUI.h>
 
 #pragma mark - UI Helpers
 
@@ -308,8 +309,10 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
 @property (nonatomic, strong) UILabel *avatarLabel;
 @property (nonatomic, strong) UILabel *nameLabel;
 @property (nonatomic, strong) UILabel *phoneLabel;
-@property (nonatomic, strong) UIImageView *selectIcon;
-@property (nonatomic, copy) void (^onTap)(void);
+@property (nonatomic, strong) UIButton *selectBtn;
+@property (nonatomic, copy) void (^onTapCell)(void);
+@property (nonatomic, copy) void (^onTapSelect)(void);
+
 - (void)configName:(NSString *)name phone:(NSString *)phone initial:(NSString *)initial selected:(BOOL)selected showSelectIcon:(BOOL)showSelectIcon;
 @end
 
@@ -353,13 +356,12 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
         self.phoneLabel.textColor = [UIColor colorWithWhite:0 alpha:0.5];
         [self.borderView addSubview:self.phoneLabel];
 
-        self.selectIcon = [UIImageView new];
-        self.selectIcon.translatesAutoresizingMaskIntoConstraints = NO;
-        self.selectIcon.contentMode = UIViewContentModeScaleAspectFit;
-        [self.borderView addSubview:self.selectIcon];
-
-        UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(tapCell)];
-        [self.contentView addGestureRecognizer:tap];
+        self.selectBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        self.selectBtn.translatesAutoresizingMaskIntoConstraints = NO;
+        self.selectBtn.backgroundColor = UIColor.clearColor;
+        self.selectBtn.contentMode = UIViewContentModeScaleAspectFit;
+        [self.selectBtn addTarget:self action:@selector(tapSelectBtn) forControlEvents:UIControlEventTouchUpInside];
+        [self.borderView addSubview:self.selectBtn];
 
         [NSLayoutConstraint activateConstraints:@[
             [self.borderView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
@@ -375,13 +377,13 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
             [self.avatarLabel.centerXAnchor constraintEqualToAnchor:self.avatarView.centerXAnchor],
             [self.avatarLabel.centerYAnchor constraintEqualToAnchor:self.avatarView.centerYAnchor],
 
-            [self.selectIcon.trailingAnchor constraintEqualToAnchor:self.borderView.trailingAnchor constant:-18],
-            [self.selectIcon.centerYAnchor constraintEqualToAnchor:self.borderView.centerYAnchor],
-            [self.selectIcon.widthAnchor constraintEqualToConstant:24],
-            [self.selectIcon.heightAnchor constraintEqualToConstant:24],
+            [self.selectBtn.trailingAnchor constraintEqualToAnchor:self.borderView.trailingAnchor constant:-18],
+            [self.selectBtn.centerYAnchor constraintEqualToAnchor:self.borderView.centerYAnchor],
+            [self.selectBtn.widthAnchor constraintEqualToConstant:36],
+            [self.selectBtn.heightAnchor constraintEqualToConstant:36],
 
             [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor constant:10],
-            [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectIcon.leadingAnchor constant:-10],
+            [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectBtn.leadingAnchor constant:-10],
             [self.nameLabel.topAnchor constraintEqualToAnchor:self.borderView.topAnchor constant:11],
 
             [self.phoneLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
@@ -393,22 +395,25 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
     return self;
 }
 
-- (void)tapCell { if (self.onTap) self.onTap(); }
+- (void)tapCell { if (self.onTapCell) self.onTapCell(); }
+- (void)tapSelectBtn { if (self.onTapSelect) self.onTapSelect(); }
 
 - (void)configName:(NSString *)name phone:(NSString *)phone initial:(NSString *)initial selected:(BOOL)selected showSelectIcon:(BOOL)showSelectIcon {
     self.nameLabel.text = name ?: @"";
     self.phoneLabel.text = phone ?: @"";
     self.avatarLabel.text = initial.length ? initial : @"?";
-    self.selectIcon.hidden = !showSelectIcon;
+    self.selectBtn.hidden = !showSelectIcon;
+
     NSString *iconName = selected ? @"ic_select_s" : @"ic_select_gray_n";
-    self.selectIcon.image = [[UIImage imageNamed:iconName] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    UIImage *img = [[UIImage imageNamed:iconName] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.selectBtn setImage:img forState:UIControlStateNormal];
 }
 
 @end
 
 #pragma mark - VC
 
-@interface DuplicateContactsViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
+@interface DuplicateContactsViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, CNContactViewControllerDelegate>
 @property (nonatomic, assign) BOOL hasContactsAccess;
 
 @property (nonatomic, strong) CAGradientLayer *topGradient;
@@ -774,6 +779,25 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     return [self currentMergeableGroups].count > 0;
 }
 
+- (void)contactViewController:(CNContactViewController *)viewController didCompleteWithContact:(CNContact * _Nullable)contact {
+    [self.navigationController popViewControllerAnimated:YES];
+    // 如果希望编辑后回来刷新重复数据，可以在这里触发：
+    // [self setupContacts];
+}
+
+- (void)openContactDetail:(CNContact *)contact {
+    if (!contact) return;
+
+    CNContactStore *store = [[CNContactStore alloc] init];
+    CNContactViewController *vc = [CNContactViewController viewControllerForContact:contact];
+    vc.contactStore = store;
+    vc.allowsEditing = YES;
+    vc.allowsActions = YES;
+    vc.delegate = self;
+
+    [self.navigationController pushViewController:vc animated:YES];
+}
+
 #pragma mark - Floating Button
 
 - (void)updateFloatingButtonState {
@@ -989,6 +1013,21 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     [self.cv reloadData];
 }
 
+#pragma mark - UICollectionViewDelegate
+
+- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+    [collectionView deselectItemAtIndexPath:indexPath animated:YES];
+
+    if (self.previewMode) return;
+    if (self.emptyView && !self.emptyView.hidden) return;
+
+    CMDuplicateGroup *g = self.allGroups[indexPath.section];
+    if (indexPath.item < 0 || indexPath.item >= (NSInteger)g.items.count) return;
+    
+    CNContact *c = g.items[indexPath.item];
+    [self openSystemPreviewContact:c];
+}
+
 #pragma mark - UICollectionViewDataSource
 
 - (NSInteger)numberOfSectionsInCollectionView:(UICollectionView *)collectionView {
@@ -1030,7 +1069,12 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
         BOOL selected = [self.selectedContactIds containsObject:c.identifier];
 
-        cell.onTap = ^{
+        cell.onTapCell = ^{
+            if (weakSelf.previewMode) return;
+            [weakSelf openSystemPreviewContact:c];
+        };
+
+        cell.onTapSelect = ^{
             if (weakSelf.previewMode) return;
             if (c.identifier.length == 0) return;
 
@@ -1042,7 +1086,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
             [weakSelf updateFloatingButtonState];
             [weakSelf syncTopSelectState];
-            [weakSelf.cv reloadData];
+
+            [weakSelf.cv reloadItemsAtIndexPaths:@[indexPath]];
         };
 
         [cell configName:name
@@ -1077,13 +1122,44 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
     NSString *phone = (phones.count > 0) ? [phones.array componentsJoinedByString:@" · "] : @"";
 
-    cell.onTap = nil;
     [cell configName:name
               phone:phone
             initial:ASDCFirstChar(name)
            selected:NO
       showSelectIcon:NO];
     return cell;
+}
+
+#pragma mark - Open Contact (sync with AllContacts)
+
+- (void)openSystemPreviewContact:(CNContact *)c {
+    if (!c) return;
+
+    CNContactStore *store = [CNContactStore new];
+    CNContact *showContact = c;
+
+    if (c.identifier.length > 0) {
+        NSError *err = nil;
+        showContact = [store unifiedContactWithIdentifier:c.identifier
+                                               keysToFetch:@[[CNContactViewController descriptorForRequiredKeys]]
+                                                     error:&err] ?: c;
+    }
+
+    CNContactViewController *vc = nil;
+    if (showContact.identifier.length > 0) {
+        vc = [CNContactViewController viewControllerForContact:showContact];
+        vc.contactStore = store;
+        vc.allowsEditing = NO;
+        vc.allowsActions = YES;
+    } else {
+        vc = [CNContactViewController viewControllerForUnknownContact:showContact];
+        vc.contactStore = store;
+        vc.allowsEditing = NO;
+        vc.allowsActions = YES;
+    }
+
+    vc.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 #pragma mark - Header

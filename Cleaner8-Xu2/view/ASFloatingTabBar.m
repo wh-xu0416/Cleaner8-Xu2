@@ -32,7 +32,7 @@ static inline UIColor *ASColorHex(uint32_t rgb, CGFloat alpha) {
     if (self = [super initWithFrame:CGRectZero]) {
         self.items = items;
 
-        self.backgroundColor = ASColorHex(0xFFFFFF, 0xCC / 255.0);
+        self.backgroundColor = UIColor.whiteColor;
         self.layer.masksToBounds = NO;
 
         self.layer.shadowColor = ASColorHex(0x000000, 0x1A / 255.0).CGColor;

@@ -14,6 +14,14 @@ typedef NS_ENUM(NSInteger, ASAssetSortMode) {
     ASAssetSortModeSmallest
 };
 
+static inline UIColor *ASHexRGBA(uint32_t hex) {
+    CGFloat r = ((hex >> 24) & 0xFF) / 255.0;
+    CGFloat g = ((hex >> 16) & 0xFF) / 255.0;
+    CGFloat b = ((hex >> 8)  & 0xFF) / 255.0;
+    CGFloat a = ( hex        & 0xFF) / 255.0;
+    return [UIColor colorWithRed:r green:g blue:b alpha:a];
+}
+
 static inline UIColor *ASBgColor(void) {
     // LaunchViewController: ASRGB(246, 248, 251)
     return [UIColor colorWithRed:246/255.0 green:248/255.0 blue:251/255.0 alpha:1.0];
@@ -1036,12 +1044,13 @@ static inline void ASNoAnim(dispatch_block_t block) {
     if (self.onToggleIndex) self.onToggleIndex(self.sectionIndex, idx);
 }
 
+
 - (void)onTapPreviewBtn:(UIButton *)btn {
     NSInteger idx = btn.tag;
     if (idx < 0 || idx >= (NSInteger)self.models.count) return;
-    if (self.onPreviewIndex) self.onPreviewIndex(self.sectionIndex, idx);
-}
 
+    if (self.onToggleIndex) self.onToggleIndex(self.sectionIndex, idx);
+}
 @end
 
 static inline CGFloat ASTextW(NSString *t, UIFont *f) {
@@ -1059,6 +1068,10 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 #pragma mark - VC
 
 @interface ASAssetListViewController () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
+@property (nonatomic, strong) UIView *as_sortMask;
+@property (nonatomic, strong) UIView *as_sortSheet;
+@property (nonatomic, assign) ASAssetSortMode as_pendingSortMode;
+@property (nonatomic, strong) NSMutableDictionary<NSNumber*, UIImageView*> *as_sortCheckByMode;
 @property (nonatomic) ASAssetSortMode sortMode;
 @property (nonatomic, strong) CAGradientLayer *topGradient;
 @property (nonatomic, strong) UIView *listBgView;
@@ -1091,6 +1104,8 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 @property (nonatomic) uint64_t selectedBytes;
 
 @property (nonatomic, strong) NSDictionary<NSString*, PHAsset*> *assetById;
+@property (nonatomic, strong) UIView *emptyView;
+@property (nonatomic, strong) UILabel *emptyLabel;
 
 @end
 
@@ -1216,6 +1231,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 //            [self.cv reloadData];
             [self recomputeBytesAndRefreshUI];
             [self syncNavSelectAllState];
+            [self updateEmptyState];
         });
     });
 }
@@ -1293,6 +1309,22 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
         self.listBgView.frame = listFrame;
         self.cv.frame = self.listBgView.bounds;
     }
+
+    CGRect hostRect = CGRectZero;
+    if ([self isGroupMode]) {
+        hostRect = self.cv.frame;
+    } else {
+        hostRect = self.listBgView.frame;
+    }
+
+    self.emptyView.frame = hostRect;
+
+    CGFloat labelH = ceil(self.emptyLabel.font.lineHeight);
+    CGFloat labelW = MIN(hostRect.size.width - 40, 320);
+    self.emptyLabel.frame = CGRectMake((hostRect.size.width - labelW) / 2.0,
+                                      (hostRect.size.height - labelH) / 2.0,
+                                      labelW,
+                                      labelH);
 
     if (!self.bottomBar.superview) [self.view addSubview:self.bottomBar];
 
@@ -1377,46 +1409,269 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 }
 
 - (void)onTapSort {
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"Sort", nil)
-                                                                message:nil
-                                                         preferredStyle:UIAlertControllerStyleActionSheet];
+    [self as_showSortSheet];
+}
 
-    __weak typeof(self) weakSelf = self;
+#pragma mark - Sort Sheet (custom)
 
-    void (^apply)(ASAssetSortMode) = ^(ASAssetSortMode m) {
-        weakSelf.sortMode = m;
-        [weakSelf applyCurrentSortAndReload];
-    };
+- (void)as_hideSortSheet {
+    if (!self.as_sortSheet) return;
 
-    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Newest", nil)
-                                          style:UIAlertActionStyleDefault
-                                        handler:^(__unused UIAlertAction * _Nonnull action) {
-        apply(ASAssetSortModeNewest);
-    }]];
+    UIView *mask = self.as_sortMask;
+    UIView *sheet = self.as_sortSheet;
 
-    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Oldest", nil)
-                                          style:UIAlertActionStyleDefault
-                                        handler:^(__unused UIAlertAction * _Nonnull action) {
-        apply(ASAssetSortModeOldest);
-    }]];
+    UIView *panel = [sheet viewWithTag:9001];
+    [UIView animateWithDuration:0.18 animations:^{
+        mask.alpha = 0.0;
+        if (panel) {
+            panel.alpha = 0.0;
+            panel.transform = CGAffineTransformMakeTranslation(0, 10);
+        } else {
+            sheet.alpha = 0.0;
+        }
+    } completion:^(__unused BOOL finished) {
+        [sheet removeFromSuperview];
+        [mask removeFromSuperview];
+        self.as_sortSheet = nil;
+        self.as_sortMask = nil;
+        self.as_sortCheckByMode = nil;
+    }];
+}
 
-    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Largest", nil)
-                                          style:UIAlertActionStyleDefault
-                                        handler:^(__unused UIAlertAction * _Nonnull action) {
-        apply(ASAssetSortModeLargest);
-    }]];
+- (void)as_sortMaskTapped {
+    [self as_hideSortSheet];
+}
 
-    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Smallest", nil)
-                                          style:UIAlertActionStyleDefault
-                                        handler:^(__unused UIAlertAction * _Nonnull action) {
-        apply(ASAssetSortModeSmallest);
-    }]];
+- (UIControl *)as_sortRowWithTitle:(NSString *)title mode:(ASAssetSortMode)mode {
 
-    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Cancel", nil)
-                                          style:UIAlertActionStyleCancel
-                                        handler:nil]];
+    UIControl *row = [UIControl new];
+    row.translatesAutoresizingMaskIntoConstraints = NO;
+    row.backgroundColor = ASHexRGBA(0xF6F6F6FF);
+    row.layer.cornerRadius = 8;
+    row.layer.masksToBounds = YES;
+    row.tag = mode;
 
-    [self presentViewController:ac animated:YES completion:nil];
+    [row addTarget:self action:@selector(as_sortRowTapped:) forControlEvents:UIControlEventTouchUpInside];
+
+    UILabel *lab = [UILabel new];
+    lab.translatesAutoresizingMaskIntoConstraints = NO;
+    lab.text = title;
+    lab.textColor = UIColor.blackColor;
+    lab.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+    [row addSubview:lab];
+
+    UIImageView *check = [UIImageView new];
+    check.translatesAutoresizingMaskIntoConstraints = NO;
+    check.contentMode = UIViewContentModeScaleAspectFit;
+    check.image = [UIImage imageNamed:@"ic_checked"];
+    [row addSubview:check];
+
+    if (!self.as_sortCheckByMode) self.as_sortCheckByMode = [NSMutableDictionary dictionary];
+    self.as_sortCheckByMode[@(mode)] = check;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [lab.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:20],
+        [lab.topAnchor constraintEqualToAnchor:row.topAnchor constant:14],
+        [lab.bottomAnchor constraintEqualToAnchor:row.bottomAnchor constant:-14],
+        [lab.trailingAnchor constraintLessThanOrEqualToAnchor:check.leadingAnchor constant:-12],
+
+        [check.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-20],
+        [check.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
+        [check.widthAnchor constraintEqualToConstant:24],
+        [check.heightAnchor constraintEqualToConstant:24],
+    ]];
+
+    return row;
+}
+
+- (void)as_applyPendingSortUI {
+    for (NSNumber *k in self.as_sortCheckByMode.allKeys) {
+        UIImageView *v = self.as_sortCheckByMode[k];
+        v.hidden = (k.integerValue != self.as_pendingSortMode);
+    }
+}
+
+- (void)as_sortRowTapped:(UIControl *)row {
+    self.as_pendingSortMode = (ASAssetSortMode)row.tag;
+    [self as_applyPendingSortUI];
+}
+
+- (void)as_sortConfirmTapped {
+    self.sortMode = self.as_pendingSortMode;
+    [self as_hideSortSheet];
+    [self applyCurrentSortAndReload];
+}
+
+- (UIWindow *)as_keyWindow {
+    UIWindow *w = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+            if (![scene isKindOfClass:UIWindowScene.class]) continue;
+            for (UIWindow *win in ((UIWindowScene *)scene).windows) {
+                if (win.isKeyWindow) { w = win; break; }
+            }
+            if (w) break;
+        }
+    }
+    if (!w) w = UIApplication.sharedApplication.keyWindow;
+    if (!w) w = UIApplication.sharedApplication.windows.firstObject;
+    return w;
+}
+
+- (void)as_sortCancelTapped {
+    [self as_hideSortSheet];
+}
+
+- (void)as_showSortSheet {
+
+    if (self.as_sortSheet) { [self as_hideSortSheet]; return; }
+
+    self.as_pendingSortMode = self.sortMode;
+
+    UIWindow *host = [self as_keyWindow];
+    if (!host) return;
+
+    UIView *mask = [UIView new];
+    mask.translatesAutoresizingMaskIntoConstraints = NO;
+    mask.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.35];
+    mask.alpha = 0.0;
+    [host addSubview:mask];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [mask.leadingAnchor constraintEqualToAnchor:host.leadingAnchor],
+        [mask.trailingAnchor constraintEqualToAnchor:host.trailingAnchor],
+        [mask.topAnchor constraintEqualToAnchor:host.topAnchor],
+        [mask.bottomAnchor constraintEqualToAnchor:host.bottomAnchor],
+    ]];
+
+    self.as_sortMask = mask;
+
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(as_sortMaskTapped)];
+    [mask addGestureRecognizer:tap];
+
+    UIView *sheet = [UIView new];
+    sheet.translatesAutoresizingMaskIntoConstraints = NO;
+    sheet.backgroundColor = UIColor.clearColor;
+    [host addSubview:sheet];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [sheet.leadingAnchor constraintEqualToAnchor:host.leadingAnchor],
+        [sheet.trailingAnchor constraintEqualToAnchor:host.trailingAnchor],
+        [sheet.bottomAnchor constraintEqualToAnchor:host.bottomAnchor],
+    ]];
+
+    self.as_sortSheet = sheet;
+
+    UILayoutGuide *safe = sheet.safeAreaLayoutGuide;
+
+    UIView *panel = [UIView new];
+    panel.tag = 9001;
+    panel.translatesAutoresizingMaskIntoConstraints = NO;
+    panel.backgroundColor = UIColor.whiteColor;
+    panel.layer.cornerRadius = 16;
+    panel.layer.masksToBounds = YES;
+    if (@available(iOS 11.0, *)) {
+        panel.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+    }
+    panel.alpha = 0.0;
+    panel.transform = CGAffineTransformMakeTranslation(0, 10);
+    [sheet addSubview:panel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [panel.leadingAnchor constraintEqualToAnchor:sheet.leadingAnchor],
+        [panel.trailingAnchor constraintEqualToAnchor:sheet.trailingAnchor],
+        [panel.topAnchor constraintEqualToAnchor:sheet.topAnchor],
+        [panel.bottomAnchor constraintEqualToAnchor:sheet.bottomAnchor],
+    ]];
+
+    UIView *content = [UIView new];
+    content.translatesAutoresizingMaskIntoConstraints = NO;
+    [panel addSubview:content];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [content.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:20],
+        [content.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-20],
+
+        [content.topAnchor constraintEqualToAnchor:safe.topAnchor constant:20],
+
+        [content.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-20],
+    ]];
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = NSLocalizedString(@"Sort", nil);
+    title.textColor = UIColor.blackColor;
+    title.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+    title.textAlignment = NSTextAlignmentCenter;
+    [content addSubview:title];
+
+    UIStackView *stack = [UIStackView new];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 15;
+    [content addSubview:stack];
+
+    UIControl *r0 = [self as_sortRowWithTitle:NSLocalizedString(@"Newest", nil) mode:ASAssetSortModeNewest];
+    UIControl *r1 = [self as_sortRowWithTitle:NSLocalizedString(@"Oldest", nil) mode:ASAssetSortModeOldest];
+    UIControl *r2 = [self as_sortRowWithTitle:NSLocalizedString(@"Largest", nil) mode:ASAssetSortModeLargest];
+    UIControl *r3 = [self as_sortRowWithTitle:NSLocalizedString(@"Smallest", nil) mode:ASAssetSortModeSmallest];
+
+    [stack addArrangedSubview:r0];
+    [stack addArrangedSubview:r1];
+    [stack addArrangedSubview:r2];
+    [stack addArrangedSubview:r3];
+
+    UIButton *confirm = [UIButton buttonWithType:UIButtonTypeCustom];
+    confirm.translatesAutoresizingMaskIntoConstraints = NO;
+    confirm.backgroundColor = ASHexRGBA(0x024DFFFF);
+    confirm.layer.cornerRadius = 26;
+    confirm.layer.masksToBounds = YES;
+    confirm.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+    [confirm setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    [confirm setTitle:NSLocalizedString(@"Confirm", nil) forState:UIControlStateNormal];
+    [confirm addTarget:self action:@selector(as_sortConfirmTapped) forControlEvents:UIControlEventTouchUpInside];
+    [content addSubview:confirm];
+
+    UIButton *cancel = [UIButton buttonWithType:UIButtonTypeCustom];
+    cancel.translatesAutoresizingMaskIntoConstraints = NO;
+    cancel.backgroundColor = ASHexRGBA(0xF6F6F6FF);
+    cancel.layer.cornerRadius = 26;
+    cancel.layer.masksToBounds = YES;
+    cancel.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+    [cancel setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+    [cancel setTitle:NSLocalizedString(@"Cancel", nil) forState:UIControlStateNormal];
+    [cancel addTarget:self action:@selector(as_sortCancelTapped) forControlEvents:UIControlEventTouchUpInside];
+    [content addSubview:cancel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [title.topAnchor constraintEqualToAnchor:content.topAnchor],
+        [title.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+        [title.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+
+        [stack.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:15],
+        [stack.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+
+        [confirm.topAnchor constraintEqualToAnchor:stack.bottomAnchor constant:15],
+        [confirm.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+        [confirm.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+        [confirm.heightAnchor constraintEqualToConstant:52],
+
+        [cancel.topAnchor constraintEqualToAnchor:confirm.bottomAnchor constant:15],
+        [cancel.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+        [cancel.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+        [cancel.heightAnchor constraintEqualToConstant:52],
+        [cancel.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
+    ]];
+
+    [self as_applyPendingSortUI];
+
+    [UIView animateWithDuration:0.18 animations:^{
+        mask.alpha = 1.0;
+        panel.alpha = 1.0;
+        panel.transform = CGAffineTransformIdentity;
+    }];
 }
 
 #pragma mark - UI 设置
@@ -1528,6 +1783,20 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
         [bg addSubview:self.cv];
     }
 
+    // Empty state
+    self.emptyView = [UIView new];
+    self.emptyView.backgroundColor = UIColor.clearColor;
+    self.emptyView.hidden = YES;
+    [self.view addSubview:self.emptyView];
+
+    self.emptyLabel = [UILabel new];
+    self.emptyLabel.text = NSLocalizedString(@"No items to clean", nil);
+    self.emptyLabel.textColor = UIColor.blackColor;
+    self.emptyLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
+    self.emptyLabel.textAlignment = NSTextAlignmentCenter;
+    self.emptyLabel.numberOfLines = 1;
+    [self.emptyView addSubview:self.emptyLabel];
+
     UIView *bar = [UIView new];
     bar.backgroundColor = UIColor.clearColor;
     bar.userInteractionEnabled = YES;
@@ -1558,6 +1827,38 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     self.deleteBtn.enabled = NO;
     
     [self.view bringSubviewToFront:self.bottomBar];
+}
+
+- (BOOL)hasAnyItemsToShow {
+    if (self.sections.count == 0) return NO;
+
+    if ([self isGroupMode]) {
+        for (ASAssetSection *sec in self.sections) {
+            if (sec.assets.count >= 2) return YES;
+        }
+        return NO;
+    } else {
+        for (ASAssetSection *sec in self.sections) {
+            if (sec.assets.count > 0) return YES;
+        }
+        return NO;
+    }
+}
+
+- (void)updateEmptyState {
+    BOOL empty = ![self hasAnyItemsToShow];
+
+    self.emptyView.hidden = !empty;
+
+    self.cv.hidden = empty;
+
+    if (!empty) return;
+
+    [self as_noAnim:^{
+        self.bottomBar.hidden = YES;
+        self.deleteBtn.hidden = YES;
+        self.deleteBtn.enabled = NO;
+    }];
 }
 
 #pragma mark - 全选功能
@@ -1919,6 +2220,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     [self recomputeGroupCardLeftWidth];
     [self updateTopSortButtonUI];
     [self.cv reloadData];
+    [self updateEmptyState];
 }
 
 #pragma mark - Default selection rule
@@ -2030,45 +2332,87 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 - (void)onDelete {
     if (self.selectedIds.count == 0) return;
 
-    NSSet<NSString *> *toDelete = [self.selectedIds copy];
-    NSArray<NSString *> *ids = toDelete.allObjects;
+    NSUInteger count = self.selectedIds.count;
 
-    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
-    if (fr.count == 0) return;
+    BOOL isVideo = [self isVideoMode];
+    NSString *typePlural = isVideo ? NSLocalizedString(@"videos",nil) : NSLocalizedString(@"photos",nil);
+    NSString *typeSingle = isVideo ? NSLocalizedString(@"video",nil)  : NSLocalizedString(@"photo",nil);
+
+    NSString *title = [NSString stringWithFormat:NSLocalizedString(@"This action will delete the selected %@ from your system album.",nil), typePlural];
+
+    NSString *actionTitle = nil;
+    if (count == 1) {
+        actionTitle = [NSString stringWithFormat:NSLocalizedString(@"Delete %@ (%lu)",nil), typeSingle, (unsigned long)count];
+    } else {
+        actionTitle = [NSString stringWithFormat:NSLocalizedString(@"Delete %@ (%lu)",nil), typePlural, (unsigned long)count];
+    }
+
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:title
+                                                                message:nil
+                                                         preferredStyle:UIAlertControllerStyleActionSheet];
 
     __weak typeof(self) weakSelf = self;
 
-    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-        [PHAssetChangeRequest deleteAssets:fr];
-    } completionHandler:^(BOOL success, NSError * _Nullable error) {
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Cancel",nil)
+                                          style:UIAlertActionStyleCancel
+                                        handler:nil]];
 
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (!success) return;
-            
-            if (success) {
+    [ac addAction:[UIAlertAction actionWithTitle:actionTitle
+                                          style:UIAlertActionStyleDestructive
+                                        handler:^(__unused UIAlertAction * _Nonnull action) {
+
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+
+        if (self.selectedIds.count == 0) return;
+
+        NSSet<NSString *> *toDelete = [self.selectedIds copy];
+        NSArray<NSString *> *ids = toDelete.allObjects;
+
+        PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
+        if (fr.count == 0) return;
+
+        __weak typeof(self) weakSelf2 = self;
+
+        [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+            [PHAssetChangeRequest deleteAssets:fr];
+        } completionHandler:^(BOOL success, NSError * _Nullable error) {
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (!success) return;
+
                 NSUInteger deletedCount = toDelete.count;
-                uint64_t freedBytes = weakSelf.selectedBytes;
+                uint64_t freedBytes = weakSelf2.selectedBytes;
 
                 ResultViewController *r =
                 [[ResultViewController alloc] initWithDeletedCount:deletedCount
                                                          freedBytes:freedBytes];
-                [weakSelf.navigationController pushViewController:r animated:YES];
+                [weakSelf2.navigationController pushViewController:r animated:YES];
 
-                [weakSelf.selectedIds removeAllObjects];
+                [weakSelf2.selectedIds removeAllObjects];
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                    [weakSelf rebuildDataFromManager];
+                    [weakSelf2 rebuildDataFromManager];
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        [weakSelf applyDefaultSelectionRule];
-                        [weakSelf.cv reloadData];
-                        [weakSelf recomputeBytesAndRefreshUI];
-                        [weakSelf syncNavSelectAllState];
+                        [weakSelf2 applyDefaultSelectionRule];
+                        [weakSelf2.cv reloadData];
+                        [weakSelf2 recomputeBytesAndRefreshUI];
+                        [weakSelf2 syncNavSelectAllState];
+                        [weakSelf2 updateEmptyState];
                     });
                 });
-            }
-        });
-    }];
-}
+            });
+        }];
+    }]];
 
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        UIPopoverPresentationController *pop = ac.popoverPresentationController;
+        pop.sourceView = self.deleteBtn ?: self.view;
+        pop.sourceRect = (self.deleteBtn ? self.deleteBtn.bounds : CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds), 1, 1));
+        pop.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    }
+
+    [self presentViewController:ac animated:YES completion:nil];
+}
 
 - (void)onTapGridSelectBtn:(UIButton *)btn {
     CGPoint p = [btn convertPoint:CGPointMake(CGRectGetMidX(btn.bounds), CGRectGetMidY(btn.bounds))

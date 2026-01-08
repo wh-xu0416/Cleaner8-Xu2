@@ -252,3 +252,6 @@
 "You can perform this action now to free up space, or do it at any convenient time" = "You can perform this action now to free up space, or do it at any convenient time";
 "You deleted %@hotos p today." = "You deleted %@ photos today.";
 "You will save about " = "You will save about ";
+"Wrong PIN. Please retry." = "Wrong PIN. Please retry.";
+"Set New Passcode" = "Set New Passcode";
+"No items to clean" = "No items to clean";

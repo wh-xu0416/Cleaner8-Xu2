@@ -476,6 +476,24 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 #pragma mark - SwipeViewController
 
 @interface SwipeViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UIScrollViewDelegate>
+@property (nonatomic, strong) UIView *sectionsCard;
+@property (nonatomic, strong) UIStackView *sectionsStack;
+
+@property (nonatomic, strong) UIView *recentSectionView;
+@property (nonatomic, strong) UIView *monthSectionView;
+@property (nonatomic, strong) UIView *othersSectionView;
+
+// sectionsCard 顶部约束：无 banner 时连 cardsContainer；有 banner 时连 permissionBanner
+@property (nonatomic, strong) NSLayoutConstraint *sectionsTopToCardsC;
+@property (nonatomic, strong) NSLayoutConstraint *sectionsTopToBannerC;
+
+// contentView 底部跟随（有权限时跟 sectionsCard；无权限时跟 noAuthPlaceholder）
+@property (nonatomic, strong) NSLayoutConstraint *sectionsCardBottomToContentC;
+@property (nonatomic, strong) NSLayoutConstraint *noAuthBottomToContentC;
+
+// 让白卡片底部在滚动底部继续延伸（白底留出 safeBottom+80 的空白）
+@property (nonatomic, strong) NSLayoutConstraint *sectionsStackBottomPadC;
+
 @property (nonatomic, assign) BOOL sw_hasPhotoAccess;
 @property (nonatomic, assign) BOOL sw_isLimitedAuth;
 
@@ -534,6 +552,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 @property (nonatomic, assign) uint64_t cachedArchivedBytes;
 @property (nonatomic, assign) CGFloat cachedCategorizedProgress;
 @property (nonatomic, strong) CAGradientLayer *topGradient;
+@property (nonatomic, strong) NSLayoutConstraint *sectionsCardBottomC;
 
 @end
 
@@ -698,16 +717,14 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         if (m.type == SwipeModuleTypeRandom20) rand = m;
         if (m.type == SwipeModuleTypeSelfie) selfie = m;
     }
-    NSMutableArray *orderedOthers = [NSMutableArray array];
+    NSMutableArray *displayOthers = [NSMutableArray array];
 
-    // Random 永远有
     if (!rand) {
         rand = [SwipeModule new];
         rand.type = SwipeModuleTypeRandom20;
-        rand.assetIDs = @[];      // 确保为空
-        rand.title = @"";         // 走默认 NSLocalizedString(@"Random", nil)
+        rand.assetIDs = @[];
+        rand.title = @"";
     }
-    // Selfie 永远有
     if (!selfie) {
         selfie = [SwipeModule new];
         selfie.type = SwipeModuleTypeSelfie;
@@ -715,9 +732,10 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         selfie.title = @"";
     }
 
-    [orderedOthers addObject:rand];
-    [orderedOthers addObject:selfie];
-    self.otherModules = orderedOthers.copy;
+    if (rand.assetIDs.count > 0)   [displayOthers addObject:rand];
+    if (selfie.assetIDs.count > 0) [displayOthers addObject:selfie];
+
+    self.otherModules = displayOthers.copy;
 
     if (self.monthModules.count > 0) {
         SwipeModule *first = self.monthModules.firstObject;
@@ -730,6 +748,22 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [self.recentCV reloadData];
     [self.monthCV reloadData];
     [self.othersCV reloadData];
+    [self sw_updateSectionVisibility];
+}
+
+- (void)sw_updateSectionVisibility {
+    BOOL showSections = self.sw_hasPhotoAccess;
+
+    BOOL hasRecent = (self.recentModules.count > 0);
+    BOOL hasMonth  = (self.monthModules.count > 0);
+    BOOL hasOthers = (self.otherModules.count > 0);
+
+    self.recentSectionView.hidden = !showSections || !hasRecent;
+    self.monthSectionView.hidden  = !showSections || !hasMonth;
+    self.othersSectionView.hidden = !showSections || !hasOthers;
+
+    BOOL any = (hasRecent || hasMonth || hasOthers);
+    self.sectionsCard.hidden = !showSections || !any;
 }
 
 #pragma mark - UI
@@ -743,6 +777,15 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     v.layer.shadowOpacity = 1;
     v.layer.shadowOffset = CGSizeMake(0, 6);
     v.layer.shadowRadius = 14;
+    return v;
+}
+
+- (UIView *)buildSectionCardView {
+    UIView *v = [UIView new];
+    v.translatesAutoresizingMaskIntoConstraints = NO;
+    v.backgroundColor = UIColor.whiteColor;
+    v.layer.cornerRadius = 24;
+    v.layer.masksToBounds = YES;
     return v;
 }
 
@@ -970,12 +1013,75 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.archiveDetailLabel.topAnchor constraintEqualToAnchor:self.archiveTitleLabel.bottomAnchor constant:5],
     ]];
 
+    // ===== 统一白色背景卡片 sectionsCard =====
+    self.sectionsCard = [self buildSectionCardView];
+    [self.contentView addSubview:self.sectionsCard];
+
+    // 顶部：无 banner 时距 cardsContainer 30；有 banner 时放到 banner 下方（留 18 的间距）
+    self.sectionsTopToCardsC = [self.sectionsCard.topAnchor constraintEqualToAnchor:self.cardsContainer.bottomAnchor constant:30];
+    self.sectionsTopToBannerC = [self.sectionsCard.topAnchor constraintEqualToAnchor:self.permissionBanner.bottomAnchor constant:18];
+    // 先不激活，sw_updatePermissionUI 里按状态切换
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.sectionsCard.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:0],
+        [self.sectionsCard.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:0],
+    ]];
+
+    self.sectionsCardBottomC = [self.sectionsCard.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:0];
+    self.sectionsCardBottomC.priority = UILayoutPriorityRequired;
+    self.sectionsCardBottomC.active = YES;
+
+    // sectionsCard 作为有权限时的内容底
+    self.sectionsCardBottomToContentC = [self.sectionsCard.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:0];
+    self.sectionsCardBottomToContentC.priority = UILayoutPriorityRequired;
+    // 是否 active 由 sw_updatePermissionUI 控制
+
+    // 无权限占位作为无权限时的内容底（你原来 noAuth 没有 bottom，会导致 content 高度不稳）
+    self.noAuthBottomToContentC = [self.noAuthPlaceholder.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:0];
+    self.noAuthBottomToContentC.priority = UILayoutPriorityRequired;
+    // 是否 active 由 sw_updatePermissionUI 控制
+
+    // 内部用 stack 来自动折叠隐藏模块
+    self.sectionsStack = [UIStackView new];
+    self.sectionsStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sectionsStack.axis = UILayoutConstraintAxisVertical;
+    self.sectionsStack.spacing = 30; // 模块间距（原来你是 30 左右的节奏）
+    [self.sectionsCard addSubview:self.sectionsStack];
+
+    // 顶部内边距 20（✅ 你的要求）
+    // 底部 padding：先给 20，后面 viewDidLayoutSubviews 会改成 -(safeBottom+80) 让白底延伸到底部
+    self.sectionsStackBottomPadC = [self.sectionsStack.bottomAnchor constraintEqualToAnchor:self.sectionsCard.bottomAnchor constant:-20];
+    self.sectionsStackBottomPadC.priority = UILayoutPriorityRequired;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.sectionsStack.leadingAnchor constraintEqualToAnchor:self.sectionsCard.leadingAnchor],
+        [self.sectionsStack.trailingAnchor constraintEqualToAnchor:self.sectionsCard.trailingAnchor],
+        [self.sectionsStack.topAnchor constraintEqualToAnchor:self.sectionsCard.topAnchor constant:20],
+        self.sectionsStackBottomPadC,
+    ]];
+
+    // ===== 三个模块容器（都塞进同一个白卡片）=====
+    self.recentSectionView = [UIView new];
+    self.recentSectionView.translatesAutoresizingMaskIntoConstraints = NO;
+
+    self.monthSectionView = [UIView new];
+    self.monthSectionView.translatesAutoresizingMaskIntoConstraints = NO;
+
+    self.othersSectionView = [UIView new];
+    self.othersSectionView.translatesAutoresizingMaskIntoConstraints = NO;
+
+    [self.sectionsStack addArrangedSubview:self.recentSectionView];
+    [self.sectionsStack addArrangedSubview:self.monthSectionView];
+    [self.sectionsStack addArrangedSubview:self.othersSectionView];
+
+    #pragma mark - Recent 模块（放进 recentSectionView）
+    // 复用你原来的创建代码（title + recentCV），只是 addSubview 改为 recentSectionView
     self.recentTitleLabel = [UILabel new];
     self.recentTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.recentTitleLabel.textColor = SWHexRGBA(0x000000FF);
     self.recentTitleLabel.font = SWFont(20, UIFontWeightSemibold);
     self.recentTitleLabel.text = NSLocalizedString(@"Recent", nil);
-    [self.contentView addSubview:self.recentTitleLabel];
+    [self.recentSectionView addSubview:self.recentTitleLabel];
 
     UICollectionViewFlowLayout *recentLayout = [UICollectionViewFlowLayout new];
     recentLayout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
@@ -990,30 +1096,33 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.recentCV.dataSource = self;
     self.recentCV.delegate = self;
     [self.recentCV registerClass:SWRecentCell.class forCellWithReuseIdentifier:@"SWRecentCell"];
-    [self.contentView addSubview:self.recentCV];
+    [self.recentSectionView addSubview:self.recentCV];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.recentTitleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:15],
-        [self.recentTitleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-15],
-        [self.recentTitleLabel.topAnchor constraintEqualToAnchor:self.permissionBanner.bottomAnchor constant:18],
+        [self.recentTitleLabel.leadingAnchor constraintEqualToAnchor:self.recentSectionView.leadingAnchor constant:15],
+        [self.recentTitleLabel.trailingAnchor constraintEqualToAnchor:self.recentSectionView.trailingAnchor constant:-15],
+        [self.recentTitleLabel.topAnchor constraintEqualToAnchor:self.recentSectionView.topAnchor],
 
-        [self.recentCV.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
-        [self.recentCV.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+        [self.recentCV.leadingAnchor constraintEqualToAnchor:self.recentSectionView.leadingAnchor],
+        [self.recentCV.trailingAnchor constraintEqualToAnchor:self.recentSectionView.trailingAnchor],
         [self.recentCV.topAnchor constraintEqualToAnchor:self.recentTitleLabel.bottomAnchor constant:10],
         [self.recentCV.heightAnchor constraintEqualToConstant:144],
+        [self.recentCV.bottomAnchor constraintEqualToAnchor:self.recentSectionView.bottomAnchor],
     ]];
+    self.contentBottomC = [self.othersCV.bottomAnchor constraintEqualToAnchor:self.sectionsCard.bottomAnchor constant:-100];
 
+    #pragma mark - Year(月份) 模块（放进 monthSectionView）
     self.yearTitleLabel = [UILabel new];
     self.yearTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.yearTitleLabel.textColor = SWHexRGBA(0x000000FF);
     self.yearTitleLabel.font = SWFont(20, UIFontWeightSemibold);
     self.yearTitleLabel.text = @"";
-    [self.contentView addSubview:self.yearTitleLabel];
+    [self.monthSectionView addSubview:self.yearTitleLabel];
 
     self.yearMoreBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.yearMoreBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.yearMoreBtn setImage:[UIImage imageNamed:@"ic_todo_small"] forState:UIControlStateNormal];
-    [self.contentView addSubview:self.yearMoreBtn];
+    [self.monthSectionView addSubview:self.yearMoreBtn];
 
     UICollectionViewFlowLayout *monthLayout = [UICollectionViewFlowLayout new];
     monthLayout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
@@ -1028,34 +1137,36 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.monthCV.dataSource = self;
     self.monthCV.delegate = self;
     [self.monthCV registerClass:SWMonthCell.class forCellWithReuseIdentifier:@"SWMonthCell"];
-    [self.contentView addSubview:self.monthCV];
+    [self.monthSectionView addSubview:self.monthCV];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.yearTitleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:15],
-        [self.yearTitleLabel.topAnchor constraintEqualToAnchor:self.recentCV.bottomAnchor constant:30],
+        [self.yearTitleLabel.leadingAnchor constraintEqualToAnchor:self.monthSectionView.leadingAnchor constant:15],
+        [self.yearTitleLabel.topAnchor constraintEqualToAnchor:self.monthSectionView.topAnchor],
 
-        [self.yearMoreBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-15],
+        [self.yearMoreBtn.trailingAnchor constraintEqualToAnchor:self.monthSectionView.trailingAnchor constant:-15],
         [self.yearMoreBtn.centerYAnchor constraintEqualToAnchor:self.yearTitleLabel.centerYAnchor],
         [self.yearMoreBtn.widthAnchor constraintEqualToConstant:40],
         [self.yearMoreBtn.heightAnchor constraintEqualToConstant:24],
 
-        [self.monthCV.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
-        [self.monthCV.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+        [self.monthCV.leadingAnchor constraintEqualToAnchor:self.monthSectionView.leadingAnchor],
+        [self.monthCV.trailingAnchor constraintEqualToAnchor:self.monthSectionView.trailingAnchor],
         [self.monthCV.topAnchor constraintEqualToAnchor:self.yearTitleLabel.bottomAnchor constant:10],
         [self.monthCV.heightAnchor constraintEqualToConstant:144],
+        [self.monthCV.bottomAnchor constraintEqualToAnchor:self.monthSectionView.bottomAnchor],
     ]];
 
+    #pragma mark - Others 模块（放进 othersSectionView）
     self.othersTitleLabel = [UILabel new];
     self.othersTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.othersTitleLabel.textColor = SWHexRGBA(0x000000FF);
     self.othersTitleLabel.font = SWFont(20, UIFontWeightSemibold);
     self.othersTitleLabel.text = NSLocalizedString(@"Others", nil);
-    [self.contentView addSubview:self.othersTitleLabel];
+    [self.othersSectionView addSubview:self.othersTitleLabel];
 
     self.othersMoreBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.othersMoreBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.othersMoreBtn setImage:[UIImage imageNamed:@"ic_todo_small"] forState:UIControlStateNormal];
-    [self.contentView addSubview:self.othersMoreBtn];
+    [self.othersSectionView addSubview:self.othersMoreBtn];
 
     UICollectionViewFlowLayout *otherLayout = [UICollectionViewFlowLayout new];
     otherLayout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
@@ -1070,44 +1181,37 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.othersCV.dataSource = self;
     self.othersCV.delegate = self;
     [self.othersCV registerClass:SWOtherCell.class forCellWithReuseIdentifier:@"SWOtherCell"];
-    [self.contentView addSubview:self.othersCV];
+    [self.othersSectionView addSubview:self.othersCV];
 
-    self.contentBottomC = [self.othersCV.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-100];
     [NSLayoutConstraint activateConstraints:@[
-        [self.othersTitleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:15],
-        [self.othersTitleLabel.topAnchor constraintEqualToAnchor:self.monthCV.bottomAnchor constant:30],
+        [self.othersTitleLabel.leadingAnchor constraintEqualToAnchor:self.othersSectionView.leadingAnchor constant:15],
+        [self.othersTitleLabel.topAnchor constraintEqualToAnchor:self.othersSectionView.topAnchor],
 
-        [self.othersMoreBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-15],
+        [self.othersMoreBtn.trailingAnchor constraintEqualToAnchor:self.othersSectionView.trailingAnchor constant:-15],
         [self.othersMoreBtn.centerYAnchor constraintEqualToAnchor:self.othersTitleLabel.centerYAnchor],
         [self.othersMoreBtn.widthAnchor constraintEqualToConstant:40],
         [self.othersMoreBtn.heightAnchor constraintEqualToConstant:24],
 
-        [self.othersCV.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
-        [self.othersCV.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+        [self.othersCV.leadingAnchor constraintEqualToAnchor:self.othersSectionView.leadingAnchor],
+        [self.othersCV.trailingAnchor constraintEqualToAnchor:self.othersSectionView.trailingAnchor],
         [self.othersCV.topAnchor constraintEqualToAnchor:self.othersTitleLabel.bottomAnchor constant:10],
         [self.othersCV.heightAnchor constraintEqualToConstant:144],
-        self.contentBottomC,
+        [self.othersCV.bottomAnchor constraintEqualToAnchor:self.othersSectionView.bottomAnchor],
     ]];
+
 }
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-
-    CGFloat w = self.view.bounds.size.width;
-    CGFloat safeTop = 0;
-    if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
-
-    CGFloat gradientH = safeTop + 402.0;
-    self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
-
-    [self applyCategorizedProgress:self.cachedCategorizedProgress];
 
     if (@available(iOS 11.0, *)) {
         CGFloat safeTop = self.view.safeAreaInsets.top;
         CGFloat safeBottom = self.view.safeAreaInsets.bottom;
 
         self.cardsTopC.constant = safeTop + 40.0;
-        self.contentBottomC.constant = -(safeBottom + 80.0);
+
+        CGFloat bottomPad = safeBottom + 80.0;
+        self.contentBottomC.constant = -bottomPad;
 
         self.scrollView.scrollIndicatorInsets = UIEdgeInsetsMake(safeTop, 0, safeBottom, 0);
     }
@@ -1145,6 +1249,29 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.othersCV.hidden = !showSections;
 
     self.permissionBannerHeightC.constant = self.sw_isLimitedAuth ? 150.0 : 0.0;
+    
+    // 顶部约束选择：limited 有 banner -> 连 banner；否则连 cardsContainer
+    self.sectionsTopToBannerC.active = NO;
+    self.sectionsTopToCardsC.active  = NO;
+
+    if (self.sw_isLimitedAuth) {
+        self.sectionsTopToBannerC.active = YES;
+    } else {
+        self.sectionsTopToCardsC.active = YES;
+    }
+
+    // contentView 底部选择：无权限 -> 跟 noAuth；有权限 -> 跟 sectionsCard
+    self.sectionsCardBottomToContentC.active = NO;
+    self.noAuthBottomToContentC.active = NO;
+
+    if (!self.sw_hasPhotoAccess) {
+        self.noAuthBottomToContentC.active = YES;
+    } else {
+        self.sectionsCardBottomToContentC.active = YES;
+    }
+
+    // 更新模块显隐（包含“没数据隐藏模块”）
+    [self sw_updateSectionVisibility];
 }
 
 - (void)sw_onTapPermissionGate {
@@ -1275,8 +1402,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 #pragma mark - UICollectionView
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    if (collectionView == self.recentCV) return MAX(self.recentModules.count, 1);
-    if (collectionView == self.monthCV)  return MAX(self.monthModules.count, 1);
+    if (collectionView == self.recentCV) return self.recentModules.count;
+    if (collectionView == self.monthCV)  return self.monthModules.count;
     if (collectionView == self.othersCV) return self.otherModules.count;
     return 0;
 }

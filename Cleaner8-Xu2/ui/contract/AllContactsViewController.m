@@ -1085,7 +1085,12 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
             }
 
             [[NSNotificationCenter defaultCenter] postNotificationName:@"CMBackupDidFinish" object:nil];
-            [weakSelf showAlertPopBackWithTitle:NSLocalizedString(@"Succeed", nil) message:NSLocalizedString(@"Backup completed", nil)];
+
+            [weakSelf showToastText:NSLocalizedString(@"Backup completed", nil)];
+
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [weakSelf.navigationController popViewControllerAnimated:YES];
+            });
         }];
     }];
 }
@@ -1121,7 +1126,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
 
     vc.hidesBottomBarWhenPushed = YES;
 
-    [self.navigationController setNavigationBarHidden:NO animated:YES];
+//    [self.navigationController setNavigationBarHidden:NO animated:YES];
     [self.navigationController pushViewController:vc animated:YES];
 }
 
@@ -1185,7 +1190,11 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
         [weakSelf updateBottomState];
         [weakSelf.cv reloadData];
 
-        [weakSelf showAlertPopBackWithTitle:NSLocalizedString(@"Succeed", nil) message:NSLocalizedString(@"Restore Complete", nil)];
+        [weakSelf showToastText:NSLocalizedString(@"Restore Complete", nil)];
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [weakSelf.navigationController popViewControllerAnimated:YES];
+        });
     }];
 }
 

@@ -243,7 +243,7 @@ static inline UIColor *ASHexBlack(void) {
     self.emptyImageView = [UIImageView new];
     self.emptyImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyImageView.contentMode = UIViewContentModeScaleAspectFit;
-    self.emptyImageView.image = [[UIImage imageNamed:@"ic_no_contact"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    self.emptyImageView.image = [[UIImage imageNamed:@"ic_empty_photo"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.emptyView addSubview:self.emptyImageView];
 
     self.emptyTextLabel = [UILabel new];

@@ -259,7 +259,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
     self.emptyImageView = [UIImageView new];
     self.emptyImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyImageView.contentMode = UIViewContentModeScaleAspectFit;
-    self.emptyImageView.image = [UIImage imageNamed:@"ic_no_contact"];
+    self.emptyImageView.image = [UIImage imageNamed:@"ic_empty_photo"];
     [self.emptyView addSubview:self.emptyImageView];
 
     self.emptyLabel = [UILabel new];
@@ -489,14 +489,65 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
 - (void)deleteTapped {
     if (self.selectedIDs.count == 0) return;
 
+    NSArray<NSString *> *ids = self.selectedIDs.allObjects;
+    NSUInteger count = ids.count;
+
+    BOOL hasVideo = NO;
+    for (NSString *aid in ids) {
+        PHAsset *a = [[SwipeManager shared] assetForID:aid];
+        if (a.mediaType == PHAssetMediaTypeVideo) { hasVideo = YES; break; }
+    }
+
+    NSString *typePlural = hasVideo ? NSLocalizedString(@"videos",nil) : NSLocalizedString(@"photos",nil);
+    NSString *typeSingle = hasVideo ? NSLocalizedString(@"video",nil)  : NSLocalizedString(@"photo",nil);
+
+    NSString *title = [NSString stringWithFormat:NSLocalizedString(@"This action will delete the selected %@ from your system album.",nil), typePlural];
+
+    NSString *deleteTitle = nil;
+    if (count == 1) {
+        deleteTitle = [NSString stringWithFormat:NSLocalizedString(@"Delete %@ (%lu)",nil), typeSingle, (unsigned long)count];
+    } else {
+        deleteTitle = [NSString stringWithFormat:NSLocalizedString(@"Delete %@ (%lu)",nil), typePlural, (unsigned long)count];
+    }
+
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:title
+                                                                message:nil
+                                                         preferredStyle:UIAlertControllerStyleActionSheet];
+
     __weak typeof(self) weakSelf = self;
-    NSArray *ids = weakSelf.selectedIDs.allObjects;
-    [[SwipeManager shared] deleteAssetsWithIDs:ids completion:^(__unused BOOL success, __unused NSError * _Nullable error) {
-        [weakSelf.selectedIDs removeAllObjects];
-        [weakSelf updateDeleteButtonVisibilityAndInsets];
-        [weakSelf handleUpdate];
-    }];
+
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Cancel",nil)
+                                          style:UIAlertActionStyleCancel
+                                        handler:nil]];
+
+    [ac addAction:[UIAlertAction actionWithTitle:deleteTitle
+                                          style:UIAlertActionStyleDestructive
+                                        handler:^(__unused UIAlertAction * _Nonnull action) {
+
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+
+        NSArray *delIDs = self.selectedIDs.allObjects;
+        [[SwipeManager shared] deleteAssetsWithIDs:delIDs completion:^(__unused BOOL success, __unused NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.selectedIDs removeAllObjects];
+                [self updateDeleteButtonVisibilityAndInsets];
+                [self handleUpdate];
+            });
+        }];
+    }]];
+
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        UIPopoverPresentationController *pop = ac.popoverPresentationController;
+        pop.sourceView = self.deleteAllButton ?: self.view;
+        pop.sourceRect = (self.deleteAllButton ? self.deleteAllButton.bounds
+                                               : CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds), 1, 1));
+        pop.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    }
+
+    [self presentViewController:ac animated:YES completion:nil];
 }
+
 
 #pragma mark - Collection
 

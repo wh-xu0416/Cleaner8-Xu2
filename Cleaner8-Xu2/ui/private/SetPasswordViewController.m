@@ -16,6 +16,8 @@
 
 @property (nonatomic, copy) NSString *firstCode;   // Set flow: first input
 @property (nonatomic, strong) NSMutableString *input;
+@property (nonatomic, strong) UILabel *errorLabel;
+
 @end
 
 @implementation SetPasswordViewController
@@ -63,6 +65,16 @@
     self.titleLabel.font = [UIFont systemFontOfSize:28 weight:UIFontWeightSemibold];
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.view addSubview:self.titleLabel];
+
+    self.errorLabel = [UILabel new];
+    self.errorLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.errorLabel.textAlignment = NSTextAlignmentCenter;
+    self.errorLabel.numberOfLines = 0;
+    self.errorLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
+    self.errorLabel.textColor = [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:1.0]; // system red-ish
+    self.errorLabel.text = @"";
+    self.errorLabel.hidden = YES;
+    [self.view addSubview:self.errorLabel];
 
     // hidden textfield
     self.hiddenTF = [UITextField new];
@@ -125,7 +137,11 @@
         [self.titleLabel.topAnchor constraintEqualToAnchor:self.nav.bottomAnchor constant:110],
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
 
-        [row.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:20],
+        [self.errorLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:10],
+        [self.errorLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
+        [self.errorLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+
+        [row.topAnchor constraintEqualToAnchor:self.errorLabel.bottomAnchor constant:16],
         [row.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
 
         [self.hiddenTF.centerXAnchor constraintEqualToAnchor:row.centerXAnchor],
@@ -141,15 +157,42 @@
 }
 
 - (void)updatePrompt {
+
+    if (self.flow == ASPasswordFlowDisable) {
+        self.titleLabel.text = (self.firstCode.length
+                                ? NSLocalizedString(@"Confirm Password", nil)
+                                : NSLocalizedString(@"Set New Passcode", nil));
+        return;
+    }
+
     if (self.flow == ASPasswordFlowSet) {
-        self.titleLabel.text = (self.firstCode.length ? NSLocalizedString(@"Confirm Password", nil) : NSLocalizedString(@"Enter Password", nil));
+        self.titleLabel.text = (self.firstCode.length
+                                ? NSLocalizedString(@"Confirm Password", nil)
+                                : NSLocalizedString(@"Enter Password", nil));
     } else {
+        // Verify
         self.titleLabel.text = NSLocalizedString(@"Enter Password", nil);
     }
 }
 
+- (void)showWrongPin {
+    self.errorLabel.text = NSLocalizedString(@"Wrong PIN. Please retry.", nil);
+    self.errorLabel.hidden = NO;
+}
+
+- (void)clearError {
+    self.errorLabel.text = @"";
+    self.errorLabel.hidden = YES;
+}
+
 - (void)tfChanged {
     NSString *t = self.hiddenTF.text ?: @"";
+
+    // 只要用户又开始输入，就把错误提示收起
+    if (t.length > 0 && !self.errorLabel.hidden) {
+        [self clearError];
+    }
+
     // 只保留数字
     NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
     t = [[t componentsSeparatedByCharactersInSet:nonDigits] componentsJoinedByString:@""];
@@ -198,14 +241,44 @@
 }
 
 - (void)handleFullCode:(NSString *)code {
-    if (self.flow == ASPasswordFlowSet) {
+
+    // ✅ Reset flow: 原 Disable 现在用来“重置密码”
+    if (self.flow == ASPasswordFlowDisable) {
         if (!self.firstCode.length) {
+            [self clearError];
             self.firstCode = code;
             [self resetInputAnimated:NO];
             [self updatePrompt];
             return;
         } else {
             if ([self.firstCode isEqualToString:code]) {
+                [self clearError];
+                [ASPasscodeManager enableWithCode:code];
+                if (self.onSuccess) self.onSuccess();
+
+                UINavigationController *nav = [self as_rootNav];
+                if (![nav isKindOfClass:UINavigationController.class]) return;
+                [nav popViewControllerAnimated:YES];
+                return;
+            } else {
+                self.firstCode = nil;
+                [self resetInputAnimated:YES];
+                [self updatePrompt];
+                return;
+            }
+        }
+    }
+
+    if (self.flow == ASPasswordFlowSet) {
+        if (!self.firstCode.length) {
+            [self clearError];
+            self.firstCode = code;
+            [self resetInputAnimated:NO];
+            [self updatePrompt];
+            return;
+        } else {
+            if ([self.firstCode isEqualToString:code]) {
+                [self clearError];
                 [ASPasscodeManager enableWithCode:code];
                 if (self.onSuccess) self.onSuccess();
                 UINavigationController *nav = [self as_rootNav];
@@ -221,16 +294,14 @@
         }
     }
 
-    // Verify / Disable
     if ([ASPasscodeManager verify:code]) {
-        if (self.flow == ASPasswordFlowDisable) {
-            [ASPasscodeManager disable];
-        }
+        [self clearError];
         if (self.onSuccess) self.onSuccess();
         UINavigationController *nav = [self as_rootNav];
         if (![nav isKindOfClass:UINavigationController.class]) return;
         [nav popViewControllerAnimated:YES];
     } else {
+        [self showWrongPin];
         [self resetInputAnimated:YES];
     }
 }

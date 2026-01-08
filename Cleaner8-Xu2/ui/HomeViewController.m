@@ -735,7 +735,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
         _cardView = [UIView new];
         _cardView.backgroundColor = UIColor.whiteColor;
-        _cardView.layer.cornerRadius = 14;
+        _cardView.layer.cornerRadius = 24;
         _cardView.clipsToBounds = YES;
         [_shadowContainer addSubview:_cardView];
 
@@ -755,8 +755,8 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
         _img2.contentMode = UIViewContentModeScaleAspectFill;
         _img1.clipsToBounds = YES;
         _img2.clipsToBounds = YES;
-        _img1.layer.cornerRadius = 12;
-        _img2.layer.cornerRadius = 12;
+        _img1.layer.cornerRadius = 24;
+        _img2.layer.cornerRadius = 24;
 
         _badgeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         _badgeBtn.titleLabel.numberOfLines = 1;
@@ -843,8 +843,8 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
         self.img1.hidden = NO;
         self.img2.hidden = NO;
 
-        self.img1.layer.cornerRadius = 12;
-        self.img2.layer.cornerRadius = 12;
+        self.img1.layer.cornerRadius = 24;
+        self.img2.layer.cornerRadius = 24;
 
         self.img1.frame = CGRectMake(pad, imgTop, imgW, imgH);
         self.img2.frame = CGRectMake(CGRectGetMaxX(self.img1.frame) + gap, imgTop, imgW, imgH);
@@ -856,7 +856,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
             self.img1.layer.cornerRadius = 0;
             self.img1.frame = CGRectMake(0, imgTop, w, h - imgTop);
         } else {
-            self.img1.layer.cornerRadius = 12;
+            self.img1.layer.cornerRadius = 24;
             self.img1.frame = CGRectMake(pad, imgTop, w - pad * 2.0, imgH);
         }
 

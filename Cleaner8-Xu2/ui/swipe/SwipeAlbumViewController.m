@@ -209,8 +209,8 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
         _hintLabel = [[UILabel alloc] initWithFrame:CGRectZero];
         _hintLabel.textAlignment = NSTextAlignmentLeft;
-        _hintLabel.font = SWFont(30, UIFontWeightBold);
-        _hintLabel.textColor = UIColor.whiteColor;
+        _hintLabel.font = SWFont(34, UIFontWeightBold);
+        _hintLabel.textColor = UIColor.blackColor;
         _hintLabel.alpha = 0;
         [self addSubview:_hintLabel];
     }
@@ -773,6 +773,13 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     });
 }
 
+- (BOOL)sw_isDoneShowing {
+    // 数据为空或 doneCard 正在显示，都视为完成态
+    if (self.unprocessedIDs.count == 0) return YES;
+    if (self.doneCard && !self.doneCard.hidden) return YES;
+    return NO;
+}
+
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     // 拦截系统左滑返回
@@ -912,23 +919,70 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:NSLocalizedString(@"Files: ", nil) attributes:kFiles]];
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%lu", (unsigned long)total] attributes:kNum]];
 
-    if (done) {
-        uint64_t bytes = [mgr archivedBytesInModule:self.module];
+    uint64_t bytes = [mgr archivedBytesInModule:self.module];
 
-        NSDictionary *kFree = @{
-            NSForegroundColorAttributeName: UIColor.blackColor,
-            NSFontAttributeName: SWFont(15, UIFontWeightRegular)
-        };
-        NSDictionary *kBytes = @{
-            NSForegroundColorAttributeName: SWHexRGBA(0x024DFFFF),
-            NSFontAttributeName: SWFont(15, UIFontWeightMedium)
-        };
+    NSDictionary *kFree = @{
+        NSForegroundColorAttributeName: UIColor.blackColor,
+        NSFontAttributeName: SWFont(15, UIFontWeightRegular)
+    };
 
-        [att appendAttributedString:[[NSAttributedString alloc] initWithString:NSLocalizedString(@" Can free up ", nil) attributes:kFree]];
-        [att appendAttributedString:[[NSAttributedString alloc] initWithString:SWHumanBytesNoSpace(bytes) attributes:kBytes]];
-    }
+    NSDictionary *kBytes = @{
+        NSForegroundColorAttributeName: done ? SWHexRGBA(0x024DFFFF) : SWHexRGBA(0x024DFFFF),
+        NSFontAttributeName: SWFont(15, UIFontWeightMedium)
+    };
+
+    [att appendAttributedString:[[NSAttributedString alloc] initWithString:NSLocalizedString(@" Can free up ", nil) attributes:kFree]];
+    [att appendAttributedString:[[NSAttributedString alloc] initWithString:SWHumanBytesNoSpace(bytes) attributes:kBytes]];
 
     self.filesLabel.attributedText = att;
+}
+
+static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
+                                                            NSString *rightText,
+                                                            UIFont *font,
+                                                            UIColor *textColor) {
+    if (leftText.length == 0) leftText = @"";
+    if (rightText.length == 0) rightText = @"";
+
+    NSMutableAttributedString *att = [NSMutableAttributedString new];
+
+    NSDictionary *attrs = @{
+        NSFontAttributeName: font ?: [UIFont systemFontOfSize:17 weight:UIFontWeightRegular],
+        NSForegroundColorAttributeName: textColor ?: UIColor.whiteColor
+    };
+
+    // 左侧文字
+    [att appendAttributedString:[[NSAttributedString alloc] initWithString:leftText attributes:attrs]];
+
+    // 左边距 5pt
+    [att appendAttributedString:[[NSAttributedString alloc] initWithString:@" " attributes:attrs]];
+    [att addAttribute:NSKernAttributeName value:@(5.0) range:NSMakeRange(att.length-1, 1)];
+
+    // 图片 attachment (16x16)
+    UIImage *img = [UIImage imageNamed:@"ic_more"];
+    if (img) {
+        NSTextAttachment *ta = [NSTextAttachment new];
+        ta.image = img;
+
+        // 16x16，并尽量在基线上居中
+        CGFloat imgW = 16, imgH = 16;
+        ta.bounds = CGRectMake(0, (font.capHeight - imgH) * 0.5, imgW, imgH);
+
+        NSAttributedString *imgStr = [NSAttributedString attributedStringWithAttachment:ta];
+        [att appendAttributedString:imgStr];
+    } else {
+        // 找不到图时兜底：用 ">"（避免空白）
+        [att appendAttributedString:[[NSAttributedString alloc] initWithString:@">" attributes:attrs]];
+    }
+
+    // 右边距 5pt
+    [att appendAttributedString:[[NSAttributedString alloc] initWithString:@" " attributes:attrs]];
+    [att addAttribute:NSKernAttributeName value:@(5.0) range:NSMakeRange(att.length-1, 1)];
+
+    // 右侧文字
+    [att appendAttributedString:[[NSAttributedString alloc] initWithString:rightText attributes:attrs]];
+
+    return att;
 }
 
 #pragma mark - Done State
@@ -976,23 +1030,32 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     }
 
     if (next) {
+
+        NSString *right = @"";
         if (next.type == SwipeModuleTypeMonth) {
-            NSString *t = [NSString stringWithFormat:NSLocalizedString(@"Next Album > %@", nil), (next.title.length ? next.title : NSLocalizedString(@"Next", nil))];
-            [self.nextAlbumBtn setTitle:t forState:UIControlStateNormal];
+            right = (next.title.length ? next.title : NSLocalizedString(@"Next", nil));
         } else if (next.type == SwipeModuleTypeRecentDay) {
             NSString *ymd = SWDayKeyFromModule(next) ?: @"";
             NSString *wk = SWWeekdayFromYMD(ymd);
-            if (wk.length == 0) wk = (next.title.length ? next.title : NSLocalizedString(@"Next", nil));
-            NSString *t = [NSString stringWithFormat:NSLocalizedString(@"Next Album > %@", nil), wk];
-            [self.nextAlbumBtn setTitle:t forState:UIControlStateNormal];
+            right = (wk.length ? wk : (next.title.length ? next.title : NSLocalizedString(@"Next", nil)));
         } else {
-            [self.nextAlbumBtn setTitle:NSLocalizedString(@"Next Album", nil) forState:UIControlStateNormal];
+            right = (next.title.length ? next.title : NSLocalizedString(@"Next", nil));
         }
+
+        NSString *left = NSLocalizedString(@"Next Album", nil);
+
+        NSAttributedString *attTitle =
+            SWNextAlbumAttributedTitle(left,
+                                      right,
+                                      SWFont(17, UIFontWeightRegular),
+                                      UIColor.whiteColor);
+
+        [self.nextAlbumBtn setAttributedTitle:attTitle forState:UIControlStateNormal];
         self.nextAlbumBtn.hidden = NO;
+
     } else {
         self.nextAlbumBtn.hidden = YES;
     }
-
 
     // Total archived bytes
     uint64_t totalBytes = (uint64_t)[[SwipeManager shared] totalArchivedBytesCached];
@@ -1286,7 +1349,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     // hint
     if (x > 25) {
         card.hintLabel.text = @"Keep";
-        card.hintLabel.textAlignment = NSTextAlignmentRight;
+        card.hintLabel.textAlignment = NSTextAlignmentLeft;
         card.hintLabel.alpha = MIN(1.0, x / 120.0);
     } else if (x < -25) {
         card.hintLabel.text = @"Archive";
@@ -1525,7 +1588,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     msg.text = NSLocalizedString(@"You can perform this action now to free up space, or do it at any convenient time", nil);
     [popup addSubview:msg];
 
-    // ===== 表格（同 doneTable 样式）=====
     UIView *table = [UIView new];
     table.translatesAutoresizingMaskIntoConstraints = NO;
     table.layer.cornerRadius = 16;
@@ -1756,7 +1818,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     if (gestureRecognizer == self.navigationController.interactivePopGestureRecognizer) {
         if (self.cardAnimating) return NO;
 
-        if (self.sw_hasOperated) {
+        if (self.sw_hasOperated && ![self sw_isDoneShowing]) {
             [self sw_showExitPopup];
             return NO;
         }
@@ -1767,7 +1829,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 - (void)onBack {
     if (self.cardAnimating) return;
 
-    if (self.sw_hasOperated) {
+    if (self.sw_hasOperated && ![self sw_isDoneShowing]) {
         [self sw_showExitPopup];
         return;
     }
@@ -1798,7 +1860,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     lab.translatesAutoresizingMaskIntoConstraints = NO;
     lab.text = title;
     lab.textColor = UIColor.whiteColor;
-    lab.font = SWFont(18, UIFontWeightSemibold);
+    lab.font = SWFont(17, UIFontWeightSemibold);
     [row addSubview:lab];
 
     UIImageView *check = [UIImageView new];
@@ -1853,7 +1915,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     [self.view layoutIfNeeded];
 
-    // mask
     UIView *mask = [UIView new];
     mask.translatesAutoresizingMaskIntoConstraints = NO;
     mask.backgroundColor = UIColor.clearColor;
@@ -1872,7 +1933,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     UIView *panel = [UIView new];
     panel.translatesAutoresizingMaskIntoConstraints = YES;
-    panel.backgroundColor = SWHexRGBA(0x8E8E8EFF);
+    panel.backgroundColor = SWHexRGBA(0x8e8e8eFF);
     panel.layer.cornerRadius = 12;
     panel.layer.masksToBounds = YES;
     panel.alpha = 0.0;
@@ -1880,24 +1941,33 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     [self.view addSubview:panel];
     self.sw_sortPanel = panel;
 
-    // header
     UILabel *hdr = [UILabel new];
     hdr.translatesAutoresizingMaskIntoConstraints = NO;
     hdr.text = NSLocalizedString(@"Sort by", nil);
-    hdr.font = SWFont(16, UIFontWeightRegular);
+    hdr.font = SWFont(12, UIFontWeightRegular);
     hdr.textColor = SWHexRGBA(0xEBEBF599);
     [panel addSubview:hdr];
 
+    // header 下分割线（你原来就有）
     UIView *line = [UIView new];
     line.translatesAutoresizingMaskIntoConstraints = NO;
     line.backgroundColor = [UIColor.whiteColor colorWithAlphaComponent:0.15];
     [panel addSubview:line];
 
     BOOL asc = self.module.sortAscending;
-    UIView *rowLatest = [self sw_sortRowWithTitle:NSLocalizedString(@"Latest", nil) selected:(!asc) action:@selector(sw_sortPickLatest)];
-    UIView *rowOldest = [self sw_sortRowWithTitle:NSLocalizedString(@"Oldest", nil) selected:(asc)  action:@selector(sw_sortPickOldest)];
+    UIView *rowLatest = [self sw_sortRowWithTitle:NSLocalizedString(@"Latest", nil)
+                                        selected:(!asc)
+                                          action:@selector(sw_sortPickLatest)];
+    UIView *rowOldest = [self sw_sortRowWithTitle:NSLocalizedString(@"Oldest", nil)
+                                        selected:(asc)
+                                          action:@selector(sw_sortPickOldest)];
     [panel addSubview:rowLatest];
     [panel addSubview:rowOldest];
+
+    UIView *sep = [UIView new];
+    sep.translatesAutoresizingMaskIntoConstraints = NO;
+    sep.backgroundColor = [UIColor.whiteColor colorWithAlphaComponent:0.15];
+    [panel addSubview:sep];
 
     CGRect anchor = [self.sortIconBtn convertRect:self.sortIconBtn.bounds toView:self.view];
     CGFloat panelW = 220;
@@ -1911,7 +1981,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     panel.frame = CGRectMake(x, y, panelW, panelH);
 
-    // panel 内部约束
     [NSLayoutConstraint activateConstraints:@[
         [hdr.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:16],
         [hdr.topAnchor constraintEqualToAnchor:panel.topAnchor constant:12],
@@ -1926,9 +1995,14 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         [rowLatest.topAnchor constraintEqualToAnchor:panel.topAnchor constant:44],
         [rowLatest.heightAnchor constraintEqualToConstant:52],
 
+        [sep.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor],
+        [sep.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor],
+        [sep.topAnchor constraintEqualToAnchor:rowLatest.bottomAnchor],
+        [sep.heightAnchor constraintEqualToConstant:1],
+
         [rowOldest.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor],
         [rowOldest.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor],
-        [rowOldest.topAnchor constraintEqualToAnchor:rowLatest.bottomAnchor],
+        [rowOldest.topAnchor constraintEqualToAnchor:sep.bottomAnchor],
         [rowOldest.heightAnchor constraintEqualToConstant:52],
     ]];
 

@@ -162,7 +162,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     UIControl *card = [UIControl new];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor = UIColor.whiteColor;
-    card.layer.cornerRadius = 24;
+    card.layer.cornerRadius = 16;
     card.layer.masksToBounds = NO;
 
     card.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.08].CGColor;

@@ -145,7 +145,7 @@
     self.navTitle.translatesAutoresizingMaskIntoConstraints = NO;
     self.navTitle.text = NSLocalizedString(@"Private", nil);
     self.navTitle.textColor = UIColor.blackColor;
-    self.navTitle.font = [UIFont systemFontOfSize:34 weight:UIFontWeightMedium];
+    self.navTitle.font = [UIFont systemFontOfSize:28 weight:UIFontWeightSemibold];
     [bar addSubview:self.navTitle];
 
     self.lockBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -153,21 +153,25 @@
     self.lockBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
     [self.lockBtn addTarget:self action:@selector(lockTap) forControlEvents:UIControlEventTouchUpInside];
     [bar addSubview:self.lockBtn];
-
+    
     [NSLayoutConstraint activateConstraints:@[
-        [bar.topAnchor constraintEqualToAnchor:safe.topAnchor],
+        [bar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:13],
         [bar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [bar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [bar.heightAnchor constraintEqualToConstant:45],
-
-        [self.navTitle.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor constant:20],
-        [self.navTitle.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
 
         [self.lockBtn.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor constant:-20],
         [self.lockBtn.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
         [self.lockBtn.widthAnchor constraintEqualToConstant:44],
         [self.lockBtn.heightAnchor constraintEqualToConstant:44],
+
+        [self.navTitle.centerXAnchor constraintEqualToAnchor:bar.centerXAnchor],
+        [self.navTitle.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
+
+        [self.navTitle.leadingAnchor constraintGreaterThanOrEqualToAnchor:bar.leadingAnchor constant:20],
+        [self.navTitle.trailingAnchor constraintLessThanOrEqualToAnchor:self.lockBtn.leadingAnchor constant:-12],
     ]];
+
 
     // image + text
     UIImageView *img = [UIImageView new];
