@@ -729,6 +729,14 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 @property (nonatomic, strong) id timeObserver;
 @property (nonatomic, assign) BOOL isExiting;
 @property (nonatomic, assign) BOOL didSendBackCallback;
+
+@property (nonatomic, strong) NSLayoutConstraint *thumbsHeightC;
+@property (nonatomic, strong) NSLayoutConstraint *thumbsBottomC;
+
+@property (nonatomic, strong) NSLayoutConstraint *pagerHeightC;
+@property (nonatomic, strong) NSLayoutConstraint *pagerBottomToThumbsTopC;
+@property (nonatomic, strong) NSLayoutConstraint *pagerBottomToSafeBottomC;
+
 @end
 
 @implementation ASMediaPreviewViewController
@@ -772,12 +780,23 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     [self reloadTopText];
     [self scrollToIndex:self.currentIndex animated:NO];
     [self updateOverlays];
+    [self as_applyHardFitLayout];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self as_applyHardFitLayout];
+}
+
+- (CGFloat)as_bottomSafeGap {
+    return 22.0;
 }
 
 #pragma mark - UI
 
 - (void)buildUI {
     BOOL multi = (self.assets.count > 1);
+    CGFloat bottomGap = [self as_bottomSafeGap];
 
     // top bar
     self.topBar = [UIView new];
@@ -883,19 +902,30 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         [self.pager.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
     ]];
 
-    self.pagerHeight = [self.pager.heightAnchor constraintEqualToAnchor:self.pager.widthAnchor multiplier:(611.0/402.0)];
-    self.pagerHeight.active = YES;
+    self.pagerHeightC = [self.pager.heightAnchor constraintEqualToConstant:300];
+    self.pagerHeightC.active = YES;
 
+    self.thumbsHeightC = [self.thumbs.heightAnchor constraintEqualToConstant:(multi ? 120 : 0)];
+    self.thumbsHeightC.active = YES;
+
+    
+    self.thumbsBottomC = [self.thumbs.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor
+                                                                  constant:-bottomGap];
+    self.thumbsBottomC.active = YES;
+    
     [NSLayoutConstraint activateConstraints:@[
-//        [self.pager.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
-
         [self.thumbs.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.thumbs.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.thumbs.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
-        [self.thumbs.heightAnchor constraintEqualToConstant:(multi ? 120 : 0)],
-        [self.pager.bottomAnchor constraintEqualToAnchor:(multi ? self.thumbs.topAnchor : safe.bottomAnchor)],
     ]];
 
+    self.pagerBottomToThumbsTopC = [self.pager.bottomAnchor constraintEqualToAnchor:self.thumbs.topAnchor];
+    self.pagerBottomToSafeBottomC = [self.pager.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor
+                                                                            constant:-bottomGap];
+
+    self.pagerBottomToThumbsTopC.active = multi;
+    self.pagerBottomToSafeBottomC.active = !multi;
+    
     [NSLayoutConstraint activateConstraints:@[
         [self.topSelectBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
         [self.topSelectBtn.topAnchor constraintEqualToAnchor:self.pager.topAnchor constant:18],
@@ -908,6 +938,85 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     self.topSelectBtn.hidden = !multi;
     self.bestBadge.hidden = YES;
+}
+
+- (void)as_applyHardFitLayout {
+    BOOL multi = (self.assets.count > 1);
+    CGFloat bottomGap = [self as_bottomSafeGap];
+
+    // bottom gap 可能在旋转/不同机型变化后要更新
+    self.thumbsBottomC.constant = -bottomGap;
+    self.pagerBottomToSafeBottomC.constant = -bottomGap;
+
+    // 切换 pager bottom 约束
+    self.pagerBottomToThumbsTopC.active = multi;
+    self.pagerBottomToSafeBottomC.active = !multi;
+
+    // 目标 thumbs 高度（允许后续被压缩）
+    CGFloat thumbsTarget = multi ? 120.0 : 0.0;
+
+    // 可用高度：整个屏幕 - safeInsets（系统安全区）- 你额外留的 bottomGap
+    UIEdgeInsets insets = self.view.safeAreaInsets;
+    CGFloat usableH = self.view.bounds.size.height - insets.top - insets.bottom - bottomGap;
+
+    // 固定区域
+    CGFloat topBarH = 56.0;
+    CGFloat pagerTopGap = 10.0;
+
+    // 理想 pager 高度（按比例）
+    CGFloat w = self.view.bounds.size.width;
+    CGFloat idealPagerH = w * (611.0 / 402.0);
+
+    // pager 最小高度（你说可以缩小 pager，所以这里给小一点也行）
+    CGFloat minPagerH = 160.0;   // 可调 140/160/180
+    CGFloat minThumbsH = 68.0;   // 缩略条最低高度（可调 60/68/80）
+
+    // 先按目标 thumbs 算最大 pager
+    CGFloat thumbsFinal = thumbsTarget;
+    CGFloat maxPagerH = usableH - topBarH - pagerTopGap - thumbsFinal;
+
+    // 如果空间不够：优先缩 pager（你允许），必要时再缩 thumbs
+    CGFloat finalPagerH = MIN(idealPagerH, maxPagerH);
+
+    if (multi) {
+        // pager 太小了 → 尝试压缩 thumbs 给 pager 让空间
+        if (finalPagerH < minPagerH) {
+            // 让 pager 至少 minPagerH，thumbs 能给多少给多少
+            CGFloat thumbsCanBe = usableH - topBarH - pagerTopGap - minPagerH;
+            thumbsFinal = MAX(0.0, MIN(thumbsTarget, thumbsCanBe));
+            thumbsFinal = MAX(thumbsFinal, minThumbsH); // 尽量保留一个最小可用 thumbs
+
+            maxPagerH = usableH - topBarH - pagerTopGap - thumbsFinal;
+            finalPagerH = MIN(idealPagerH, maxPagerH);
+        }
+
+        // 极端小屏：即使 thumbs 最小也不够，那就继续缩 pager（但保证 > 0）
+        if (finalPagerH < minPagerH) {
+            finalPagerH = MAX(120.0, finalPagerH); // 最极限也给 120，别变成 0
+        }
+    } else {
+        // 单资源：thumbs=0，pager 就吃满可用高度（夹紧）
+        thumbsFinal = 0.0;
+        maxPagerH = usableH - topBarH - pagerTopGap;
+        finalPagerH = MIN(idealPagerH, maxPagerH);
+        finalPagerH = MAX(120.0, finalPagerH);
+    }
+
+    // 应用约束
+    self.thumbsHeightC.constant = thumbsFinal;
+    self.thumbs.hidden = !(multi && thumbsFinal > 0.0);
+
+    // thumbs 被压成 0 时，pager bottom 要贴 safe bottom（带 bottomGap）
+    BOOL showThumbs = (multi && thumbsFinal > 0.0);
+    self.pagerBottomToThumbsTopC.active = showThumbs;
+    self.pagerBottomToSafeBottomC.active = !showThumbs;
+
+    self.pagerHeightC.constant = floor(finalPagerH);
+
+    // 更新布局 & 刷新 layout
+    [self.view layoutIfNeeded];
+    [(UICollectionViewFlowLayout *)self.pager.collectionViewLayout invalidateLayout];
+    [(UICollectionViewFlowLayout *)self.thumbs.collectionViewLayout invalidateLayout];
 }
 
 #pragma mark - Back / Return selected

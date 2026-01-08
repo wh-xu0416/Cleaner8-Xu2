@@ -320,6 +320,9 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
 // Bottom
 @property (nonatomic, strong) UIButton *compressBtn;
+@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UIView *scrollContentView;
+
 @end
 
 @implementation ImageCompressionQualityViewController
@@ -369,7 +372,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 - (void)buildUI {
     CGFloat side = 20;
 
-    // 背景渐变（同视频）
+    // 背景渐变（不变）
     self.bgGradient = [CAGradientLayer layer];
     self.bgGradient.colors = @[
         (id)[UIColor colorWithRed:229/255.0 green:241/255.0 blue:251/255.0 alpha:1].CGColor,
@@ -379,7 +382,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.bgGradient.endPoint   = CGPointMake(0.5, 1.0);
     [self.view.layer insertSublayer:self.bgGradient atIndex:0];
 
-    // 底部按钮（同视频）
+    // 底部按钮（固定，不变）
     self.compressBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.compressBtn setTitle:@"Compress" forState:UIControlStateNormal];
     self.compressBtn.titleLabel.font = ASRG(20);
@@ -391,19 +394,15 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     [self.view addSubview:self.compressBtn];
     self.compressBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // Header（同视频）
     UIView *header = [UIView new];
     header.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:header];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-
     UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.backBtn setImage:backImg forState:UIControlStateNormal];
-
     self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
     self.backBtn.adjustsImageWhenHighlighted = NO;
-
     [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -416,9 +415,23 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     [header addSubview:self.backBtn];
     [header addSubview:self.titleLabel];
 
+    self.scrollView = [UIScrollView new];
+    self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollView.alwaysBounceVertical = YES;
+    self.scrollView.showsVerticalScrollIndicator = YES;
+    self.scrollView.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.scrollView];
+
+    self.scrollContentView = [UIView new];
+    self.scrollContentView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollContentView.backgroundColor = UIColor.clearColor;
+    [self.scrollView addSubview:self.scrollContentView];
+
+    // ===== 原来的“内容区域”开始：都加到 scrollContentView 上 =====
+
     UIView *preview = [UIView new];
     preview.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:preview];
+    [self.scrollContentView addSubview:preview];
 
     UICollectionViewFlowLayout *lay = [UICollectionViewFlowLayout new];
     lay.minimumLineSpacing = 10;
@@ -433,15 +446,13 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.grid.translatesAutoresizingMaskIntoConstraints = NO;
     [self.grid registerClass:ASMinusCell.class forCellWithReuseIdentifier:@"g"];
     [preview addSubview:self.grid];
-    
+
     preview.clipsToBounds = NO;
     preview.layer.masksToBounds = NO;
-
     self.grid.clipsToBounds = NO;
     self.grid.layer.masksToBounds = NO;
 
-
-    // Before/After（同视频）
+    // Before/After
     self.beforeLabel = [UILabel new];
     self.beforeLabel.font = ASSB(24);
     self.beforeLabel.textColor = UIColor.blackColor;
@@ -451,14 +462,13 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.afterLabel.textColor = ASBlue();
 
     self.arrowView = [UIImageView new];
-
     UIImage *toImg = [[UIImage imageNamed:@"ic_compress_to"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     self.arrowView.image = toImg;
     self.arrowView.contentMode = UIViewContentModeCenter;
 
     UIView *ba = [UIView new];
     ba.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:ba];
+    [self.scrollContentView addSubview:ba];
 
     UIStackView *baStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.beforeLabel, self.arrowView, self.afterLabel]];
     baStack.axis = UILayoutConstraintAxisHorizontal;
@@ -476,9 +486,9 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.saveLabel.textColor = UIColor.blackColor;
     self.saveLabel.textAlignment = NSTextAlignmentCenter;
     self.saveLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.saveLabel];
+    [self.scrollContentView addSubview:self.saveLabel];
 
-    // Select card（同视频）
+    // Select card
     self.selectCard = [UIView new];
     self.selectCard.backgroundColor = ASSelectCardBG();
     self.selectCard.layer.cornerRadius = 22;
@@ -497,7 +507,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.whiteBox.layer.masksToBounds = YES;
     self.whiteBox.translatesAutoresizingMaskIntoConstraints = NO;
 
-    [self.view addSubview:self.selectCard];
+    [self.scrollContentView addSubview:self.selectCard];
     [self.selectCard addSubview:self.selectTitle];
     [self.selectCard addSubview:self.whiteBox];
 
@@ -524,18 +534,15 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
     CGFloat gridItem = 80;
     CGFloat gridGap = 10;
-    CGFloat gridSide = gridItem * 3 + gridGap * 2; // 272
-
+    CGFloat gridSide = gridItem * 3 + gridGap * 2;
     CGFloat headerH = 56;
 
     [NSLayoutConstraint activateConstraints:@[
-        // bottom button (same as video)
         [self.compressBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [self.compressBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
         [self.compressBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:0],
         [self.compressBtn.heightAnchor constraintEqualToConstant:70],
 
-        // header
         [header.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [header.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -549,10 +556,22 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:header.centerXAnchor],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
 
-        // preview block position same as video
-        [preview.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:10],
-        [preview.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
-        [preview.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
+        [self.scrollView.topAnchor constraintEqualToAnchor:header.bottomAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.compressBtn.topAnchor],
+
+        [self.scrollContentView.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor],
+        [self.scrollContentView.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
+        [self.scrollContentView.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
+        [self.scrollContentView.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor],
+
+        [self.scrollContentView.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
+
+        // preview
+        [preview.topAnchor constraintEqualToAnchor:self.scrollContentView.topAnchor constant:10],
+        [preview.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
+        [preview.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
 
         // grid centered in preview
         [self.grid.centerXAnchor constraintEqualToAnchor:preview.centerXAnchor],
@@ -563,24 +582,23 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
         // before/after
         [ba.topAnchor constraintEqualToAnchor:preview.bottomAnchor constant:10],
-        [ba.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
-        [ba.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
+        [ba.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
+        [ba.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
         [ba.heightAnchor constraintEqualToConstant:34],
 
         [baStack.centerXAnchor constraintEqualToAnchor:ba.centerXAnchor],
         [baStack.centerYAnchor constraintEqualToAnchor:ba.centerYAnchor],
         [baStack.leadingAnchor constraintGreaterThanOrEqualToAnchor:ba.leadingAnchor],
         [baStack.trailingAnchor constraintLessThanOrEqualToAnchor:ba.trailingAnchor],
-        
+
         [self.saveLabel.topAnchor constraintEqualToAnchor:ba.bottomAnchor constant:4],
-        [self.saveLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
-        [self.saveLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
+        [self.saveLabel.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
+        [self.saveLabel.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
 
         // select card
         [self.selectCard.topAnchor constraintEqualToAnchor:self.saveLabel.bottomAnchor constant:15],
-        [self.selectCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
-        [self.selectCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
-        [self.selectCard.bottomAnchor constraintLessThanOrEqualToAnchor:self.compressBtn.topAnchor constant:0],
+        [self.selectCard.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
+        [self.selectCard.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
 
         [self.selectTitle.topAnchor constraintEqualToAnchor:self.selectCard.topAnchor constant:13],
         [self.selectTitle.leadingAnchor constraintEqualToAnchor:self.selectCard.leadingAnchor constant:18],
@@ -598,6 +616,8 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         [self.rowSmall.heightAnchor constraintEqualToConstant:74],
         [self.rowMedium.heightAnchor constraintEqualToConstant:74],
         [self.rowLarge.heightAnchor constraintEqualToConstant:74],
+
+        [self.selectCard.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-16],
     ]];
 }
 

@@ -296,6 +296,9 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 
 // Bottom
 @property (nonatomic, strong) UIButton *compressBtn;
+@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UIView *scrollContentView;
+
 @end
 
 @implementation VideoCompressionQualityViewController
@@ -347,7 +350,11 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
 }
 
 - (void)buildUI {
-    // 背景渐变（和截图接近）
+    CGFloat side = 20;
+    CGFloat headerH = 56;
+    CGFloat thumbW = 150;
+    CGFloat thumbH = 200;
+
     self.bgGradient = [CAGradientLayer layer];
     self.bgGradient.colors = @[
         (id)[UIColor colorWithRed:229/255.0 green:241/255.0 blue:251/255.0 alpha:1].CGColor,
@@ -357,7 +364,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.bgGradient.endPoint   = CGPointMake(0.5, 1.0);
     [self.view.layer insertSublayer:self.bgGradient atIndex:0];
 
-    // 底部按钮（固定）
     self.compressBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.compressBtn setTitle:@"Compress" forState:UIControlStateNormal];
     self.compressBtn.titleLabel.font = ASRG(20);
@@ -366,85 +372,73 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.compressBtn.layer.cornerRadius = 35;
     self.compressBtn.layer.masksToBounds = YES;
     [self.compressBtn addTarget:self action:@selector(onCompress) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.compressBtn];
     self.compressBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.compressBtn];
+
+    UIView *header = [UIView new];
+    header.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:header];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-
     UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.backBtn setImage:backImg forState:UIControlStateNormal];
-
     self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
     self.backBtn.adjustsImageWhenHighlighted = NO;
-
     [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    
+    [header addSubview:self.backBtn];
+
     self.titleLabel = [UILabel new];
     self.titleLabel.font = ASSB(24);
     self.titleLabel.textColor = UIColor.blackColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
-
-    UIView *header = [UIView new];
-    [self.view addSubview:header];
-    [header addSubview:self.backBtn];
-    [header addSubview:self.titleLabel];
-    header.translatesAutoresizingMaskIntoConstraints = NO;
-    self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [header addSubview:self.titleLabel];
 
-    // Preview
+    self.scrollView = [UIScrollView new];
+    self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollView.alwaysBounceVertical = YES;
+    self.scrollView.showsVerticalScrollIndicator = YES;
+    self.scrollView.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.scrollView];
+
+    self.scrollContentView = [UIView new];
+    self.scrollContentView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollContentView.backgroundColor = UIColor.clearColor;
+    [self.scrollView addSubview:self.scrollContentView];
+
+    UIView *preview = [UIView new];
+    preview.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.scrollContentView addSubview:preview];
+
+    UIView *content = [UIView new];
+    content.translatesAutoresizingMaskIntoConstraints = NO;
+    [preview addSubview:content];
+
     self.thumbView = [UIImageView new];
     self.thumbView.contentMode = UIViewContentModeScaleAspectFill;
     self.thumbView.layer.cornerRadius = 16;
     self.thumbView.layer.masksToBounds = YES;
     self.thumbView.userInteractionEnabled = YES;
+    self.thumbView.translatesAutoresizingMaskIntoConstraints = NO;
+    [content addSubview:self.thumbView];
+
     UITapGestureRecognizer *tapThumb = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onTapPreview)];
     [self.thumbView addGestureRecognizer:tapThumb];
 
     self.playBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    UIImage *img = [UIImage imageNamed:@"ic_play"];
-    [self.playBtn setImage:[img imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]
-                  forState:UIControlStateNormal];
+    UIImage *playImg = [UIImage imageNamed:@"ic_play"];
+    [self.playBtn setImage:[playImg imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
     self.playBtn.layer.cornerRadius = 11;
     self.playBtn.layer.masksToBounds = YES;
     [self.playBtn addTarget:self action:@selector(onTapPreview) forControlEvents:UIControlEventTouchUpInside];
+    self.playBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.thumbView addSubview:self.playBtn];
 
-    UIView *preview = [UIView new];
-    [self.view addSubview:preview];
-    preview.translatesAutoresizingMaskIntoConstraints = NO;
-
-    // info 容器
     UIView *info = [UIView new];
     info.translatesAutoresizingMaskIntoConstraints = NO;
-
-
-    // playBtn 覆盖在 thumb 上（加到 preview 上也可以）
-    [self.thumbView addSubview:self.playBtn];
-    self.thumbView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.playBtn.translatesAutoresizingMaskIntoConstraints = NO;
-
-    // ✅ 关键：提高 hugging/抗压缩，避免 info 被拉伸到屏幕边缘
-    [self.thumbView setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-    [self.thumbView setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-    [info setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-    [info setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-
-    // ✅ content 容器：把 thumb + info 当成一个整体居中
-    UIView *content = [UIView new];
-    content.translatesAutoresizingMaskIntoConstraints = NO;
-    [preview addSubview:content];
-
-    // thumb + info 放到 content 里
-    [self.thumbView removeFromSuperview];
-    [info removeFromSuperview];
-    [content addSubview:self.thumbView];
     [content addSubview:info];
 
-    self.thumbView.translatesAutoresizingMaskIntoConstraints = NO;
-    info.translatesAutoresizingMaskIntoConstraints = NO;
-
-    // info labels
     self.sizeKey = [self makeKey:@"Size"];
     self.sizeVal = [self makeVal];
     self.durKey  = [self makeKey:@"Duration"];
@@ -460,75 +454,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     [info addSubview:self.resVal];
     for (UIView *v in info.subviews) v.translatesAutoresizingMaskIntoConstraints = NO;
 
-    CGFloat side = 20;
-    CGFloat thumbW = 150;
-    CGFloat thumbH = 200;
-
-    // preview block
-    [NSLayoutConstraint activateConstraints:@[
-        [preview.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:16],
-        [preview.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
-        [preview.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
-
-        // thumb 固定尺寸
-        [self.thumbView.widthAnchor constraintEqualToConstant:thumbW],
-        [self.thumbView.heightAnchor constraintEqualToConstant:thumbH],
-        
-        [content.centerXAnchor constraintEqualToAnchor:preview.centerXAnchor],
-        [content.topAnchor constraintEqualToAnchor:preview.topAnchor],
-        [content.bottomAnchor constraintEqualToAnchor:preview.bottomAnchor],
-        [content.leadingAnchor constraintGreaterThanOrEqualToAnchor:preview.leadingAnchor],
-        [content.trailingAnchor constraintLessThanOrEqualToAnchor:preview.trailingAnchor],
-
-        // thumb 固定尺寸 + 贴 content 左侧
-        [self.thumbView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
-        [self.thumbView.topAnchor constraintEqualToAnchor:content.topAnchor],
-        [self.thumbView.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
-        [self.thumbView.widthAnchor constraintEqualToConstant:thumbW],
-        [self.thumbView.heightAnchor constraintEqualToConstant:thumbH],
-
-        // info 跟在 thumb 右侧，整体由内容决定宽度
-        [info.leadingAnchor constraintEqualToAnchor:self.thumbView.trailingAnchor constant:18],
-        [info.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
-        [info.centerYAnchor constraintEqualToAnchor:self.thumbView.centerYAnchor],
-
-        // play button 覆盖在 thumb 上
-        [self.playBtn.leadingAnchor constraintEqualToAnchor:self.thumbView.leadingAnchor constant:11],
-        [self.playBtn.topAnchor constraintEqualToAnchor:self.thumbView.topAnchor constant:11],
-        [self.playBtn.widthAnchor constraintEqualToConstant:22],
-        [self.playBtn.heightAnchor constraintEqualToConstant:22],
-
-        // info labels（高度闭合很关键）
-        [self.sizeKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-            [self.sizeVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-            [self.durKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-            [self.durVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-            [self.resKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-            [self.resVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
-        [self.sizeKey.topAnchor constraintEqualToAnchor:info.topAnchor],
-        [self.sizeKey.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
-
-        [self.sizeVal.topAnchor constraintEqualToAnchor:self.sizeKey.bottomAnchor constant:6],
-        [self.sizeVal.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
-
-        [self.durKey.topAnchor constraintEqualToAnchor:self.sizeVal.bottomAnchor constant:20],
-        [self.durKey.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
-
-        [self.durVal.topAnchor constraintEqualToAnchor:self.durKey.bottomAnchor constant:6],
-        [self.durVal.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
-
-        [self.resKey.topAnchor constraintEqualToAnchor:self.durVal.bottomAnchor constant:20],
-        [self.resKey.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
-
-        [self.resVal.topAnchor constraintEqualToAnchor:self.resKey.bottomAnchor constant:6],
-        [self.resVal.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
-
-        // ✅ 让 info 的高度闭合（否则对齐容易怪）
-        [self.resVal.bottomAnchor constraintEqualToAnchor:info.bottomAnchor],
-    ]];
-
-  
-    // Before/After
     self.beforeLabel = [UILabel new];
     self.beforeLabel.font = ASSB(24);
     self.beforeLabel.textColor = UIColor.blackColor;
@@ -538,14 +463,13 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.afterLabel.textColor = ASBlue();
 
     self.arrowView = [UIImageView new];
-    
     UIImage *toImg = [[UIImage imageNamed:@"ic_compress_to"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     self.arrowView.image = toImg;
     self.arrowView.contentMode = UIViewContentModeCenter;
-    
+
     UIView *ba = [UIView new];
-    [self.view addSubview:ba];
     ba.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.scrollContentView addSubview:ba];
 
     UIStackView *baStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.beforeLabel, self.arrowView, self.afterLabel]];
     baStack.axis = UILayoutConstraintAxisHorizontal;
@@ -563,31 +487,29 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     self.saveLabel.font = ASRG(16);
     self.saveLabel.textColor = UIColor.blackColor;
     self.saveLabel.textAlignment = NSTextAlignmentCenter;
-    [self.view addSubview:self.saveLabel];
     self.saveLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.scrollContentView addSubview:self.saveLabel];
 
-    // Select card
     self.selectCard = [UIView new];
     self.selectCard.backgroundColor = ASSelectCardBG();
     self.selectCard.layer.cornerRadius = 22;
     self.selectCard.layer.masksToBounds = YES;
+    self.selectCard.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.scrollContentView addSubview:self.selectCard];
 
     self.selectTitle = [UILabel new];
     self.selectTitle.font = ASSB(20);
     self.selectTitle.textColor = UIColor.blackColor;
     self.selectTitle.text = @"Select size";
+    self.selectTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.selectCard addSubview:self.selectTitle];
 
     self.whiteBox = [UIView new];
     self.whiteBox.backgroundColor = UIColor.whiteColor;
     self.whiteBox.layer.cornerRadius = 16;
     self.whiteBox.layer.masksToBounds = YES;
-
-    [self.view addSubview:self.selectCard];
-    [self.selectCard addSubview:self.selectTitle];
-    [self.selectCard addSubview:self.whiteBox];
-    self.selectCard.translatesAutoresizingMaskIntoConstraints = NO;
-    self.selectTitle.translatesAutoresizingMaskIntoConstraints = NO;
     self.whiteBox.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.selectCard addSubview:self.whiteBox];
 
     self.rowSmall = [[ASQualityRow alloc] initWithQuality:ASCompressionQualitySmall
                                                    title:@"Small Size"
@@ -607,20 +529,16 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
     stack.spacing = 5;
     stack.alignment = UIStackViewAlignmentFill;
     stack.distribution = UIStackViewDistributionFill;
-    [self.whiteBox addSubview:stack];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
-
-
-    CGFloat headerH = 56;
+    [self.whiteBox addSubview:stack];
 
     [NSLayoutConstraint activateConstraints:@[
-        // bottom button
+        // bottom button（固定）
         [self.compressBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
         [self.compressBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
         [self.compressBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:0],
         [self.compressBtn.heightAnchor constraintEqualToConstant:70],
 
-        // header
         [header.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [header.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -634,38 +552,76 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:header.centerXAnchor],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
 
-        // preview block
-        [preview.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:16],
-        [preview.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
-        [preview.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
+        [self.scrollView.topAnchor constraintEqualToAnchor:header.bottomAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.compressBtn.topAnchor],
 
+        [self.scrollContentView.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor],
+        [self.scrollContentView.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
+        [self.scrollContentView.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
+        [self.scrollContentView.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor],
+        [self.scrollContentView.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
+
+        // preview
+        [preview.topAnchor constraintEqualToAnchor:self.scrollContentView.topAnchor constant:16],
+        [preview.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
+        [preview.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
+
+        [content.centerXAnchor constraintEqualToAnchor:preview.centerXAnchor],
+        [content.topAnchor constraintEqualToAnchor:preview.topAnchor],
+        [content.bottomAnchor constraintEqualToAnchor:preview.bottomAnchor],
+        [content.leadingAnchor constraintGreaterThanOrEqualToAnchor:preview.leadingAnchor],
+        [content.trailingAnchor constraintLessThanOrEqualToAnchor:preview.trailingAnchor],
+
+        // thumb 固定尺寸
+        [self.thumbView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+        [self.thumbView.topAnchor constraintEqualToAnchor:content.topAnchor],
+        [self.thumbView.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
         [self.thumbView.widthAnchor constraintEqualToConstant:thumbW],
         [self.thumbView.heightAnchor constraintEqualToConstant:thumbH],
 
-        // thumb 固定尺寸保持
-        [self.thumbView.widthAnchor constraintEqualToConstant:thumbW],
-        [self.thumbView.heightAnchor constraintEqualToConstant:thumbH],
+        // play button
+        [self.playBtn.leadingAnchor constraintEqualToAnchor:self.thumbView.leadingAnchor constant:11],
+        [self.playBtn.topAnchor constraintEqualToAnchor:self.thumbView.topAnchor constant:11],
+        [self.playBtn.widthAnchor constraintEqualToConstant:22],
+        [self.playBtn.heightAnchor constraintEqualToConstant:22],
 
-        // info labels
+        // info
+        [info.leadingAnchor constraintEqualToAnchor:self.thumbView.trailingAnchor constant:18],
+        [info.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+        [info.centerYAnchor constraintEqualToAnchor:self.thumbView.centerYAnchor],
+
+        // info labels（闭合高度）
         [self.sizeKey.topAnchor constraintEqualToAnchor:info.topAnchor],
         [self.sizeKey.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
+        [self.sizeKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
+
         [self.sizeVal.topAnchor constraintEqualToAnchor:self.sizeKey.bottomAnchor constant:6],
         [self.sizeVal.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
+        [self.sizeVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
 
         [self.durKey.topAnchor constraintEqualToAnchor:self.sizeVal.bottomAnchor constant:20],
         [self.durKey.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
+        [self.durKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
+
         [self.durVal.topAnchor constraintEqualToAnchor:self.durKey.bottomAnchor constant:6],
         [self.durVal.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
+        [self.durVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
 
         [self.resKey.topAnchor constraintEqualToAnchor:self.durVal.bottomAnchor constant:20],
         [self.resKey.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
+        [self.resKey.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
+
         [self.resVal.topAnchor constraintEqualToAnchor:self.resKey.bottomAnchor constant:6],
         [self.resVal.leadingAnchor constraintEqualToAnchor:info.leadingAnchor],
+        [self.resVal.trailingAnchor constraintLessThanOrEqualToAnchor:info.trailingAnchor],
+        [self.resVal.bottomAnchor constraintEqualToAnchor:info.bottomAnchor],
 
         // before/after
         [ba.topAnchor constraintEqualToAnchor:preview.bottomAnchor constant:22],
-        [ba.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
-        [ba.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
+        [ba.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
+        [ba.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
         [ba.heightAnchor constraintEqualToConstant:34],
 
         [self.arrowView.widthAnchor constraintEqualToConstant:26],
@@ -676,20 +632,15 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [baStack.leadingAnchor constraintGreaterThanOrEqualToAnchor:ba.leadingAnchor],
         [baStack.trailingAnchor constraintLessThanOrEqualToAnchor:ba.trailingAnchor],
 
-        [self.arrowView.widthAnchor constraintEqualToConstant:26],
-        [self.arrowView.heightAnchor constraintEqualToConstant:26],
-
+        // save label
         [self.saveLabel.topAnchor constraintEqualToAnchor:ba.bottomAnchor constant:4],
-        [self.saveLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
-        [self.saveLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
+        [self.saveLabel.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
+        [self.saveLabel.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
 
         // select card
         [self.selectCard.topAnchor constraintEqualToAnchor:self.saveLabel.bottomAnchor constant:18],
-        [self.selectCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
-        [self.selectCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
-
-        // select card must be above bottom button (no scroll)
-        [self.selectCard.bottomAnchor constraintLessThanOrEqualToAnchor:self.compressBtn.topAnchor constant:0],
+        [self.selectCard.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:side],
+        [self.selectCard.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-side],
 
         [self.selectTitle.topAnchor constraintEqualToAnchor:self.selectCard.topAnchor constant:13],
         [self.selectTitle.leadingAnchor constraintEqualToAnchor:self.selectCard.leadingAnchor constant:18],
@@ -707,6 +658,8 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:s weight
         [self.rowSmall.heightAnchor constraintEqualToConstant:74],
         [self.rowMedium.heightAnchor constraintEqualToConstant:74],
         [self.rowLarge.heightAnchor constraintEqualToConstant:74],
+
+        [self.selectCard.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-16],
     ]];
 }
 

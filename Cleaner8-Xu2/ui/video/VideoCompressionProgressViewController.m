@@ -215,6 +215,8 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
 @property (nonatomic) BOOL didExit;
 @property (nonatomic) BOOL showingCancelAlert;
 @property (nonatomic, strong, nullable) UIAlertController *cancelAlert;
+@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UIView *scrollContentView;
 
 @end
 
@@ -342,22 +344,13 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
 
 - (void)buildUI {
     CGFloat side = 20;
+    CGFloat headerH = 56;
     CGFloat previewW = 210;
     CGFloat previewH = 280;
-    
-    self.topCard = [UIView new];
-    self.topCard.backgroundColor = UIColor.whiteColor;
-    self.topCard.translatesAutoresizingMaskIntoConstraints = NO;
-    self.topCard.layer.cornerRadius = 34;
-    if (@available(iOS 11.0,*)) {
-        self.topCard.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
-    }
-    self.topCard.layer.masksToBounds = YES;
-    [self.view addSubview:self.topCard];
 
     UIView *header = [UIView new];
     header.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.topCard addSubview:header];
+    [self.view addSubview:header];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
@@ -366,6 +359,7 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
     self.backBtn.adjustsImageWhenHighlighted = NO;
     [self.backBtn addTarget:self action:@selector(onCancelPressed) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [header addSubview:self.backBtn];
 
     self.titleLabel = [UILabel new];
     self.titleLabel.text = @"In Process";
@@ -373,10 +367,46 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
     self.titleLabel.textColor = UIColor.blackColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-
-    [header addSubview:self.backBtn];
     [header addSubview:self.titleLabel];
 
+    self.cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.cancelBtn setTitle:@"Cancel" forState:UIControlStateNormal];
+    self.cancelBtn.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
+    [self.cancelBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    self.cancelBtn.backgroundColor = ASBlue();
+    self.cancelBtn.layer.cornerRadius = 35;
+    self.cancelBtn.layer.masksToBounds = NO;
+    self.cancelBtn.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.18].CGColor;
+    self.cancelBtn.layer.shadowOpacity = 1.0;
+    self.cancelBtn.layer.shadowOffset = CGSizeMake(0, 10);
+    self.cancelBtn.layer.shadowRadius = 18;
+    [self.cancelBtn addTarget:self action:@selector(onCancelPressed) forControlEvents:UIControlEventTouchUpInside];
+    self.cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.cancelBtn];
+
+    self.scrollView = [UIScrollView new];
+    self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollView.alwaysBounceVertical = YES;
+    self.scrollView.showsVerticalScrollIndicator = YES;
+    self.scrollView.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.scrollView];
+
+    self.scrollContentView = [UIView new];
+    self.scrollContentView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollContentView.backgroundColor = UIColor.clearColor;
+    [self.scrollView addSubview:self.scrollContentView];
+
+    self.topCard = [UIView new];
+    self.topCard.backgroundColor = UIColor.whiteColor;
+    self.topCard.translatesAutoresizingMaskIntoConstraints = NO;
+    self.topCard.layer.cornerRadius = 34;
+    if (@available(iOS 11.0,*)) {
+        self.topCard.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+    }
+    self.topCard.layer.masksToBounds = YES;
+    [self.scrollContentView addSubview:self.topCard];
+
+    // thumb
     self.thumbView = [UIImageView new];
     self.thumbView.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1];
     self.thumbView.contentMode = UIViewContentModeScaleAspectFill;
@@ -419,36 +449,16 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
     self.tipLabel.textColor = [UIColor colorWithWhite:0.15 alpha:1];
     self.tipLabel.numberOfLines = 0;
     self.tipLabel.lineBreakMode = NSLineBreakByWordWrapping;
-    self.tipLabel.preferredMaxLayoutWidth = UIScreen.mainScreen.bounds.size.width - 60;
     self.tipLabel.textAlignment = NSTextAlignmentCenter;
     self.tipLabel.text = @"It is recommended not to minimize or close the app...";
     self.tipLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.tipLabel];
-
-    self.cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.cancelBtn setTitle:@"Cancel" forState:UIControlStateNormal];
-    self.cancelBtn.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
-    [self.cancelBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    self.cancelBtn.backgroundColor = ASBlue();
-    self.cancelBtn.layer.cornerRadius = 35;
-    self.cancelBtn.layer.masksToBounds = NO;
-    self.cancelBtn.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.18].CGColor;
-    self.cancelBtn.layer.shadowOpacity = 1.0;
-    self.cancelBtn.layer.shadowOffset = CGSizeMake(0, 10);
-    self.cancelBtn.layer.shadowRadius = 18;
-    [self.cancelBtn addTarget:self action:@selector(onCancelPressed) forControlEvents:UIControlEventTouchUpInside];
-    self.cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.cancelBtn];
+    [self.scrollContentView addSubview:self.tipLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.topCard.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.topCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.topCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-
-        [header.topAnchor constraintEqualToAnchor:self.topCard.safeAreaLayoutGuide.topAnchor],
-        [header.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor],
-        [header.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor],
-        [header.heightAnchor constraintEqualToConstant:56],
+        [header.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [header.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [header.heightAnchor constraintEqualToConstant:headerH],
 
         [self.backBtn.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:6],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
@@ -458,7 +468,27 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:header.centerXAnchor],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
 
-        [self.thumbView.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:10],
+        [self.cancelBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:40],
+        [self.cancelBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-40],
+        [self.cancelBtn.heightAnchor constraintEqualToConstant:70],
+        [self.cancelBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-22],
+
+        [self.scrollView.topAnchor constraintEqualToAnchor:header.bottomAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.cancelBtn.topAnchor],
+
+        [self.scrollContentView.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor],
+        [self.scrollContentView.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
+        [self.scrollContentView.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
+        [self.scrollContentView.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor],
+        [self.scrollContentView.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
+
+        [self.topCard.topAnchor constraintEqualToAnchor:self.scrollContentView.topAnchor constant:0],
+        [self.topCard.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor],
+        [self.topCard.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor],
+
+        [self.thumbView.topAnchor constraintEqualToAnchor:self.topCard.topAnchor constant:10],
         [self.thumbView.centerXAnchor constraintEqualToAnchor:self.topCard.centerXAnchor],
         [self.thumbView.widthAnchor constraintEqualToConstant:previewW],
         [self.thumbView.heightAnchor constraintEqualToConstant:previewH],
@@ -478,14 +508,9 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
         [self.topCard.bottomAnchor constraintEqualToAnchor:row.bottomAnchor constant:46],
 
         [self.tipLabel.topAnchor constraintEqualToAnchor:self.topCard.bottomAnchor constant:40],
-        [self.tipLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:30],
-        [self.tipLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-30],
-
-        [self.cancelBtn.topAnchor constraintEqualToAnchor:self.tipLabel.bottomAnchor constant:28],
-        [self.cancelBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:40],
-        [self.cancelBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-40],
-        [self.cancelBtn.heightAnchor constraintEqualToConstant:70],
-        [self.cancelBtn.bottomAnchor constraintLessThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-22],
+        [self.tipLabel.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:30],
+        [self.tipLabel.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-30],
+        [self.tipLabel.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-28],
     ]];
 
     dispatch_async(dispatch_get_main_queue(), ^{

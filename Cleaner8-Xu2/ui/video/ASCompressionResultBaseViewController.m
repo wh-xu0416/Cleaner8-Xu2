@@ -308,6 +308,8 @@ typedef void(^ASDeleteSheetBlock)(void);
 @property (nonatomic, strong) UIButton *todoBtn;
 
 @property (nonatomic, assign) BOOL hasAskedDelete;
+@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UIView *scrollContentView;
 
 @end
 
@@ -474,19 +476,12 @@ typedef void(^ASDeleteSheetBlock)(void);
 #pragma mark - UI
 
 - (void)buildUI {
-    self.topCard = [UIView new];
-    self.topCard.backgroundColor = UIColor.whiteColor;
-    self.topCard.translatesAutoresizingMaskIntoConstraints = NO;
-    self.topCard.layer.cornerRadius = 34;
-    if (@available(iOS 11.0,*)) {
-        self.topCard.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
-    }
-    self.topCard.layer.masksToBounds = YES;
-    [self.view addSubview:self.topCard];
+    CGFloat headerH = 56;
+    CGFloat side20 = 20;
 
     self.navBar = [UIView new];
     self.navBar.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.topCard addSubview:self.navBar];
+    [self.view addSubview:self.navBar];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
@@ -515,6 +510,28 @@ typedef void(^ASDeleteSheetBlock)(void);
     [self.navBar addSubview:self.homeBtn];
     self.homeBtn.hidden = ![self shouldShowHomeButton];
 
+    self.scrollView = [UIScrollView new];
+    self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollView.alwaysBounceVertical = YES;
+    self.scrollView.showsVerticalScrollIndicator = YES;
+    self.scrollView.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.scrollView];
+
+    self.scrollContentView = [UIView new];
+    self.scrollContentView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollContentView.backgroundColor = UIColor.clearColor;
+    [self.scrollView addSubview:self.scrollContentView];
+
+    self.topCard = [UIView new];
+    self.topCard.backgroundColor = UIColor.whiteColor;
+    self.topCard.translatesAutoresizingMaskIntoConstraints = NO;
+    self.topCard.layer.cornerRadius = 34;
+    if (@available(iOS 11.0,*)) {
+        self.topCard.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+    }
+    self.topCard.layer.masksToBounds = YES;
+    [self.scrollContentView addSubview:self.topCard];
+
     UIView *previewRef = nil;
 
     if ([self useStaticPreviewIcon]) {
@@ -538,6 +555,7 @@ typedef void(^ASDeleteSheetBlock)(void);
         self.playIcon.image = [[UIImage imageNamed:@"ic_play"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         self.playIcon.contentMode = UIViewContentModeScaleAspectFit;
         [self.thumbView addSubview:self.playIcon];
+
         self.thumbView.userInteractionEnabled = YES;
         UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onTapPreview)];
         [self.thumbView addGestureRecognizer:tap];
@@ -570,6 +588,7 @@ typedef void(^ASDeleteSheetBlock)(void);
     self.table = [self buildStatsTable];
     [self.topCard addSubview:self.table];
 
+    // ===== studioRow（也滚动）=====
     self.studioRow = [UIControl new];
     self.studioRow.translatesAutoresizingMaskIntoConstraints = NO;
     self.studioRow.backgroundColor = UIColor.whiteColor;
@@ -580,7 +599,7 @@ typedef void(^ASDeleteSheetBlock)(void);
     self.studioRow.layer.shadowOpacity = 1.0;
     self.studioRow.layer.shadowOffset = CGSizeMake(0, 10);
     self.studioRow.layer.shadowRadius = 20;
-    [self.view addSubview:self.studioRow];
+    [self.scrollContentView addSubview:self.studioRow];
 
     self.studioIcon = [UIImageView new];
     self.studioIcon.translatesAutoresizingMaskIntoConstraints = NO;
@@ -603,17 +622,14 @@ typedef void(^ASDeleteSheetBlock)(void);
     [self.todoBtn addTarget:self action:@selector(onStudio) forControlEvents:UIControlEventTouchUpInside];
     [self.studioRow addSubview:self.todoBtn];
 
-    CGFloat side20 = 20;
+    NSMutableArray<NSLayoutConstraint *> *cs = [NSMutableArray array];
 
-    NSMutableArray<NSLayoutConstraint *> *cs = [NSMutableArray arrayWithArray:@[
-        [self.topCard.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.topCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.topCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-
-        [self.navBar.topAnchor constraintEqualToAnchor:self.topCard.safeAreaLayoutGuide.topAnchor],
-        [self.navBar.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor],
-        [self.navBar.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor],
-        [self.navBar.heightAnchor constraintEqualToConstant:56],
+    // navBar 固定
+    [cs addObjectsFromArray:@[
+        [self.navBar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.navBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.navBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.navBar.heightAnchor constraintEqualToConstant:headerH],
 
         [self.backBtn.leadingAnchor constraintEqualToAnchor:self.navBar.leadingAnchor constant:6],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:self.navBar.centerYAnchor],
@@ -626,17 +642,38 @@ typedef void(^ASDeleteSheetBlock)(void);
         [self.homeBtn.heightAnchor constraintEqualToConstant:44],
     ]];
 
+    [cs addObjectsFromArray:@[
+        [self.scrollView.topAnchor constraintEqualToAnchor:self.navBar.bottomAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+
+        [self.scrollContentView.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor],
+        [self.scrollContentView.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
+        [self.scrollContentView.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
+        [self.scrollContentView.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor],
+        [self.scrollContentView.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
+    ]];
+
+    // topCard 在滚动内容顶部
+    [cs addObjectsFromArray:@[
+        [self.topCard.topAnchor constraintEqualToAnchor:self.scrollContentView.topAnchor constant:0],
+        [self.topCard.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor],
+        [self.topCard.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor],
+    ]];
+
+    // 预览区（静态/动态两种分支约束）
     if ([self useStaticPreviewIcon]) {
         CGSize sz = [self staticPreviewSize];
         [cs addObjectsFromArray:@[
-            [self.staticIconView.topAnchor constraintEqualToAnchor:self.navBar.bottomAnchor constant:18],
+            [self.staticIconView.topAnchor constraintEqualToAnchor:self.topCard.topAnchor constant:18],
             [self.staticIconView.centerXAnchor constraintEqualToAnchor:self.topCard.centerXAnchor],
             [self.staticIconView.widthAnchor constraintEqualToConstant:sz.width],
             [self.staticIconView.heightAnchor constraintEqualToConstant:sz.height],
         ]];
     } else {
         [cs addObjectsFromArray:@[
-            [self.thumbView.topAnchor constraintEqualToAnchor:self.navBar.bottomAnchor constant:10],
+            [self.thumbView.topAnchor constraintEqualToAnchor:self.topCard.topAnchor constant:10],
             [self.thumbView.centerXAnchor constraintEqualToAnchor:self.topCard.centerXAnchor],
             [self.thumbView.widthAnchor constraintEqualToConstant:180],
             [self.thumbView.heightAnchor constraintEqualToConstant:240],
@@ -653,6 +690,7 @@ typedef void(^ASDeleteSheetBlock)(void);
         ]];
     }
 
+    // 下面内容（沿用你原来的布局，只是把参照从 navBar.bottom 改成 topCard.top / previewRef）
     [cs addObjectsFromArray:@[
         [self.greatLabel.topAnchor constraintEqualToAnchor:previewRef.bottomAnchor constant:18],
         [self.greatLabel.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:side20],
@@ -669,11 +707,11 @@ typedef void(^ASDeleteSheetBlock)(void);
 
         [self.topCard.bottomAnchor constraintEqualToAnchor:self.table.bottomAnchor constant:35],
 
+        // studioRow 也在 scrollContentView（滚动）
         [self.studioRow.topAnchor constraintEqualToAnchor:self.topCard.bottomAnchor constant:30],
-        [self.studioRow.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.studioRow.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.studioRow.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:20],
+        [self.studioRow.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-20],
         [self.studioRow.heightAnchor constraintEqualToConstant:110],
-        [self.studioRow.bottomAnchor constraintLessThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-22],
 
         [self.studioIcon.leadingAnchor constraintEqualToAnchor:self.studioRow.leadingAnchor constant:22],
         [self.studioIcon.centerYAnchor constraintEqualToAnchor:self.studioRow.centerYAnchor],
@@ -687,12 +725,16 @@ typedef void(^ASDeleteSheetBlock)(void);
         [self.todoBtn.centerYAnchor constraintEqualToAnchor:self.studioRow.centerYAnchor],
         [self.todoBtn.widthAnchor constraintEqualToConstant:60],
         [self.todoBtn.heightAnchor constraintEqualToConstant:36],
+
+        // ✅ 收口：决定 contentSize
+        [self.studioRow.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-22],
     ]];
 
     [NSLayoutConstraint activateConstraints:cs];
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.studioRow.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.studioRow.bounds cornerRadius:24].CGPath;
+        self.studioRow.layer.shadowPath =
+        [UIBezierPath bezierPathWithRoundedRect:self.studioRow.bounds cornerRadius:24].CGPath;
     });
 }
 
