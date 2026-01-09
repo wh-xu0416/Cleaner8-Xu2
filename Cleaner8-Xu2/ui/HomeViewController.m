@@ -101,6 +101,48 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     ASHomeCardTypeOtherPhotos,
 };
 
+#pragma mark - Scan UI Result Model
+
+@interface ASScanUIResult : NSObject
+@property(nonatomic, assign) uint64_t diskTotal;
+@property(nonatomic, assign) uint64_t diskFree;
+
+@property(nonatomic, assign) uint64_t clutterBytes;
+@property(nonatomic, assign) uint64_t appDataBytes;
+
+// Similar Photos
+@property(nonatomic, assign) uint64_t simBytes;
+@property(nonatomic, assign) NSUInteger simCount;
+@property(nonatomic, copy)   NSArray<NSString *> *simThumbs;
+
+// Duplicate Photos
+@property(nonatomic, assign) uint64_t dupBytes;
+@property(nonatomic, assign) NSUInteger dupCount;
+@property(nonatomic, copy)   NSArray<NSString *> *dupThumbs;
+
+// Screenshots
+@property(nonatomic, assign) uint64_t shotsBytes;
+@property(nonatomic, assign) NSUInteger shotsCount;
+@property(nonatomic, copy)   NSArray<NSString *> *shotsThumb;
+
+// Blurry
+@property(nonatomic, assign) uint64_t blurBytes;
+@property(nonatomic, assign) NSUInteger blurCount;
+@property(nonatomic, copy)   NSArray<NSString *> *blurThumb;
+
+// Other
+@property(nonatomic, assign) uint64_t otherBytes;
+@property(nonatomic, assign) NSUInteger otherCount;
+@property(nonatomic, copy)   NSArray<NSString *> *otherThumb;
+
+// Videos (simVid + dupVid + bigVideos + screenRecordings)
+@property(nonatomic, assign) uint64_t vBytes;
+@property(nonatomic, assign) NSUInteger vCount;
+@property(nonatomic, copy)   NSArray<NSString *> *videoThumb;
+@end
+
+@implementation ASScanUIResult @end
+
 #pragma mark - Home Module Model
 
 @interface ASHomeModuleVM : NSObject
@@ -1031,6 +1073,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 @property(nonatomic, assign) ASPhotoAuthLevel lastAppliedAuthLevel;
 @property(nonatomic, assign) BOOL lastAppliedLimited;
+
+@property(nonatomic, strong) NSCache<NSString*, PHAsset*> *assetCache;
+@property(nonatomic, strong) dispatch_queue_t photoFetchQueue;
 @end
 
 @implementation HomeViewController
@@ -1104,6 +1149,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     [self setupUI];
     [self computeDiskSpace];
     
+    self.assetCache = [NSCache new];
+    self.photoFetchQueue = dispatch_queue_create("com.xiaoxu2.home.photoFetch", DISPATCH_QUEUE_CONCURRENT);
+
     self.homeBuildQueue = dispatch_queue_create("com.xiaoxu2.home.build", DISPATCH_QUEUE_SERIAL);
     self.lastAppliedAuthLevel = ASPhotoAuthLevelUnknown;
     self.lastAppliedLimited = NO;
@@ -1143,40 +1191,6 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 - (void)onAppDidBecomeActive:(NSNotification *)n {
     [self resumeVisibleVideoCovers];
 }
-
-- (void)rebuildModulesAndReloadAsyncFinal:(BOOL)isFinal {
-    __weak typeof(self) weakSelf = self;
-    dispatch_async(self.homeBuildQueue, ^{
-        @autoreleasepool {
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) return;
-
-            [self computeDiskSpace];
-
-            if (self.scanMgr.snapshot.state == ASScanStateScanning) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self scheduleScanUIUpdateCoalesced];
-                });
-                return;
-            }
-
-            NSArray<ASHomeModuleVM *> *old = self.modules ?: @[];
-            NSArray<ASHomeModuleVM *> *newMods = [self buildModulesFromManagerAndComputeClutterIsFinal:isFinal];
-
-            // [self preserveCoversFromOld:old toNew:newMods];
-
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) self2 = weakSelf;
-                if (!self2) return;
-
-                self2.modules = newMods;
-                [self2.cv reloadData];
-                [self2 updateHeaderDuringScanning];
-            });
-        }
-    });
-}
-
 
 - (void)onTapPermissionGate {
     PHAuthorizationStatus st = [self currentPHAuthStatus];
@@ -1256,6 +1270,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
     // 只有权限/limited 真变化才 reload
     if (authChanged) {
+        [self ensureModulesIfNeeded];        // ✅ 新增
         [self resetCoverStateForAuthChange];
         [self.cv reloadData];
     } else {
@@ -1353,51 +1368,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     [super viewDidLayoutSubviews];
 
     self.cv.frame = self.view.bounds;
+    [self applyLayoutForCurrentAuth];
 
-    ASWaterfallLayout *wf = (ASWaterfallLayout *)self.cv.collectionViewLayout;
-    if ([wf isKindOfClass:ASWaterfallLayout.class]) {
-
-        BOOL changed = NO;
-
-        UIEdgeInsets targetInset;
-        CGFloat targetInter;
-        CGFloat targetLine;
-
-        if (![self hasPhotoAccess]) {
-            targetInset = UIEdgeInsetsMake(0, 0, SW(16), 0);
-            targetInter = 0;
-            targetLine  = SW(12);
-        } else {
-            targetInset = UIEdgeInsetsMake(0, kHomeSideInset, kHomeSideInset, kHomeSideInset);
-            targetInter = kHomeGridGap;
-            targetLine  = kHomeGridGap;
-        }
-
-        if (!UIEdgeInsetsEqualToEdgeInsets(wf.sectionInset, targetInset)) {
-            wf.sectionInset = targetInset;
-            changed = YES;
-        }
-        if (fabs(wf.interItemSpacing - targetInter) > 0.5) {
-            wf.interItemSpacing = targetInter;
-            changed = YES;
-        }
-        if (fabs(wf.lineSpacing - targetLine) > 0.5) {
-            wf.lineSpacing = targetLine;
-            changed = YES;
-        }
-
-        CGFloat newH = [self collectionView:self.cv layout:wf referenceSizeForHeaderInSection:0].height;
-        if (fabs(wf.headerHeight - newH) > 0.5) {
-            wf.headerHeight = newH;
-            changed = YES;
-        }
-
-        if (changed) {
-            [wf invalidateLayout];
-        }
-    }
-
-    // gradient / contentInset 这些保持不变
     CGFloat w = self.view.bounds.size.width;
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
@@ -1409,6 +1381,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.cv.contentInset = SWInsets(20, 0, safe.bottom + 70, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 }
+
 
 #pragma mark - Data Build
 
@@ -1441,10 +1414,42 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 }
 
+#pragma mark - Helpers
+
+- (void)ensureModulesIfNeeded {
+    if (![self hasPhotoAccess]) return;
+    if (self.modules.count > 0) return;
+
+    // 扫描中先给 6 个占位模块，避免第二次进来 reload 后 item=0
+    self.modules = [self buildModulesFromManagerAndComputeClutterIsFinal:NO];
+    [self.cv reloadData];
+    [self updateHeaderDuringScanning];
+}
+
+- (void)resetHomeCell:(HomeModuleCell *)cell vm:(ASHomeModuleVM *)vm {
+    [self cancelCellRequests:cell];
+    [cell stopVideoIfNeeded];
+
+    cell.appliedCoverKey = nil;
+    cell.representedLocalIds = @[];
+    cell.coverRequestKey = nil;
+
+    cell.hasFinalThumb1 = NO;
+    cell.hasFinalThumb2 = NO;
+
+    cell.img1.image = [UIImage imageNamed:@"ic_placeholder"];
+    cell.img2.image = (vm.showsTwoThumbs ? [UIImage imageNamed:@"ic_placeholder"] : nil);
+    cell.playIconView.hidden = YES;
+}
+
 - (void)rebuildModulesAndReload {
+    [self rebuildModulesAndReloadIsFinal:YES];
+}
+
+- (void)rebuildModulesAndReloadIsFinal:(BOOL)isFinal {
     CFTimeInterval t0 = CFAbsoluteTimeGetCurrent();
 
-    if (self.scanMgr.snapshot.state == ASScanStateScanning) {
+    if (self.scanMgr.snapshot.state == ASScanStateScanning && isFinal) {
         [self scheduleScanUIUpdateCoalesced];
         ASLogCost(@"TOTAL rebuildModulesAndReload (scanning)", t0);
         return;
@@ -1456,62 +1461,44 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             __strong typeof(weakSelf) self = weakSelf;
             if (!self) return;
 
-            NSDictionary *attrs = [[NSFileManager defaultManager]
-                                   attributesOfFileSystemForPath:NSHomeDirectory()
-                                   error:nil];
-            uint64_t total = [attrs[NSFileSystemSize] unsignedLongLongValue];
-            uint64_t free  = [attrs[NSFileSystemFreeSize] unsignedLongLongValue];
-
-            uint64_t totalLocal = total;
-            uint64_t freeLocal  = free;
-
-            self.diskTotalBytes = totalLocal;
-            self.diskFreeBytes  = freeLocal;
+            [self computeDiskSpace];
 
             NSArray<ASHomeModuleVM *> *newMods =
-            [self buildModulesFromManagerAndComputeClutterIsFinal:YES];
+            [self buildModulesFromManagerAndComputeClutterIsFinal:isFinal];
 
             dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) self = weakSelf;
-                if (!self) return;
+                __strong typeof(weakSelf) self2 = weakSelf;
+                if (!self2) return;
 
-                self.diskTotalBytes = totalLocal;
-                self.diskFreeBytes  = freeLocal;
-
-                NSArray<ASHomeModuleVM *> *old = self.modules ?: @[];
-                self.modules = newMods;
+                NSArray<ASHomeModuleVM *> *old = self2.modules ?: @[];
+                self2.modules = newMods;
 
                 if (old.count == 0 || old.count != newMods.count) {
-                    [self.cv reloadData];
+                    [self2.cv reloadData];
                 } else {
                     NSMutableArray<NSIndexPath *> *reloadIPs = [NSMutableArray array];
                     for (NSInteger i = 0; i < newMods.count; i++) {
-                        NSString *ok = [self contentKeyForVM:old[i]];
-                        NSString *nk = [self contentKeyForVM:newMods[i]];
+                        NSString *ok = [self2 contentKeyForVM:old[i]];
+                        NSString *nk = [self2 contentKeyForVM:newMods[i]];
                         if (![ok isEqualToString:nk]) {
                             [reloadIPs addObject:[NSIndexPath indexPathForItem:i inSection:0]];
                         }
                     }
-
                     if (reloadIPs.count) {
                         [UIView performWithoutAnimation:^{
-                            [self.cv reloadItemsAtIndexPaths:reloadIPs];
+                            [self2.cv reloadItemsAtIndexPaths:reloadIPs];
                         }];
                     }
                 }
 
-                [self updateHeaderDuringScanning];
-
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self refreshVisibleCellsAndCovers];
-                });
+                [self2 updateHeaderDuringScanning];
+                [self2 refreshVisibleCellsAndCovers];
 
                 ASLogCost(@"TOTAL rebuildModulesAndReload (async)", t0);
             });
         }
     });
 }
-
 
 - (NSString *)coverKeyForVM:(ASHomeModuleVM *)vm {
     NSString *k = vm.thumbKey ?: @"";
@@ -1584,13 +1571,12 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.pendingScanUIUpdate = YES;
 
     if (!self.scanUITimer) {
-        // 每 0.25s 合并刷新一次
-        self.scanUITimer = [NSTimer scheduledTimerWithTimeInterval:0.25
+        self.scanUITimer = [NSTimer scheduledTimerWithTimeInterval:0.6
                                                            target:self
                                                          selector:@selector(handleScanUITimerFire)
                                                          userInfo:nil
                                                           repeats:YES];
-        [[NSRunLoop mainRunLoop] addTimer:self.scanUITimer forMode:NSRunLoopCommonModes];
+        self.scanUITimer.tolerance = 0.2;
     }
 }
 
@@ -1602,9 +1588,212 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     return [self hasPhotoAccess];
 }
 
+#pragma mark - Build scan UI snapshot (background-safe)
+
+- (ASScanUIResult *)buildScanUIResultDuringScanning {
+    ASScanUIResult *r = [ASScanUIResult new];
+
+    // 1) disk
+    NSDictionary *attrs = [[NSFileManager defaultManager]
+                           attributesOfFileSystemForPath:NSHomeDirectory()
+                           error:nil];
+    uint64_t total = [attrs[NSFileSystemSize] unsignedLongLongValue];
+    uint64_t free  = [attrs[NSFileSystemFreeSize] unsignedLongLongValue];
+    r.diskTotal = total;
+    r.diskFree  = free;
+
+    // 2) input from scan manager (no PhotoKit fetch here)
+    NSArray<ASAssetGroup *> *sim = self.scanMgr.similarGroups ?: @[];
+    NSArray<ASAssetGroup *> *dup = self.scanMgr.duplicateGroups ?: @[];
+
+    NSArray<ASAssetModel *> *shots  = self.scanMgr.screenshots      ?: @[];
+    NSArray<ASAssetModel *> *recs   = self.scanMgr.screenRecordings ?: @[];
+    NSArray<ASAssetModel *> *bigs   = self.scanMgr.bigVideos        ?: @[];
+    NSArray<ASAssetModel *> *blurs  = self.scanMgr.blurryPhotos     ?: @[];
+    NSArray<ASAssetModel *> *others = self.scanMgr.otherPhotos      ?: @[];
+
+    // 3) unique clutter bytes (by localId)
+    NSMutableDictionary<NSString *, NSNumber *> *uniqBytesById = [NSMutableDictionary dictionary];
+
+    void (^addUniq)(ASAssetModel *m) = ^(ASAssetModel *m) {
+        if (!m.localId.length) return;
+        if (!uniqBytesById[m.localId]) {
+            uniqBytesById[m.localId] = @(m.fileSizeBytes);
+        }
+    };
+
+    // helpers: pick thumbs quickly
+    NSArray<NSString *> *(^thumbsFromFirstGroup)(NSArray<ASAssetGroup *> *, ASGroupType, NSUInteger) =
+    ^NSArray<NSString *> *(NSArray<ASAssetGroup *> *groups, ASGroupType type, NSUInteger maxCount) {
+        for (ASAssetGroup *g in groups) {
+            if (g.type != type) continue;
+            if (g.assets.count < 2) continue;
+            NSMutableArray<NSString *> *ids = [NSMutableArray array];
+            for (ASAssetModel *m in g.assets) {
+                if (!m.localId.length) continue;
+                [ids addObject:m.localId];
+                if (ids.count == maxCount) break;
+            }
+            if (ids.count) return ids;
+        }
+        return @[];
+    };
+
+    NSString *(^firstLocalId)(NSArray<ASAssetModel *> *) =
+    ^NSString *(NSArray<ASAssetModel *> *arr) {
+        for (ASAssetModel *m in arr) {
+            if (m.localId.length) return m.localId;
+        }
+        return (NSString *)nil;
+    };
+
+    // 4) Similar Images
+    {
+        uint64_t bytes = 0;
+        NSUInteger cnt = 0;
+
+        for (ASAssetGroup *g in sim) {
+            if (g.type != ASGroupTypeSimilarImage) continue;
+            if (g.assets.count < 2) continue;
+            for (ASAssetModel *m in g.assets) {
+                if (!m.localId.length) continue;
+                cnt += 1;
+                bytes += m.fileSizeBytes;
+                addUniq(m);
+            }
+        }
+        r.simBytes  = bytes;
+        r.simCount  = cnt;
+        r.simThumbs = thumbsFromFirstGroup(sim, ASGroupTypeSimilarImage, 2);
+    }
+
+    // 5) Duplicate Images
+    {
+        uint64_t bytes = 0;
+        NSUInteger cnt = 0;
+
+        for (ASAssetGroup *g in dup) {
+            if (g.type != ASGroupTypeDuplicateImage) continue;
+            if (g.assets.count < 2) continue;
+            for (ASAssetModel *m in g.assets) {
+                if (!m.localId.length) continue;
+                cnt += 1;
+                bytes += m.fileSizeBytes;
+                addUniq(m);
+            }
+        }
+        r.dupBytes  = bytes;
+        r.dupCount  = cnt;
+        r.dupThumbs = thumbsFromFirstGroup(dup, ASGroupTypeDuplicateImage, 2);
+    }
+
+    // 6) Screenshots / Blurry / Other
+    {
+        uint64_t bytes = 0; NSUInteger cnt = 0;
+        for (ASAssetModel *m in shots) { if (!m.localId.length) continue; cnt++; bytes += m.fileSizeBytes; addUniq(m); }
+        r.shotsBytes = bytes;
+        r.shotsCount = cnt;
+        NSString *lid = firstLocalId(shots);
+        r.shotsThumb = lid ? @[lid] : @[];
+    }
+    {
+        uint64_t bytes = 0; NSUInteger cnt = 0;
+        for (ASAssetModel *m in blurs) { if (!m.localId.length) continue; cnt++; bytes += m.fileSizeBytes; addUniq(m); }
+        r.blurBytes = bytes;
+        r.blurCount = cnt;
+        NSString *lid = firstLocalId(blurs);
+        r.blurThumb = lid ? @[lid] : @[];
+    }
+    {
+        uint64_t bytes = 0; NSUInteger cnt = 0;
+        for (ASAssetModel *m in others) { if (!m.localId.length) continue; cnt++; bytes += m.fileSizeBytes; addUniq(m); }
+        r.otherBytes = bytes;
+        r.otherCount = cnt;
+        NSString *lid = firstLocalId(others);
+        r.otherThumb = lid ? @[lid] : @[];
+    }
+
+    // 7) Videos (simVid + dupVid + bigs + recs)
+    {
+        uint64_t bytes = 0;
+        NSUInteger cnt = 0;
+
+        // similar video groups
+        for (ASAssetGroup *g in sim) {
+            if (g.type != ASGroupTypeSimilarVideo) continue;
+            if (g.assets.count < 2) continue;
+            for (ASAssetModel *m in g.assets) {
+                if (!m.localId.length) continue;
+                cnt += 1;
+                bytes += m.fileSizeBytes;
+                addUniq(m);
+            }
+        }
+        // duplicate video groups
+        for (ASAssetGroup *g in dup) {
+            if (g.type != ASGroupTypeDuplicateVideo) continue;
+            if (g.assets.count < 2) continue;
+            for (ASAssetModel *m in g.assets) {
+                if (!m.localId.length) continue;
+                cnt += 1;
+                bytes += m.fileSizeBytes;
+                addUniq(m);
+            }
+        }
+        // big videos
+        for (ASAssetModel *m in bigs) {
+            if (!m.localId.length) continue;
+            cnt += 1;
+            bytes += m.fileSizeBytes;
+            addUniq(m);
+        }
+        // screen recordings
+        for (ASAssetModel *m in recs) {
+            if (!m.localId.length) continue;
+            cnt += 1;
+            bytes += m.fileSizeBytes;
+            addUniq(m);
+        }
+
+        r.vBytes = bytes;
+        r.vCount = cnt;
+
+        // video cover：优先 bigs -> recs -> 任意一个视频组里的第一个
+        NSString *cover = firstLocalId(bigs);
+        if (!cover) cover = firstLocalId(recs);
+        if (!cover) {
+            // fallback: first from similar/dup video group assets
+            for (ASAssetGroup *g in sim) {
+                if (g.type != ASGroupTypeSimilarVideo || g.assets.count < 1) continue;
+                cover = firstLocalId(g.assets);
+                if (cover) break;
+            }
+        }
+        if (!cover) {
+            for (ASAssetGroup *g in dup) {
+                if (g.type != ASGroupTypeDuplicateVideo || g.assets.count < 1) continue;
+                cover = firstLocalId(g.assets);
+                if (cover) break;
+            }
+        }
+        r.videoThumb = cover ? @[cover] : @[];
+    }
+
+    // 8) clutter/appData
+    uint64_t uniqBytes = 0;
+    for (NSNumber *n in uniqBytesById.allValues) uniqBytes += n.unsignedLongLongValue;
+
+    r.clutterBytes = uniqBytes;
+
+    uint64_t used = (total > free) ? (total - free) : 0;
+    r.appDataBytes = (used > uniqBytes) ? (used - uniqBytes) : 0;
+
+    return r;
+}
+
+
 - (void)handleScanUITimerFire {
     if (!self.pendingScanUIUpdate) return;
-
     if (self.scanMgr.snapshot.state != ASScanStateScanning) {
         self.pendingScanUIUpdate = NO;
         [self.scanUITimer invalidate];
@@ -1612,58 +1801,69 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return;
     }
 
-    CFTimeInterval now = CFAbsoluteTimeGetCurrent();
-    if (now - self.lastScanUIFire < 0.6) {
-        return;
-    }
-    self.lastScanUIFire = now;
-
+    // 你现在用 0.25s timer + 0.6s gate，建议直接把 timer 改成 0.6s（见后面 D）
     self.pendingScanUIUpdate = NO;
-    [self computeDiskSpace];
 
-    [self updateModulesDuringScanning];
-}
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(self.homeBuildQueue, ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
 
-- (void)updateModulesDuringScanning {
+        ASScanUIResult *r = [self buildScanUIResultDuringScanning]; // 重活：后台算
 
-    if (self.modules.count == 0) {
-        __weak typeof(self) weakSelf = self;
-        dispatch_async(self.homeBuildQueue, ^{
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self2 = weakSelf;
+            if (!self2) return;
+            if (self2.scanMgr.snapshot.state != ASScanStateScanning) return;
 
-            NSArray *mods = [self buildModulesFromManagerAndComputeClutterIsFinal:NO];
+            // 只在主线程赋值 + 刷 UI
+            self2.diskTotalBytes = r.diskTotal;
+            self2.diskFreeBytes  = r.diskFree;
+            self2.clutterBytes   = r.clutterBytes;
+            self2.appDataBytes   = r.appDataBytes;
 
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) self2 = weakSelf;
-                if (!self2) return;
-                self2.modules = mods;
-                [self2.cv reloadData];
-                [self2 updateHeaderDuringScanning];
-            });
+            // 更新 modules（modules 只有 6 个，主线程改很轻）
+            for (ASHomeModuleVM *vm in self2.modules) {
+                switch (vm.type) {
+                    case ASHomeCardTypeSimilarPhotos:
+                        vm.totalBytes = r.simBytes; vm.totalCount = r.simCount;
+                        vm.countText  = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil),(unsigned long)r.simCount];
+                        if (!vm.didSetThumb && r.simThumbs.count) { vm.thumbLocalIds = r.simThumbs; vm.thumbKey = [r.simThumbs componentsJoinedByString:@"|"]; vm.didSetThumb = YES; }
+                        break;
+                    case ASHomeCardTypeDuplicatePhotos:
+                        vm.totalBytes = r.dupBytes; vm.totalCount = r.dupCount;
+                        vm.countText  = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil),(unsigned long)r.dupCount];
+                        if (!vm.didSetThumb && r.dupThumbs.count) { vm.thumbLocalIds = r.dupThumbs; vm.thumbKey = [r.dupThumbs componentsJoinedByString:@"|"]; vm.didSetThumb = YES; }
+                        break;
+                    case ASHomeCardTypeScreenshots:
+                        vm.totalBytes = r.shotsBytes; vm.totalCount = r.shotsCount;
+                        vm.countText  = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil),(unsigned long)r.shotsCount];
+                        if (!vm.didSetThumb && r.shotsThumb.count) { vm.thumbLocalIds = r.shotsThumb; vm.thumbKey = r.shotsThumb.firstObject; vm.didSetThumb = YES; }
+                        break;
+                    case ASHomeCardTypeBlurryPhotos:
+                        vm.totalBytes = r.blurBytes; vm.totalCount = r.blurCount;
+                        vm.countText  = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil),(unsigned long)r.blurCount];
+                        if (!vm.didSetThumb && r.blurThumb.count) { vm.thumbLocalIds = r.blurThumb; vm.thumbKey = r.blurThumb.firstObject; vm.didSetThumb = YES; }
+                        break;
+                    case ASHomeCardTypeOtherPhotos:
+                        vm.totalBytes = r.otherBytes; vm.totalCount = r.otherCount;
+                        vm.countText  = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil),(unsigned long)r.otherCount];
+                        if (!vm.didSetThumb && r.otherThumb.count) { vm.thumbLocalIds = r.otherThumb; vm.thumbKey = r.otherThumb.firstObject; vm.didSetThumb = YES; }
+                        break;
+                    case ASHomeCardTypeVideos:
+                        vm.totalBytes = r.vBytes; vm.totalCount = r.vCount;
+                        vm.countText  = [NSString stringWithFormat:NSLocalizedString(@"%lu Videos", nil),(unsigned long)r.vCount];
+                        if (!vm.didSetThumb && r.videoThumb.count) { vm.thumbLocalIds = r.videoThumb; vm.thumbKey = r.videoThumb.firstObject; vm.didSetThumb = YES; }
+                        break;
+                }
+            }
+
+            [self2 updateHeaderDuringScanning];
+
+            // 刷可见 cell 文案/封面（见 B/C：封面也要降载）
+            [self2 refreshVisibleCellsAndCovers];
         });
-        return;
-    }
-
-    [self refreshCountsAndBytesOnlyKeepThumbs];
-
-    [self updateHeaderDuringScanning];
-
-    NSArray<NSIndexPath *> *visible = [self.cv indexPathsForVisibleItems];
-    for (NSIndexPath *ip in visible) {
-        if (ip.item >= self.modules.count) continue;
-
-        HomeModuleCell *cell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:ip];
-        if (!cell) continue;
-
-        ASHomeModuleVM *vm = self.modules[ip.item];
-
-        [cell applyVM:vm humanSizeFn:^NSString *(uint64_t bytes) {
-            return [HomeModuleCell humanSize:bytes];
-        }];
-
-        [self ensureCoverLoadedOnceDuringScanningForIndexPath:ip];
-    }
+    });
 }
 
 - (void)requestCoverIfNeededForCell:(HomeModuleCell *)cell
@@ -1735,207 +1935,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
        humanSizeFn:^NSString * _Nonnull(uint64_t bytes) {
         return [HomeModuleCell humanSize:bytes];
     }];
-}
-
-- (BOOL)refreshCountsAndBytesOnlyKeepThumbs {
-
-    // 扫描中不做“存在性校验”，否则会 fetchAssetsWithLocalIdentifiers 巨重
-    NSArray<ASAssetGroup *> *dup = self.scanMgr.duplicateGroups ?: @[];
-    NSArray<ASAssetGroup *> *sim = self.scanMgr.similarGroups ?: @[];
-    NSArray<ASAssetModel *> *shots = self.scanMgr.screenshots ?: @[];
-    NSArray<ASAssetModel *> *recs  = self.scanMgr.screenRecordings ?: @[];
-    NSArray<ASAssetModel *> *bigs  = self.scanMgr.bigVideos ?: @[];
-    NSArray<ASAssetModel *> *blurs = self.scanMgr.blurryPhotos ?: @[];
-    NSArray<ASAssetModel *> *others = self.scanMgr.otherPhotos ?: @[];
-
-    NSArray<ASAssetModel *> *(^flattenGroups)(NSArray<ASAssetGroup *> *, ASGroupType) =
-    ^NSArray<ASAssetModel *> *(NSArray<ASAssetGroup *> *groups, ASGroupType type) {
-        NSMutableArray<ASAssetModel *> *arr = [NSMutableArray array];
-        for (ASAssetGroup *g in groups) {
-            if (g.type != type) continue;
-            if (g.assets.count < 2) continue;
-            [arr addObjectsFromArray:g.assets];
-        }
-        return arr;
-    };
-
-    NSArray<ASAssetModel *> *simImg = flattenGroups(sim, ASGroupTypeSimilarImage);
-    NSArray<ASAssetModel *> *dupImg = flattenGroups(dup, ASGroupTypeDuplicateImage);
-    NSArray<ASAssetModel *> *simVid = flattenGroups(sim, ASGroupTypeSimilarVideo);
-    NSArray<ASAssetModel *> *dupVid = flattenGroups(dup, ASGroupTypeDuplicateVideo);
-
-    NSMutableDictionary<NSString*, NSNumber*> *bytesById = [NSMutableDictionary dictionary];
-    void (^collectUniq)(NSArray<ASAssetModel *> *) = ^(NSArray<ASAssetModel *> *arr) {
-        for (ASAssetModel *m in arr) {
-            if (!m.localId.length) continue;
-            if (!bytesById[m.localId]) bytesById[m.localId] = @(m.fileSizeBytes);
-        }
-    };
-
-    collectUniq(simImg);
-    collectUniq(dupImg);
-    collectUniq(simVid);
-    collectUniq(dupVid);
-    collectUniq(shots);
-    collectUniq(recs);
-    collectUniq(bigs);
-    collectUniq(blurs);
-    collectUniq(others);
-
-    uint64_t uniqBytes = 0;
-    for (NSNumber *n in bytesById.allValues) uniqBytes += n.unsignedLongLongValue;
-
-    self.allCleanableIds = [NSSet setWithArray:bytesById.allKeys];
-    self.allCleanableBytes = uniqBytes;
-    self.clutterBytes = uniqBytes;
-
-    uint64_t used = (self.diskTotalBytes > self.diskFreeBytes) ? (self.diskTotalBytes - self.diskFreeBytes) : 0;
-    self.appDataBytes = (used > self.clutterBytes) ? (used - self.clutterBytes) : 0;
-
-    BOOL changed = NO;
-    for (ASHomeModuleVM *vm in self.modules) {
-        switch (vm.type) {
-            case ASHomeCardTypeSimilarPhotos: {
-                uint64_t bytes = 0; for (ASAssetModel *m in simImg) bytes += m.fileSizeBytes;
-                NSUInteger cnt = simImg.count;
-                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)cnt];
-
-                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
-                    vm.totalBytes = bytes;
-                    vm.totalCount = cnt;
-                    vm.countText = ct;
-                    changed = YES;
-                }
-
-                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0) {
-                    NSArray<NSString *> *ids = [self thumbsFromFirstGroup:sim type:ASGroupTypeSimilarImage maxCount:2];
-                    if (ids.count > 0) {
-                        vm.thumbLocalIds = ids;
-                        vm.thumbKey = [ids componentsJoinedByString:@"|"];
-                        vm.didSetThumb = YES;
-                        changed = YES;
-                    }
-                }
-            } break;
-
-            case ASHomeCardTypeDuplicatePhotos: {
-                uint64_t bytes = 0; for (ASAssetModel *m in dupImg) bytes += m.fileSizeBytes;
-                NSUInteger cnt = dupImg.count;
-                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)cnt];
-
-                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
-                    vm.totalBytes = bytes;
-                    vm.totalCount = cnt;
-                    vm.countText = ct;
-                    changed = YES;
-                }
-
-                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0) {
-                    NSArray<NSString *> *ids = [self thumbsFromFirstGroup:dup type:ASGroupTypeDuplicateImage maxCount:2];
-                    if (ids.count > 0) {
-                        vm.thumbLocalIds = ids;
-                        vm.thumbKey = [ids componentsJoinedByString:@"|"];
-                        vm.didSetThumb = YES;
-                        changed = YES;
-                    }
-                }
-            } break;
-
-            case ASHomeCardTypeScreenshots: {
-                uint64_t bytes = 0; for (ASAssetModel *m in shots) bytes += m.fileSizeBytes;
-                NSUInteger cnt = shots.count;
-                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)cnt];
-
-                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
-                    vm.totalBytes = bytes;
-                    vm.totalCount = cnt;
-                    vm.countText = ct;
-                    changed = YES;
-                }
-
-                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0 && shots.firstObject.localId.length) {
-                    vm.thumbLocalIds = @[shots.firstObject.localId];
-                    vm.thumbKey = shots.firstObject.localId;
-                    vm.didSetThumb = YES;
-                    changed = YES;
-                }
-            } break;
-
-            case ASHomeCardTypeBlurryPhotos: {
-                uint64_t bytes = 0; for (ASAssetModel *m in blurs) bytes += m.fileSizeBytes;
-                NSUInteger cnt = blurs.count;
-                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)cnt];
-
-                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
-                    vm.totalBytes = bytes;
-                    vm.totalCount = cnt;
-                    vm.countText = ct;
-                    changed = YES;
-                }
-
-                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0 && blurs.firstObject.localId.length) {
-                    vm.thumbLocalIds = @[blurs.firstObject.localId];
-                    vm.thumbKey = blurs.firstObject.localId;
-                    vm.didSetThumb = YES;
-                    changed = YES;
-                }
-            } break;
-
-            case ASHomeCardTypeOtherPhotos: {
-                uint64_t bytes = 0; for (ASAssetModel *m in others) bytes += m.fileSizeBytes;
-                NSUInteger cnt = others.count;
-                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Photos", nil), (unsigned long)cnt];
-
-                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
-                    vm.totalBytes = bytes;
-                    vm.totalCount = cnt;
-                    vm.countText = ct;
-                    changed = YES;
-                }
-
-                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0 && others.firstObject.localId.length) {
-                    vm.thumbLocalIds = @[others.firstObject.localId];
-                    vm.thumbKey = others.firstObject.localId;
-                    vm.didSetThumb = YES;
-                    changed = YES;
-                }
-            } break;
-
-            case ASHomeCardTypeVideos: {
-                NSUInteger cnt = simVid.count + dupVid.count + bigs.count + recs.count;
-                uint64_t bytes = 0;
-                for (ASAssetModel *m in simVid) bytes += m.fileSizeBytes;
-                for (ASAssetModel *m in dupVid) bytes += m.fileSizeBytes;
-                for (ASAssetModel *m in bigs) bytes += m.fileSizeBytes;
-                for (ASAssetModel *m in recs) bytes += m.fileSizeBytes;
-
-                NSString *ct = [NSString stringWithFormat:NSLocalizedString(@"%lu Videos", nil), (unsigned long)cnt];
-                if (vm.totalBytes != bytes || vm.totalCount != cnt || ![vm.countText isEqualToString:ct]) {
-                    vm.totalBytes = bytes;
-                    vm.totalCount = cnt;
-                    vm.countText = ct;
-                    changed = YES;
-                }
-
-                if (!vm.didSetThumb && vm.thumbLocalIds.count == 0) {
-                    NSString *cover = nil;
-                    if (bigs.firstObject.localId.length) cover = bigs.firstObject.localId;
-                    else if (recs.firstObject.localId.length) cover = recs.firstObject.localId;
-                    else if (simVid.firstObject.localId.length) cover = simVid.firstObject.localId;
-                    else if (dupVid.firstObject.localId.length) cover = dupVid.firstObject.localId;
-
-                    if (cover.length) {
-                        vm.thumbLocalIds = @[cover];
-                        vm.thumbKey = cover;
-                        vm.didSetThumb = YES;
-                        changed = YES;
-                    }
-                }
-            } break;
-        }
-    }
-
-    return changed;
 }
 
 - (NSArray<NSString *> *)thumbsFromFirstGroup:(NSArray<ASAssetGroup *> *)groups
@@ -2300,23 +2299,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return [HomeModuleCell humanSize:bytes];
     }];
 
-    if (![self hasPhotoAccess]) {
-        [self cancelCellRequests:cell];
-        [cell stopVideoIfNeeded];
-
-        cell.appliedCoverKey = nil;
-        cell.thumbKey = nil;
-        cell.representedLocalIds = @[];
-
-        cell.hasFinalThumb1 = NO;
-        cell.hasFinalThumb2 = NO;
-
-        cell.img1.image = [UIImage imageNamed:@"ic_placeholder"];
-        cell.img2.image = (vm.showsTwoThumbs ? [UIImage imageNamed:@"ic_placeholder"] : nil);
-        cell.playIconView.hidden = YES;
-        return cell;
-    }
-
     NSArray<NSString *> *ids = vm.thumbLocalIds ?: @[];
     if (ids.count == 0) {
         [self cancelCellRequests:cell];
@@ -2517,148 +2499,171 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     if (![cell isKindOfClass:HomeModuleCell.class]) return;
     HomeModuleCell *c = (HomeModuleCell *)cell;
 
-    if (c.reqId1 != PHInvalidImageRequestID) {
-        [self.imgMgr cancelImageRequest:c.reqId1];
-        c.reqId1 = PHInvalidImageRequestID;
-    }
-    if (c.reqId2 != PHInvalidImageRequestID) {
-        [self.imgMgr cancelImageRequest:c.reqId2];
-        c.reqId2 = PHInvalidImageRequestID;
-    }
-
     [self cancelCellRequests:c];
     [c stopVideoIfNeeded];
 }
 
-#pragma mark - Scan Cover One-Time Load
+- (NSArray<PHAsset *> *)assetsForLocalIdsCached:(NSArray<NSString *> *)ids {
+    if (ids.count == 0) return @[];
 
-- (void)ensureCoverLoadedOnceDuringScanningForIndexPath:(NSIndexPath *)ip {
-    if (![self hasPhotoAccess]) return;
-    if (ip.item >= self.modules.count) return;
-
-    ASHomeModuleVM *vm = self.modules[ip.item];
-    if (vm.thumbLocalIds.count == 0) return;
-
-    HomeModuleCell *cell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:ip];
-    if (!cell) return;
-
-    NSString *key = [self coverKeyForVM:vm];
-
-    BOOL hasAllFinal = cell.hasFinalThumb1 && (!vm.showsTwoThumbs || cell.hasFinalThumb2);
-    if ([cell.appliedCoverKey isEqualToString:key] && hasAllFinal) return;
-
-    if (cell.coverRequestKey && [cell.coverRequestKey isEqualToString:key]) return;
-
-    cell.coverRequestKey = key;
-    cell.representedLocalIds = vm.thumbLocalIds ?: @[];
-    cell.thumbKey = key;
-    cell.appliedCoverKey = key;
-
-    cell.hasFinalThumb1 = NO;
-    cell.hasFinalThumb2 = NO;
-
-    [self cancelCellRequests:cell];
-    [cell stopVideoIfNeeded];
-
-    if (!cell.img1.image) cell.img1.image = [UIImage imageNamed:@"ic_placeholder"];
-    if (vm.showsTwoThumbs && !cell.img2.image) cell.img2.image = [UIImage imageNamed:@"ic_placeholder"];
-
-    if (vm.isVideoCover) {
-        [self loadVideoPreviewForVM:vm intoCell:cell atIndexPath:ip];
-    } else {
-        [self loadThumbsForVM:vm intoCell:cell atIndexPath:ip];
+    NSMutableArray<NSString *> *miss = [NSMutableArray array];
+    for (NSString *lid in ids) {
+        if (lid.length == 0) continue;
+        if (![self.assetCache objectForKey:lid]) {
+            [miss addObject:lid];
+        }
     }
+
+    if (miss.count) {
+        PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:miss options:nil];
+        [fr enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            NSString *lid = obj.localIdentifier;
+            if (lid.length) {
+                [self.assetCache setObject:obj forKey:lid];
+            }
+        }];
+    }
+
+    NSMutableArray<PHAsset *> *out = [NSMutableArray arrayWithCapacity:ids.count];
+    for (NSString *lid in ids) {
+        PHAsset *a = (lid.length ? [self.assetCache objectForKey:lid] : nil);
+        if (a) [out addObject:a];
+    }
+    return out;
 }
 
 #pragma mark - Thumbnails (Images)
 
-- (void)loadThumbsForVM:(ASHomeModuleVM *)vm intoCell:(HomeModuleCell *)cell atIndexPath:(NSIndexPath *)indexPath {
+- (void)loadThumbsForVM:(ASHomeModuleVM *)vm
+               intoCell:(HomeModuleCell *)cell
+            atIndexPath:(NSIndexPath *)indexPath {
 
     NSArray<NSString *> *ids = vm.thumbLocalIds ?: @[];
     if (ids.count == 0) return;
 
+    // 这些都在主线程读取一次，后面异步对齐校验用
     NSString *expectedKey = cell.appliedCoverKey ?: @"";
+    NSInteger token = cell.renderToken;
+    BOOL needsTwo = vm.showsTwoThumbs;
 
+    // 先取消旧请求（主线程安全地改 cell 状态）
     [self cancelCellRequests:cell];
     [cell stopVideoIfNeeded];
 
-    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
-    if (fr.count == 0) return;
+    // 计算 targetSize（主线程，避免并发读 cell bounds/frame）
+    CGFloat scale = UIScreen.mainScreen.scale;
 
+    CGSize s1 = cell.img1.bounds.size;
+    if (s1.width <= 1 || s1.height <= 1) s1 = cell.img1.frame.size;
+    if (s1.width <= 1 || s1.height <= 1) s1 = CGSizeMake(SW(120), SW(120));
+    CGSize t1 = CGSizeMake(MAX(1, s1.width * scale), MAX(1, s1.height * scale));
+
+    CGSize s2 = cell.img2.bounds.size;
+    if (s2.width <= 1 || s2.height <= 1) s2 = cell.img2.frame.size;
+    if (s2.width <= 1 || s2.height <= 1) s2 = CGSizeMake(SW(120), SW(120));
+    CGSize t2 = CGSizeMake(MAX(1, s2.width * scale), MAX(1, s2.height * scale));
+
+    // options（可复用你原来的配置）
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.networkAccessAllowed = YES;
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
     opt.resizeMode = PHImageRequestOptionsResizeModeFast;
     opt.synchronous = NO;
 
-    CGFloat scale = UIScreen.mainScreen.scale;
-
-    CGSize s1 = cell.img1.bounds.size;
-    if (s1.width <= 1 || s1.height <= 1) s1 = cell.img1.frame.size;
-    if (s1.width <= 1 || s1.height <= 1) s1 = CGSizeMake(SW(120), SW(120));
-    CGSize t1 = CGSizeMake(s1.width * scale, s1.height * scale);
-
-    CGSize s2 = cell.img2.bounds.size;
-    if (s2.width <= 1 || s2.height <= 1) s2 = cell.img2.frame.size;
-    if (s2.width <= 1 || s2.height <= 1) s2 = CGSizeMake(SW(120), SW(120));
-    CGSize t2 = CGSizeMake(s2.width * scale, s2.height * scale);
-
     __weak typeof(self) weakSelf = self;
+    NSArray<NSString *> *idsCopy = [ids copy]; // 防止外面改动
 
-    void (^setImg)(NSInteger, UIImage *, NSDictionary *) = ^(NSInteger idx, UIImage *img, NSDictionary *info) {
-        BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
+    // 1) 后台取 PHAsset（缓存 + 批量 fetch）
+    dispatch_async(self.photoFetchQueue, ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
 
+        NSArray<PHAsset *> *assets = [self assetsForLocalIdsCached:idsCopy];
+        if (assets.count == 0) return;
+
+        PHAsset *a0 = assets.count > 0 ? assets[0] : nil;
+        PHAsset *a1 = assets.count > 1 ? assets[1] : nil;
+
+        // 2) 回主线程做 requestImage + UI set（避免跨线程写 cell/collectionView）
         dispatch_async(dispatch_get_main_queue(), ^{
-            HomeModuleCell *nowCell = (HomeModuleCell *)[weakSelf.cv cellForItemAtIndexPath:indexPath];
-            if (!nowCell) return;
+            __strong typeof(weakSelf) self2 = weakSelf;
+            if (!self2) return;
 
-            NSString *k1 = nowCell.appliedCoverKey ? nowCell.appliedCoverKey : @"";
-            NSString *k2 = expectedKey ? expectedKey : @"";
-            if (![k1 isEqualToString:k2]) return;
-            if (![nowCell.representedLocalIds isEqualToArray:ids]) return;
+            HomeModuleCell *nowCell = (HomeModuleCell *)[self2.cv cellForItemAtIndexPath:indexPath];
+            if (![nowCell isKindOfClass:HomeModuleCell.class]) return;
 
-            if (idx == 0) {
-                // degraded 先上屏，但不置 final
-                if (!degraded || !nowCell.hasFinalThumb1) {
-                    nowCell.img1.image = img;
-                    if (!degraded) nowCell.hasFinalThumb1 = YES;
-                }
+            // 复用/滚动校验：token + key + ids 必须一致
+            if (nowCell.renderToken != token) return;
+            NSString *k = (nowCell.appliedCoverKey != nil) ? nowCell.appliedCoverKey : @"";
+            if (![k isEqualToString:(expectedKey != nil ? expectedKey : @"")]) return;
+
+            if (![nowCell.representedLocalIds isEqualToArray:idsCopy]) return;
+
+            // 如果只需要一张图，确保第二张清空
+            if (!needsTwo) {
+                nowCell.img2.image = nil;
+                nowCell.hasFinalThumb2 = YES;
+            }
+
+            // 通用 setImg：degraded 先上屏但不置 final
+            void (^setImg)(NSInteger idx, UIImage *img, NSDictionary *info) = ^(NSInteger idx, UIImage *img, NSDictionary *info) {
+                BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    HomeModuleCell *againCell = (HomeModuleCell *)[self2.cv cellForItemAtIndexPath:indexPath];
+                    if (![againCell isKindOfClass:HomeModuleCell.class]) return;
+
+                    if (againCell.renderToken != token) return;
+                    NSString *k = (againCell.appliedCoverKey != nil) ? againCell.appliedCoverKey : @"";
+                    if (![k isEqualToString:(expectedKey != nil ? expectedKey : @"")]) return;
+
+                    if (![againCell.representedLocalIds isEqualToArray:idsCopy]) return;
+
+                    if (idx == 0) {
+                        if (!degraded || !againCell.hasFinalThumb1) {
+                            againCell.img1.image = img;
+                            if (!degraded) againCell.hasFinalThumb1 = YES;
+                        }
+                    } else {
+                        if (!degraded || !againCell.hasFinalThumb2) {
+                            againCell.img2.image = img;
+                            if (!degraded) againCell.hasFinalThumb2 = YES;
+                        }
+                    }
+                });
+            };
+
+            // 发起 requestImage（主线程写 reqId）
+            if (a0) {
+                nowCell.reqId1 = [self2.imgMgr requestImageForAsset:a0
+                                                         targetSize:t1
+                                                        contentMode:PHImageContentModeAspectFill
+                                                            options:opt
+                                                      resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+                    if (!result) return;
+                    if ([info[PHImageCancelledKey] boolValue]) return;
+                    setImg(0, result, info ?: @{});
+                }];
+            }
+
+            if (needsTwo && a1) {
+                nowCell.reqId2 = [self2.imgMgr requestImageForAsset:a1
+                                                         targetSize:t2
+                                                        contentMode:PHImageContentModeAspectFill
+                                                            options:opt
+                                                      resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+                    if (!result) return;
+                    if ([info[PHImageCancelledKey] boolValue]) return;
+                    setImg(1, result, info ?: @{});
+                }];
             } else {
-                if (!degraded || !nowCell.hasFinalThumb2) {
-                    nowCell.img2.image = img;
-                    if (!degraded) nowCell.hasFinalThumb2 = YES;
-                }
+                // 第二张不存在/不需要：避免残留
+                nowCell.img2.image = needsTwo ? nowCell.img2.image : nil;
             }
         });
-    };
-
-    PHAsset *a0 = fr.count > 0 ? [fr objectAtIndex:0] : nil;
-    PHAsset *a1 = fr.count > 1 ? [fr objectAtIndex:1] : nil;
-
-    if (a0) {
-        cell.reqId1 = [self.imgMgr requestImageForAsset:a0
-                                             targetSize:t1
-                                            contentMode:PHImageContentModeAspectFill
-                                                options:opt
-                                          resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
-         
-            if (result) setImg(0, result, info ?: @{});
-        }];
-    }
-
-    if (a1 && vm.showsTwoThumbs) {
-        cell.reqId2 = [self.imgMgr requestImageForAsset:a1
-                                             targetSize:t2
-                                            contentMode:PHImageContentModeAspectFill
-                                                options:opt
-                                          resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
-           
-            if (result) setImg(1, result, info ?: @{});
-        }];
-    } else {
-        cell.img2.image = nil;
-    }
+    });
 }
+
 
 #pragma mark - Video Preview
 

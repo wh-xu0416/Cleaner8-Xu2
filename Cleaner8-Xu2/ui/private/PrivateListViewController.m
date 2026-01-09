@@ -530,7 +530,7 @@ static inline UIColor *ASHexBlack(void) {
     PHPickerConfiguration *cfg =
     [[PHPickerConfiguration alloc] initWithPhotoLibrary:PHPhotoLibrary.sharedPhotoLibrary];
     cfg.preferredAssetRepresentationMode = PHPickerConfigurationAssetRepresentationModeCurrent;
-    cfg.selectionLimit = 0;
+    cfg.selectionLimit = 20;
     if (@available(iOS 14, *)) {
         cfg.filter = (self.mediaType == ASPrivateMediaTypePhoto) ? PHPickerFilter.imagesFilter : PHPickerFilter.videosFilter;
     }
