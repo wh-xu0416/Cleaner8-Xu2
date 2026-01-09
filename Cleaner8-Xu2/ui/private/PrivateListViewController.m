@@ -10,6 +10,7 @@
 #import <PhotosUI/PhotosUI.h>
 #import <AVFoundation/AVFoundation.h>
 #import "ASMediaPreviewViewController.h"
+#import "ASPrivatePermissionBanner.h"
 
 #pragma mark - Adapt Helpers (402)
 
@@ -52,6 +53,8 @@ static inline UIColor *ASHexBlack(void) {
 @property (nonatomic, strong) NSCache<NSString*, UIImage*> *thumbCache;
 @property (nonatomic, strong) dispatch_queue_t thumbQueue;
 @property (nonatomic, strong) NSOperationQueue *thumbOpQ;
+@property (nonatomic, strong) UIStackView *emptyStack;
+@property (nonatomic, strong) ASPrivatePermissionBanner *permissionBanner;
 
 @end
 
@@ -249,11 +252,32 @@ static inline UIColor *ASHexBlack(void) {
         [self.cv.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
     ]];
 
-    // Empty
+    // Empty stack (empty + banner)
+    self.emptyStack = [UIStackView new];
+    self.emptyStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.emptyStack.axis = UILayoutConstraintAxisVertical;
+    self.emptyStack.alignment = UIStackViewAlignmentCenter;
+    self.emptyStack.spacing = AS(40);
+    self.emptyStack.hidden = YES;
+    [self.view addSubview:self.emptyStack];
+
+    // 让整体尽量居中，但别压到顶部/底部按钮
+    NSLayoutConstraint *centerY = [self.emptyStack.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-AS(10)];
+    centerY.priority = UILayoutPriorityDefaultHigh;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.emptyStack.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        centerY,
+        [self.emptyStack.topAnchor constraintGreaterThanOrEqualToAnchor:self.navBar.bottomAnchor constant:AS(20)],
+        [self.emptyStack.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomBtn.topAnchor constant:-AS(20)],
+        [self.emptyStack.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:AS(15)],
+        [self.emptyStack.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-AS(15)],
+    ]];
+
+    // Empty view
     self.emptyView = [UIView new];
     self.emptyView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.emptyView.hidden = YES;
-    [self.view addSubview:self.emptyView];
+    [self.emptyStack addArrangedSubview:self.emptyView];
 
     self.emptyImageView = [UIImageView new];
     self.emptyImageView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -270,9 +294,6 @@ static inline UIColor *ASHexBlack(void) {
     [self.emptyView addSubview:self.emptyTextLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.emptyView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.emptyView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-AS(10)],
-
         [self.emptyImageView.topAnchor constraintEqualToAnchor:self.emptyView.topAnchor],
         [self.emptyImageView.centerXAnchor constraintEqualToAnchor:self.emptyView.centerXAnchor],
         [self.emptyImageView.widthAnchor constraintEqualToConstant:AS(182)],
@@ -283,16 +304,36 @@ static inline UIColor *ASHexBlack(void) {
         [self.emptyTextLabel.bottomAnchor constraintEqualToAnchor:self.emptyView.bottomAnchor],
     ]];
 
+    // Permission banner (默认隐藏)
+    self.permissionBanner = [ASPrivatePermissionBanner new];
+    self.permissionBanner.translatesAutoresizingMaskIntoConstraints = NO;
+    self.permissionBanner.hidden = YES;
+
+    self.permissionBanner.onGoSettings = ^{
+        [ws handlePermissionCTA];
+    };
+
+    [self.emptyStack addArrangedSubview:self.permissionBanner];
+
+    // banner 宽度贴合页面左右 15
+    [NSLayoutConstraint activateConstraints:@[
+        [self.permissionBanner.widthAnchor constraintEqualToAnchor:self.view.widthAnchor constant:-AS(30)],
+    ]];
+
     [self updateSelectAllUI];
     [self updateBottomTitle];
 }
 
 - (void)updateEmptyStateUI {
     BOOL empty = (self.items.count == 0);
+    BOOL hasPermission = [self canImportFromLibrary];
+    BOOL showBanner = (empty && !hasPermission);
 
     self.countLabel.hidden = empty;
     self.selectAllButton.hidden = empty;
-    self.emptyView.hidden = !empty;
+
+    self.emptyStack.hidden = !empty;
+    self.permissionBanner.hidden = !showBanner;
 
     if (empty) {
         self.allSelected = NO;
@@ -365,10 +406,16 @@ static inline UIColor *ASHexBlack(void) {
 - (void)updateBottomTitle {
     if (self.selectedPaths.count > 0) {
         [self.bottomBtn setTitle:NSLocalizedString(@"Delete", nil) forState:UIControlStateNormal];
-    } else {
-        NSString *t = (self.mediaType == ASPrivateMediaTypePhoto) ? NSLocalizedString(@"Add Photos", nil) : NSLocalizedString(@"Add Videos", nil);
-        [self.bottomBtn setTitle:t forState:UIControlStateNormal];
+        return;
     }
+
+    if (![self canImportFromLibrary]) {
+        [self.bottomBtn setTitle:NSLocalizedString(@"Go to Settings", nil) forState:UIControlStateNormal];
+        return;
+    }
+
+    NSString *t = (self.mediaType == ASPrivateMediaTypePhoto) ? NSLocalizedString(@"Add Photos", nil) : NSLocalizedString(@"Add Videos", nil);
+    [self.bottomBtn setTitle:t forState:UIControlStateNormal];
 }
 
 - (NSArray<NSURL *> *)selectedURLs {

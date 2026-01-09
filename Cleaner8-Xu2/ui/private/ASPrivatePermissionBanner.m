@@ -63,6 +63,7 @@ static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont system
 
             // 50 -> AS(50)
             [_btn.heightAnchor constraintGreaterThanOrEqualToConstant:AS(50)],
+            [_btn.topAnchor constraintEqualToAnchor:_title.bottomAnchor constant:AS(20)],
 
             [t.leadingAnchor constraintEqualToAnchor:_btn.leadingAnchor constant:AS(32)],
             [t.topAnchor constraintEqualToAnchor:_btn.topAnchor constant:AS(10)],

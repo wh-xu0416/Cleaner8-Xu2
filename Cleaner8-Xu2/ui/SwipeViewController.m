@@ -8,6 +8,7 @@
 #import "ASArchivedFilesViewController.h"
 #import <PhotosUI/PhotosUI.h>
 #import "ASPrivatePermissionBanner.h"
+#import "UIViewController+ASPrivateBackground.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -591,7 +592,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = SWHexRGBA(0xEAF2FFFF);
+    [self as_applyPrivateBackground];
     self.cachedArchivedBytes = UINT64_MAX;
 
     self.assetCache = [NSCache new];
@@ -817,7 +818,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     // Scroll
     self.scrollView = [UIScrollView new];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.scrollView.alwaysBounceVertical = YES;
+//    self.scrollView.alwaysBounceVertical = YES;
     self.scrollView.showsVerticalScrollIndicator = NO;
     [self.view addSubview:self.scrollView];
 
@@ -1208,7 +1209,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         self.cardsTopC.constant = safeTop + SW(40.0);
 
         CGFloat bottomPad = safeBottom + SW(80.0);
-        self.contentBottomC.constant = -bottomPad;
+        self.sectionsStackBottomPadC.constant = -bottomPad;
 
         self.scrollView.scrollIndicatorInsets = UIEdgeInsetsMake(safeTop, 0, safeBottom, 0);
     }

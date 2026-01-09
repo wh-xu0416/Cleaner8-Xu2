@@ -1,5 +1,6 @@
 #import "SetViewController.h"
 #import "Common.h"
+#import "UIViewController+ASPrivateBackground.h"
 
 #pragma mark - UI Helpers
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
@@ -26,7 +27,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
 @interface SetViewController ()
 
-@property(nonatomic,strong) UIImageView *bgTop;
 @property(nonatomic,strong) UILabel *titleLab;
 
 @property(nonatomic,strong) UIScrollView *scroll;
@@ -61,14 +61,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 #pragma mark - UI
 
 - (void)buildUI {
-
-    // 顶部背景
-    self.bgTop = [UIImageView new];
-    self.bgTop.translatesAutoresizingMaskIntoConstraints = NO;
-    self.bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
-    self.bgTop.contentMode = UIViewContentModeScaleAspectFill;
-    self.bgTop.clipsToBounds = YES;
-    [self.view addSubview:self.bgTop];
+    [self as_applyPrivateBackground];
 
     self.scroll = [UIScrollView new];
     self.scroll.translatesAutoresizingMaskIntoConstraints = NO;
@@ -118,19 +111,11 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [self.content addSubview:self.versionCard];
 
     [NSLayoutConstraint activateConstraints:@[
-        // bg
-        [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.bgTop.heightAnchor constraintEqualToConstant:SW(360)],
-
-        // scroll
         [self.scroll.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.scroll.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
-        // content
         [self.content.topAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.topAnchor],
         [self.content.leadingAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.leadingAnchor],
         [self.content.trailingAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.trailingAnchor],

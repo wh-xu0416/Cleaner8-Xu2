@@ -358,12 +358,12 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
 
         _spaceTitleLabel = [UILabel new];
         _spaceTitleLabel.text = NSLocalizedString(@"Space To Clean", nil);
-        _spaceTitleLabel.font = ASFont(17, UIFontWeightMedium);
+        _spaceTitleLabel.font = ASFont(17, UIFontWeightBold);
         _spaceTitleLabel.textColor = UIColor.blackColor;
         [self addSubview:_spaceTitleLabel];
 
         _spaceLabel = [UILabel new];
-        _spaceLabel.font = ASFont(34, UIFontWeightMedium);
+        _spaceLabel.font = ASFont(34, UIFontWeightBold);
         _spaceLabel.textColor = UIColor.blackColor;
         [self addSubview:_spaceLabel];
 
@@ -1102,6 +1102,8 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 - (void)viewDidLoad {
     [super viewDidLoad];
     [self setupUI];
+    [self computeDiskSpace];
+    
     self.homeBuildQueue = dispatch_queue_create("com.xiaoxu2.home.build", DISPATCH_QUEUE_SERIAL);
     self.lastAppliedAuthLevel = ASPhotoAuthLevelUnknown;
     self.lastAppliedLimited = NO;
@@ -1122,7 +1124,6 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
         });
     }];
     [self bootstrapScanFlow];
-    [self rebuildModulesAndReloadAsyncFinal:NO];
     
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(onAppWillResignActive:)
@@ -1202,105 +1203,39 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 }
 
 - (void)bootstrapScanFlow {
-
-    PHAuthorizationStatus st = [self currentPHAuthStatus];
-    [self updatePermissionUIForStatus:st];
-    ASPhotoAuthLevel curLevel = [self mapToAuthLevel:st];
-    ASPhotoAuthLevel lastLevel = [self storedAuthLevel];
-    
-    BOOL authChanged = (lastLevel != ASPhotoAuthLevelUnknown && lastLevel != curLevel);
-    if (authChanged) {
-        [self resetCoverStateForAuthChange];
-    }
-
-    if (st == PHAuthorizationStatusNotDetermined) {
-        __weak typeof(self) weakSelf = self;
-
-        if (@available(iOS 14.0, *)) {
-            [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite handler:^(PHAuthorizationStatus status) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [weakSelf updatePermissionUIForStatus:status];
-
-                    ASPhotoAuthLevel newLevel = [weakSelf mapToAuthLevel:status];
-                    [weakSelf storeAuthLevel:newLevel];
-
-                    if (newLevel == ASPhotoAuthLevelLimited || newLevel == ASPhotoAuthLevelFull) {
-                        [weakSelf startFullScanForce:YES];
-                    } else {
-                        [weakSelf rebuildModulesAndReload];
-                    }
-                });
-            }];
-        } else {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    ASPhotoAuthLevel newLevel = [weakSelf mapToAuthLevel:status];
-                    [weakSelf storeAuthLevel:newLevel];
-
-                    if (newLevel == ASPhotoAuthLevelLimited || newLevel == ASPhotoAuthLevelFull) {
-                        [weakSelf startFullScanForce:YES];
-                    } else {
-                        [weakSelf rebuildModulesAndReload];
-                    }
-                });
-            }];
-#pragma clang diagnostic pop
-        }
-        return;
-    }
-
-    if (st != PHAuthorizationStatusAuthorized && st != PHAuthorizationStatusLimited) {
-        [self storeAuthLevel:ASPhotoAuthLevelNone];
-        [self updatePermissionUIForStatus:st];
-        [self rebuildModulesAndReload];
-        return;
-
-    }
-
-    BOOL hasCache = [self.scanMgr isCacheValid];
-
-    // 规则：权限变动 limit<->full 全量扫描；0->limit/full 全量扫描（不管缓存）
-    BOOL forceFullByAuthChange = NO;
-    if (lastLevel != ASPhotoAuthLevelUnknown && lastLevel != curLevel) {
-        forceFullByAuthChange = YES;
-    }
-
-    // 更新记录（避免下次启动一直判定“权限变动”）
-    [self storeAuthLevel:curLevel];
-
-    if (forceFullByAuthChange) {
-        [self startFullScanForce:YES];
-        return;
-    }
-
-    if (!hasCache) {
-        // 规则：有权限无缓存 -> 全量扫描并缓存
-        [self startFullScanForce:NO];
-        return;
-    }
-
-    // 规则：有权限有缓存 -> 先展示缓存（已经展示了）-> 再增量更新
-    [self.scanMgr loadCacheAndCheckIncremental];
-}
-
-- (void)startFullScanForce:(BOOL)force {
-
-    if (!force && self.scanMgr.snapshot.state == ASScanStateScanning) return;
-
-    if (force && self.scanMgr.snapshot.state == ASScanStateScanning) {
-        [self.scanMgr cancel];
-    }
-
     __weak typeof(self) weakSelf = self;
-    [self.scanMgr startFullScanWithProgress:nil
-                                 completion:^(__unused ASScanSnapshot *snapshot, __unused NSError * _Nullable error) {
+
+    [self.scanMgr startupForHomeWithProgress:^(ASScanSnapshot *snap) {
+        // 扫描开始/进行中，也顺便刷新一次权限UI（防止授权后不切换）
         dispatch_async(dispatch_get_main_queue(), ^{
-            [weakSelf rebuildModulesAndReloadAsyncFinal:YES];
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            PHAuthorizationStatus st = [self currentPHAuthStatus];
+            [self updatePermissionUIForStatus:st];
+        });
+    } completion:^(ASScanSnapshot *snapshot, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            PHAuthorizationStatus st = [self currentPHAuthStatus];
+            [self updatePermissionUIForStatus:st];
+
+            // 有权限后，强制重建一次模块（避免仍停留在 no-auth cell）
+            if ([self hasPhotoAccess]) {
+                [self rebuildModulesAndReload];
+            }
+        });
+    } showPermissionPlaceholder:^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            PHAuthorizationStatus st = [self currentPHAuthStatus];
+            [self updatePermissionUIForStatus:st];
+            [self rebuildModulesAndReload];
         });
     }];
 }
+
 
 - (void)updatePermissionUIForStatus:(PHAuthorizationStatus)st {
 
@@ -1321,6 +1256,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
     // 只有权限/limited 真变化才 reload
     if (authChanged) {
+        [self resetCoverStateForAuthChange];
         [self.cv reloadData];
     } else {
         // 不 reload 的情况下，至少把 header 文案/ banner 状态更新一下
@@ -1421,22 +1357,47 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     ASWaterfallLayout *wf = (ASWaterfallLayout *)self.cv.collectionViewLayout;
     if ([wf isKindOfClass:ASWaterfallLayout.class]) {
 
+        BOOL changed = NO;
+
+        UIEdgeInsets targetInset;
+        CGFloat targetInter;
+        CGFloat targetLine;
+
         if (![self hasPhotoAccess]) {
-            wf.sectionInset = UIEdgeInsetsMake(0, 0, SW(16), 0);
-            wf.interItemSpacing = 0;
+            targetInset = UIEdgeInsetsMake(0, 0, SW(16), 0);
+            targetInter = 0;
+            targetLine  = SW(12);
         } else {
-            wf.sectionInset = UIEdgeInsetsMake(0, kHomeSideInset, kHomeSideInset, kHomeSideInset);
-            wf.interItemSpacing = kHomeGridGap;
+            targetInset = UIEdgeInsetsMake(0, kHomeSideInset, kHomeSideInset, kHomeSideInset);
+            targetInter = kHomeGridGap;
+            targetLine  = kHomeGridGap;
+        }
+
+        if (!UIEdgeInsetsEqualToEdgeInsets(wf.sectionInset, targetInset)) {
+            wf.sectionInset = targetInset;
+            changed = YES;
+        }
+        if (fabs(wf.interItemSpacing - targetInter) > 0.5) {
+            wf.interItemSpacing = targetInter;
+            changed = YES;
+        }
+        if (fabs(wf.lineSpacing - targetLine) > 0.5) {
+            wf.lineSpacing = targetLine;
+            changed = YES;
         }
 
         CGFloat newH = [self collectionView:self.cv layout:wf referenceSizeForHeaderInSection:0].height;
         if (fabs(wf.headerHeight - newH) > 0.5) {
             wf.headerHeight = newH;
+            changed = YES;
         }
 
-        [wf invalidateLayout];
+        if (changed) {
+            [wf invalidateLayout];
+        }
     }
 
+    // gradient / contentInset 这些保持不变
     CGFloat w = self.view.bounds.size.width;
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
@@ -1658,14 +1619,29 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.lastScanUIFire = now;
 
     self.pendingScanUIUpdate = NO;
+    [self computeDiskSpace];
+
     [self updateModulesDuringScanning];
 }
 
 - (void)updateModulesDuringScanning {
 
     if (self.modules.count == 0) {
-        self.modules = [self buildModulesFromManagerAndComputeClutterIsFinal:NO];
-        [self.cv reloadData];
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(self.homeBuildQueue, ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+
+            NSArray *mods = [self buildModulesFromManagerAndComputeClutterIsFinal:NO];
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) self2 = weakSelf;
+                if (!self2) return;
+                self2.modules = mods;
+                [self2.cv reloadData];
+                [self2 updateHeaderDuringScanning];
+            });
+        });
         return;
     }
 
@@ -2739,7 +2715,7 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
 
             PHImageRequestOptions *iopt = [PHImageRequestOptions new];
             iopt.networkAccessAllowed = YES;
-            iopt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic; // ✅ 先给低清再给高清
+            iopt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
             iopt.resizeMode = PHImageRequestOptionsResizeModeFast;
             iopt.synchronous = NO;
 

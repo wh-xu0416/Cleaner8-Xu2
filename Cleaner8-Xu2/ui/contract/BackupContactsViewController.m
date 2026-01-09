@@ -4,6 +4,7 @@
 #import "ASSelectTitleBar.h"
 #import "Common.h"
 #import <UIKit/UIKit.h>
+#import "UIViewController+ASPrivateBackground.h"
 
 #pragma mark - UI Helpers
 
@@ -130,8 +131,6 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
 @property (nonatomic, strong) ContactsManager *contactsManager;
 @property (nonatomic, strong) NSArray<CMBackupInfo *> *backups;
 
-@property (nonatomic, strong) UIImageView *bgTop;
-
 @property (nonatomic, strong) ASSelectTitleBar *titleBar;
 
 @property (nonatomic, strong) UICollectionView *cv;
@@ -150,8 +149,8 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    [self as_applyPrivateBackground];
 
-    self.view.backgroundColor = ASACRGB(246, 248, 251);
     self.contactsManager = [ContactsManager shared];
     self.backups = @[];
     self.selectedBackupIds = [NSMutableSet set];
@@ -161,7 +160,6 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
                                                  name:@"CMBackupDidFinish"
                                                object:nil];
 
-    [self buildBackground];
     [self setupTitleBar];
     [self setupCollectionView];
     [self setupBottomButton];
@@ -182,25 +180,6 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
 
 - (void)onBackupDidFinish {
     [self loadBackups];
-}
-
-#pragma mark - UI
-
-- (void)buildBackground {
-    self.bgTop = [UIImageView new];
-    self.bgTop.translatesAutoresizingMaskIntoConstraints = NO;
-    self.bgTop.image = [UIImage imageNamed:@"ic_home_bg"];
-    self.bgTop.contentMode = UIViewContentModeScaleAspectFill;
-    self.bgTop.clipsToBounds = YES;
-    self.bgTop.userInteractionEnabled = NO;
-    [self.view insertSubview:self.bgTop atIndex:0];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.bgTop.heightAnchor constraintEqualToConstant:AS(360)],
-    ]];
 }
 
 - (void)setupTitleBar {

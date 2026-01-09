@@ -434,7 +434,7 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
     self.emptyTitle = [UILabel new];
     self.emptyTitle.text = NSLocalizedString(@"No Content", nil);
     self.emptyTitle.textColor = UIColor.blackColor;
-    self.emptyTitle.font = ASACFont(33, UIFontWeightMedium);
+    self.emptyTitle.font = ASACFont(24, UIFontWeightMedium);
     self.emptyTitle.textAlignment = NSTextAlignmentCenter;
     [self.emptyView addSubview:self.emptyTitle];
 }
@@ -1409,8 +1409,8 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
         self.cv.scrollIndicatorInsets = self.cv.contentInset;
 
         CGFloat emptyH = H - navH - safeBottom - extraBottom;
-        self.emptyView.frame = CGRectMake(0, navH, W, emptyH);
-        
+        self.emptyView.frame = CGRectMake(0, listY, W, H - listY - (btnH + safeBottom));
+
         if (!self.emptyView.hidden) {
             CGSize img = CGSizeMake(AS(182), AS(168));
             CGFloat centerY = self.emptyView.bounds.size.height * 0.5;
@@ -1435,7 +1435,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     self.cv.frame = CGRectMake(0, listY, W, H - listY);
 
     CGFloat emptyH = H - navH - safeBottom - extraBottom;
-    self.emptyView.frame = CGRectMake(0, navH, W, emptyH);
+    self.emptyView.frame = CGRectMake(0, listY, W, H - listY - (btnH + safeBottom));
 
     if (!self.emptyView.hidden) {
         CGSize img = CGSizeMake(AS(182), AS(168));
