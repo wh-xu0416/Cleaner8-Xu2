@@ -965,7 +965,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 #pragma mark - Empty State
 
 - (void)updateEmptyStateIfNeeded {
-
     BOOL noPermission = !self.hasContactsAccess;
     BOOL noGroups = ((self.allGroups ?: @[]).count == 0);
     BOOL showEmpty = (noPermission || noGroups);
@@ -1005,16 +1004,21 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         self.emptyHint.text = NSLocalizedString(@"Go Back And Select Duplicates To See a Preview", nil);
         self.emptyHint.hidden = NO;
         self.emptySubTitle.hidden = NO;
+
+        self.titleBar.showTitle = NO;
     } else {
-        self.pageTitleLabel.hidden = YES;
+        self.pageTitleLabel.hidden = NO; // Ensure title is visible
         self.countLabel.hidden = YES;
 
         self.emptyImage.image = [UIImage imageNamed:@"ic_no_contact"];
-        self.emptyTitle.text = NSLocalizedString(@"No Content", nil);
+        self.emptyTitle.text = NSLocalizedString(@"No Contacts", nil);
         self.emptyTitle.font = ASDCFont(24, UIFontWeightMedium);
 
         self.emptySubTitle.hidden = YES;
         self.emptyHint.hidden = YES;
+        self.pageTitleLabel.hidden = YES;
+
+        self.titleBar.showTitle = YES;
     }
 
     [self.cv reloadData];
@@ -1164,6 +1168,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         vc.allowsEditing = NO;
         vc.allowsActions = YES;
     }
+
+    // Ensure the navigation bar is visible before pushing the contact view controller
+    self.navigationController.navigationBarHidden = NO;
 
     vc.hidesBottomBarWhenPushed = YES;
     [self.navigationController pushViewController:vc animated:YES];

@@ -1309,7 +1309,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     self.topSelectAllBtn.frame = CGRectMake(pad, rowY, w1, btnH);
     self.topSortBtn.frame = CGRectMake(self.topToolbar.bounds.size.width - pad - w2, rowY, w2, btnH);
 
-    CGFloat cvY = navH + toolbarH;
+    CGFloat cvY = navH + toolbarH + SW(10); // Added 10pt gap
     CGRect listFrame = CGRectMake(0,
                                   cvY,
                                   self.view.bounds.size.width,

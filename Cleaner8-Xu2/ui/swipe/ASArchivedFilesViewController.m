@@ -261,6 +261,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
 
     self.collectionView.contentInset = UIEdgeInsetsMake(0, AS(10), AS(12) + self.view.safeAreaInsets.bottom, AS(10));
 
+    // Empty state view configuration
     self.emptyView = [UIView new];
     self.emptyView.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyView.backgroundColor = UIColor.clearColor;
@@ -282,20 +283,24 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
     [self.emptyView addSubview:self.emptyLabel];
 
     [NSLayoutConstraint activateConstraints:@[
+        // Center the empty view within the collectionView
         [self.emptyView.centerXAnchor constraintEqualToAnchor:self.collectionView.centerXAnchor],
         [self.emptyView.centerYAnchor constraintEqualToAnchor:self.collectionView.centerYAnchor],
+        [self.emptyView.centerYAnchor constraintEqualToAnchor:self.collectionView.centerYAnchor constant:-AS(80)],
 
+        // Center the empty image within the empty view
         [self.emptyImageView.centerXAnchor constraintEqualToAnchor:self.emptyView.centerXAnchor],
         [self.emptyImageView.topAnchor constraintEqualToAnchor:self.emptyView.topAnchor],
         [self.emptyImageView.widthAnchor constraintEqualToConstant:AS(182)],
         [self.emptyImageView.heightAnchor constraintEqualToConstant:AS(168)],
 
+        // Center the label under the image
         [self.emptyLabel.topAnchor constraintEqualToAnchor:self.emptyImageView.bottomAnchor constant:AS(2)],
         [self.emptyLabel.leadingAnchor constraintEqualToAnchor:self.emptyView.leadingAnchor],
         [self.emptyLabel.trailingAnchor constraintEqualToAnchor:self.emptyView.trailingAnchor],
         [self.emptyLabel.bottomAnchor constraintEqualToAnchor:self.emptyView.bottomAnchor],
     ]];
-
+    
     self.bottomButtonsHost = [UIView new];
     self.bottomButtonsHost.translatesAutoresizingMaskIntoConstraints = NO;
     self.bottomButtonsHost.backgroundColor = UIColor.clearColor;

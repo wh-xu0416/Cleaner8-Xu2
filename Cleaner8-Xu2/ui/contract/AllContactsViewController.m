@@ -339,7 +339,11 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
     if (self.mode == AllContactsModeIncomplete) {
         self.pageTitleLabel.hidden = showEmpty;
         self.countLabel.hidden = showEmpty;
+
+        self.titleBar.showTitle = showEmpty;
+        if (showEmpty) [self.titleBar setTitleText:NSLocalizedString(@"Incomplete Contacts", nil)];
     }
+
     [self.view setNeedsLayout];
     [self.view layoutIfNeeded];
 }
@@ -350,7 +354,7 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
     NSString *title = NSLocalizedString(@"All", nil);
     if (self.mode == AllContactsModeBackup) title = NSLocalizedString(@"Backup Contacts", nil);
     if (self.mode == AllContactsModeRestore) title = NSLocalizedString(@"Restore Backup", nil);
-    if (self.mode == AllContactsModeIncomplete) title = @"";
+    if (self.mode == AllContactsModeIncomplete) title = NSLocalizedString(@"Incomplete Contacts", nil);
     return title;
 }
 
@@ -858,13 +862,13 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
 
 - (void)syncTopSelectState {
 
-    if (self.mode == AllContactsModeIncomplete) {
-        self.titleBar.showTitle = NO;
-    } else {
+    if (self.mode != AllContactsModeIncomplete) {
         [self.titleBar setTitleText:[self pageTitleText]];
         self.titleBar.showTitle = YES;
+    } else {
+        [self.titleBar setTitleText:[self pageTitleText]];
     }
-
+    
     BOOL hasContacts = (self.contacts.count > 0);
     self.titleBar.showSelectButton = hasContacts;
 
@@ -1133,9 +1137,10 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
         vc.allowsActions = YES;
     }
 
-    vc.hidesBottomBarWhenPushed = YES;
+    // Show the navigation bar before pushing the contact view controller
+    self.navigationController.navigationBarHidden = NO; // Ensure navigation bar is visible
 
-//    [self.navigationController setNavigationBarHidden:NO animated:YES];
+    vc.hidesBottomBarWhenPushed = YES;
     [self.navigationController pushViewController:vc animated:YES];
 }
 

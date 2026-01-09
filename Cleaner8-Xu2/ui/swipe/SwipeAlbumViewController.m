@@ -5,8 +5,8 @@
 #import "SwipeManager.h"
 #import "ASArchivedFilesViewController.h"
 #import "Common.h"
+#import <CoreImage/CoreImage.h>
 
-#pragma mark - Adapt Helpers (402)
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWScale(void) {
@@ -148,6 +148,53 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     if (outMonth) *outMonth = p[1].integerValue;
 }
 
+@interface UIImage (Blur)
+
+- (UIImage *)applyGaussianBlurWithRadius:(CGFloat)radius;
+
+@end
+
+@implementation UIImage (Blur)
+
+- (UIImage *)applyGaussianBlurWithRadius:(CGFloat)radius {
+    if (radius <= 0.01) return self;
+
+    CIImage *input = [[CIImage alloc] initWithImage:self];
+    if (!input) return self;
+
+    CGRect extent = input.extent;
+
+    // 防止边缘透明/黑边
+    CIFilter *clamp = [CIFilter filterWithName:@"CIAffineClamp"];
+    [clamp setValue:input forKey:kCIInputImageKey];
+    [clamp setValue:[NSValue valueWithCGAffineTransform:CGAffineTransformIdentity] forKey:@"inputTransform"];
+    CIImage *clamped = clamp.outputImage ?: input;
+
+    CIFilter *blur = [CIFilter filterWithName:@"CIGaussianBlur"];
+    [blur setValue:clamped forKey:kCIInputImageKey];
+    [blur setValue:@(radius) forKey:kCIInputRadiusKey];
+
+    CIImage *blurred = blur.outputImage;
+    if (!blurred) return self;
+
+    CIImage *cropped = [blurred imageByCroppingToRect:extent];
+
+    static CIContext *ctx = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        ctx = [CIContext contextWithOptions:@{ kCIContextUseSoftwareRenderer : @NO }];
+    });
+
+    CGImageRef cg = [ctx createCGImage:cropped fromRect:extent];
+    if (!cg) return self;
+
+    UIImage *out = [UIImage imageWithCGImage:cg scale:self.scale orientation:self.imageOrientation];
+    CGImageRelease(cg);
+    return out;
+}
+
+@end
+
 #pragma mark - Thumb Cell
 
 @interface SwipeThumbCell : UICollectionViewCell
@@ -202,6 +249,12 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 @property (nonatomic, copy) NSString *assetID;
 @property (nonatomic, strong) UIImageView *imageView;
 @property (nonatomic, strong) UILabel *hintLabel;
+
+@property (nonatomic, assign) PHImageRequestID reqId;
+@property (nonatomic, copy) NSString *representedAssetID;
+@property (nonatomic, strong) UIImage *rawImage;
+
+@property (nonatomic, assign) BOOL sw_revealWhenReady;
 @end
 
 @implementation SwipeCardView
@@ -211,6 +264,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         self.layer.masksToBounds = YES;
 
         self.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
+        _reqId = PHInvalidImageRequestID;
 
         _imageView = [[UIImageView alloc] initWithFrame:CGRectZero];
         _imageView.contentMode = UIViewContentModeScaleAspectFit;
@@ -221,7 +275,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         [self addSubview:_imageView];
 
         _hintLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-        _hintLabel.textAlignment = NSTextAlignmentLeft;
+        _hintLabel.textAlignment = NSTextAlignmentCenter;
         _hintLabel.font = SWFontS(34, UIFontWeightBold);
         _hintLabel.textColor = UIColor.blackColor;
         _hintLabel.alpha = 0;
@@ -240,6 +294,10 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 #pragma mark - SwipeAlbumViewController
 
 @interface SwipeAlbumViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate>
+@property (nonatomic, strong) NSCache<NSString *, UIImage *> *cardBlurImageCache;
+@property (nonatomic, strong) dispatch_queue_t sw_blurQueue;
+@property (nonatomic, strong) NSMutableSet<NSString *> *sw_blurInFlight;
+
 @property (nonatomic, assign) BOOL sw_hasOperated; // 本页是否做过任何操作
 @property (nonatomic, strong) UIView *sw_exitMask;
 @property (nonatomic, strong) UIView *sw_exitPopup;
@@ -313,17 +371,34 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 @property (nonatomic, strong) UIView *sw_sortPanel;
 @property (nonatomic, assign) BOOL sw_sortShowing;
 @property (nonatomic, assign) BOOL sw_pendingSortJumpToFirst;
+@property (nonatomic, strong) NSCache<NSString *, UIImage *> *thumbImageCache;
+@property (nonatomic, strong) NSCache<NSString *, UIImage *> *cardImageCache;
 
 @end
+static inline NSString *SWImgKey(NSString *prefix, NSString *aid, CGSize px) {
+    return [NSString stringWithFormat:@"%@%@_%.0fx%.0f", prefix, aid, px.width, px.height];
+}
 
 @implementation SwipeAlbumViewController
 
 - (instancetype)initWithModule:(SwipeModule *)module {
     if ((self = [super init])) {
         _module = module;
+        _cardBlurImageCache = [NSCache new];
+        _cardBlurImageCache.countLimit = 80;
+
+        _sw_blurQueue = dispatch_queue_create("com.xiaoxu.swipe8.blur", DISPATCH_QUEUE_CONCURRENT);
+        _sw_blurInFlight = [NSMutableSet set];
+
         _imageManager = [PHCachingImageManager new];
         _assetCache = [NSCache new];
         _assetCache.countLimit = 1000;
+
+        _thumbImageCache = [NSCache new];
+        _thumbImageCache.countLimit = 800;
+
+        _cardImageCache = [NSCache new];
+        _cardImageCache.countLimit = 80;
 
         _cards = [NSMutableArray array];
         _unprocessedIDs = [NSMutableArray array];
@@ -1135,6 +1210,113 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
 
 #pragma mark - Card Stack
 
+- (CGFloat)sw_blurRadiusForCardIndex:(NSInteger)idx {
+    if (idx == 1) return SW(16); // middle
+    if (idx == 2) return SW(22); // bottom
+    return 0;
+}
+
+- (NSString *)sw_blurKeyForAssetID:(NSString *)aid px:(CGSize)px radius:(CGFloat)r {
+    return [NSString stringWithFormat:@"cardblur_%@_%.0fx%.0f_r%.2f", aid ?: @"", px.width, px.height, r];
+}
+
+- (void)sw_revealCardIfNeeded:(SwipeCardView *)card {
+    if (!card.sw_revealWhenReady) return;
+    if (!card.hidden) { card.sw_revealWhenReady = NO; return; }
+
+    card.hidden = NO;
+    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        card.alpha = 1.0;
+    } completion:nil];
+    card.sw_revealWhenReady = NO;
+}
+
+- (void)sw_applyVisualForCard:(SwipeCardView *)card {
+    if (!card || card.hidden) return;
+
+    NSInteger idx = [self.cards indexOfObject:card];
+    if (idx == NSNotFound) return;
+
+    UIImage *raw = card.rawImage ?: card.imageView.image;
+    if (!raw) return;
+
+    // ✅ 顶卡永远清晰
+    if (idx == 0) {
+        card.imageView.image = raw;
+        [self sw_revealCardIfNeeded:card];
+        return;
+    }
+
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGSize px = CGSizeMake(card.bounds.size.width * scale, card.bounds.size.height * scale);
+    CGFloat radius = [self sw_blurRadiusForCardIndex:idx];
+
+    NSString *blurKey = [self sw_blurKeyForAssetID:card.assetID px:px radius:radius];
+    UIImage *cachedBlur = [self.cardBlurImageCache objectForKey:blurKey];
+    if (cachedBlur) {
+        card.imageView.image = cachedBlur;
+        [self sw_revealCardIfNeeded:card];
+        return;
+    }
+
+    // 缓存未命中：为了不出现空白，非 showWhenReady 的卡先用 raw 顶一下
+    if (!card.sw_revealWhenReady && !card.imageView.image) {
+        card.imageView.image = raw;
+    }
+
+    // 防止重复算同一张
+    @synchronized (self.sw_blurInFlight) {
+        if ([self.sw_blurInFlight containsObject:blurKey]) return;
+        [self.sw_blurInFlight addObject:blurKey];
+    }
+
+    NSString *aid = card.assetID ?: @"";
+    __weak typeof(self) ws = self;
+    __weak typeof(card) wcard = card;
+
+    dispatch_async(self.sw_blurQueue, ^{
+        UIImage *b = [raw applyGaussianBlurWithRadius:radius];
+        if (b) {
+            [ws.cardBlurImageCache setObject:b forKey:blurKey];
+        }
+        @synchronized (ws.sw_blurInFlight) {
+            [ws.sw_blurInFlight removeObject:blurKey];
+        }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(ws) self = ws;
+            SwipeCardView *scard = wcard;
+            if (!self || !scard) return;
+
+            // asset 复用校验 + 位置校验（防止轮转/撤回后错贴）
+            if (![scard.assetID isEqualToString:aid]) return;
+
+            NSInteger curIdx = [self.cards indexOfObject:scard];
+            if (curIdx == NSNotFound) return;
+
+            // 如果此刻它已经变成顶卡了，就别贴模糊
+            if (curIdx == 0) {
+                scard.imageView.image = scard.rawImage ?: scard.imageView.image;
+                [self sw_revealCardIfNeeded:scard];
+                return;
+            }
+
+            // 仍是非顶卡 -> 应用模糊
+            UIImage *finalBlur = [self.cardBlurImageCache objectForKey:blurKey];
+            if (finalBlur) {
+                scard.imageView.image = finalBlur;
+                [self sw_revealCardIfNeeded:scard];
+            }
+        });
+    });
+}
+
+- (void)sw_updateCardBlurAppearance {
+    for (SwipeCardView *c in self.cards) {
+        [self sw_applyVisualForCard:c];
+    }
+}
+
 - (void)sw_refreshCardStackAfterRemovingTopAnimated:(BOOL)animated completion:(void(^)(void))completion {
 
     if (self.unprocessedIDs.count == 0) {
@@ -1182,11 +1364,16 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
     NSString *newBottomAid = (self.unprocessedIDs.count >= 3) ? self.unprocessedIDs[2] : nil;
     if (newBottomAid.length) {
         if (![self.cards[2].assetID isEqualToString:newBottomAid]) {
-              self.cards[2].assetID = newBottomAid;
-              self.cards[2].imageView.image = nil;
-              [self loadImageForAssetID:newBottomAid
-                          intoImageView:self.cards[2].imageView
-                             targetSize:SWCardFrameForIndex(2).size];
+            if (newBottomAid.length) {
+                if (![self.cards[2].assetID isEqualToString:newBottomAid]) {
+                    // 这是复用卡，showWhenReady:YES，避免底部卡片闪一下
+                    [self sw_setCard:self.cards[2]
+                             assetID:newBottomAid
+                          targetSize:SWCardFrameForIndex(2).size
+                       showWhenReady:YES];
+                }
+            }
+
           }
     }
 
@@ -1206,16 +1393,7 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
         [self updateTopUIFromManager];
         [self scrollThumbsToTopIfNeededAnimated:animated];
 
-        if (newBottomAid.length) {
-            oldTop.hidden = NO;
-            [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-                oldTop.alpha = 1.0;
-            } completion:nil];
-        } else {
-            oldTop.hidden = YES;
-            oldTop.alpha = 0.0;
-        }
-
+    
         [self attachPanToTopCard];
         if (completion) completion();
     };
@@ -1226,10 +1404,11 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
         return;
     }
 
-    [UIView animateWithDuration:0.22 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
         applyFrames();
     } completion:^(__unused BOOL finished) {
         finish();
+        [self sw_updateCardBlurAppearance];
     }];
 }
 
@@ -1300,7 +1479,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         return;
     }
 
-    [UIView animateWithDuration:0.22 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
         applyFrames();
     } completion:nil];
 }
@@ -1319,6 +1498,28 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     view.center = CGPointMake(view.center.x - transition.x, view.center.y - transition.y);
 }
 
+- (CGAffineTransform)sw_pendulumTransformForX:(CGFloat)x
+                                           y:(CGFloat)y
+                                       width:(CGFloat)w
+                               clampProgress:(BOOL)clampProgress {
+    w = MAX(1.0, w);
+    CGFloat denom = w * 0.55;
+    CGFloat p = (denom > 1.0) ? (fabs(x) / denom) : 0.0;
+
+    if (clampProgress) p = MIN(1.0, p);
+
+    CGFloat tx = x * 0.35;
+    CGFloat ty = (y * 0.08) - p * 18.0;
+
+    CGFloat maxAngle = (CGFloat)(M_PI / 10.0);
+    CGFloat rot = -(x / w) * maxAngle;
+
+    CGAffineTransform tr = CGAffineTransformIdentity;
+    tr = CGAffineTransformTranslate(tr, tx, ty);
+    tr = CGAffineTransformRotate(tr, rot);
+    return tr;
+}
+
 - (void)handlePan:(UIPanGestureRecognizer *)pan {
     if (self.cardAnimating) return;
 
@@ -1331,34 +1532,16 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     CGFloat w = MAX(1.0, self.cardArea.bounds.size.width);
     CGFloat x = t.x;
 
-    // 摆动“灵敏度”：更容易触发摆动
-    CGFloat progress = MIN(1.0, fabs(x) / (w * 0.55));
-
-    if (pan.state == UIGestureRecognizerStateBegan) {
-        [self sw_setAnchorPoint:CGPointMake(0.5, 0.0) forView:card];
-    }
-
-    // 顶部也要“轻微位移”：不要 1:1 跟手，做弱位移更像钟摆
-    CGFloat tx = x * 0.35;                 // 顶部轻微跟随左右
-    CGFloat ty = (t.y * 0.08) - progress*18; // 轻微上下 + 摆动带一点上提
-
-    // 方向修正：右滑要顺时针 => rotation 为负
-    CGFloat maxAngle = (CGFloat)(M_PI / 10.0); // 18°
-    CGFloat rot = -(x / w) * maxAngle;
-
-    CGAffineTransform tr = CGAffineTransformIdentity;
-    tr = CGAffineTransformTranslate(tr, tx, ty);
-    tr = CGAffineTransformRotate(tr, rot);
-    card.transform = tr;
+    card.transform = [self sw_pendulumTransformForX:x y:t.y width:w clampProgress:YES];
 
     // hint
     if (x > 25) {
         card.hintLabel.text = @"Keep";
-        card.hintLabel.textAlignment = NSTextAlignmentLeft;
+        card.hintLabel.textAlignment = NSTextAlignmentCenter;
         card.hintLabel.alpha = MIN(1.0, x / SW(120.0));
     } else if (x < -25) {
         card.hintLabel.text = @"Archive";
-        card.hintLabel.textAlignment = NSTextAlignmentLeft;
+        card.hintLabel.textAlignment = NSTextAlignmentCenter;
         card.hintLabel.alpha = MIN(1.0, -x / SW(120.0));
     } else {
         card.hintLabel.alpha = 0;
@@ -1366,26 +1549,66 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     if (pan.state == UIGestureRecognizerStateEnded || pan.state == UIGestureRecognizerStateCancelled) {
 
-        // 先判断“快速甩动”，快速滑动也要适配
         CGFloat vx = v.x;
+        CGFloat vy = v.y;
 
-        BOOL flingRight = (vx > SW(900));
-        BOOL flingLeft  = (vx < -SW(900));
+        CGFloat w = MAX(1.0, self.cardArea.bounds.size.width);
+        CGFloat absX = fabs(x);
 
-        // 再判断“位移阈值”，灵敏度稍微高一点
-        CGFloat threshold = w * 0.35;
+        CGFloat verticalGuard = 1.35;
+        BOOL mostlyHorizontal = (fabs(vx) > fabs(vy) * verticalGuard);
 
-        if (flingRight || x > threshold) {
-            [self commitTopCardArchived:NO velocity:v];
+        CGFloat vxFling        = SW(520);   // 强甩速度
+        CGFloat vxDragMin      = SW(180);   // 软阈值提交：松手至少要有点速度
+        CGFloat dragThreshold  = w * 0.22;  // 软距离阈值
+        CGFloat hardThreshold  = w * 0.30;  // 硬距离阈值：够远就该出去（但要允许“快速回拉取消”）
+
+        CGFloat vxReturnCancel = SW(260);   // 反向回拉速度阈值（可以 220~320 调）
+        BOOL sameDirection = ((x >= 0 && vx >= 0) || (x <= 0 && vx <= 0));
+        BOOL returningFast = (mostlyHorizontal && !sameDirection && fabs(vx) >= vxReturnCancel);
+
+        if (returningFast) {
+            [UIView animateWithDuration:0.12
+                                  delay:0
+                 usingSpringWithDamping:0.9
+                  initialSpringVelocity:0.6
+                                options:UIViewAnimationOptionCurveEaseOut
+                             animations:^{
+                card.transform = CGAffineTransformIdentity;
+                card.hintLabel.alpha = 0;
+            } completion:^(__unused BOOL finished) {
+                [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:card];
+                [self layoutCardsAnimated:YES];
+            }];
             return;
         }
-        if (flingLeft || x < -threshold) {
-            [self commitTopCardArchived:YES velocity:v];
+
+        BOOL shouldCommit = NO;
+        BOOL commitArchive = (x < 0);
+
+        if (mostlyHorizontal && absX >= hardThreshold) {
+            shouldCommit = YES;
+            commitArchive = (x < 0);
+        }
+        else {
+            CGFloat flingMinDist = w * 0.10;
+            if (mostlyHorizontal && fabs(vx) >= vxFling && absX >= flingMinDist && sameDirection) {
+                shouldCommit = YES;
+                commitArchive = (vx < 0);
+            }
+            else if (mostlyHorizontal && absX >= dragThreshold && fabs(vx) >= vxDragMin && sameDirection) {
+                shouldCommit = YES;
+                commitArchive = (x < 0);
+            }
+        }
+
+        if (shouldCommit) {
+            [self commitTopCardArchived:commitArchive velocity:v translation:t];
             return;
         }
 
-        // 回弹：先把 transform 回到 identity（保持顶部支点）
-        [UIView animateWithDuration:0.22
+        // 不提交：回弹（不要再 commit）
+        [UIView animateWithDuration:0.12
                               delay:0
              usingSpringWithDamping:0.9
               initialSpringVelocity:0.6
@@ -1394,90 +1617,166 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
             card.transform = CGAffineTransformIdentity;
             card.hintLabel.alpha = 0;
         } completion:^(__unused BOOL finished) {
-
-            // 回弹结束再把支点复位到中心，避免“中途改 anchor 抖一下”
             [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:card];
             [self layoutCardsAnimated:YES];
         }];
     }
+
 }
 
-- (void)onArchiveBtn { [self commitTopCardArchived:YES velocity:CGPointZero]; }
-- (void)onKeepBtn    { [self commitTopCardArchived:NO  velocity:CGPointZero]; }
+- (void)sw_animateAdvanceStackWithOutgoingTop:(SwipeCardView *)outTop
+                                     archived:(BOOL)archived
+                                     velocity:(CGPoint)velocity
+                                  translation:(CGPoint)translation
+                                   completion:(void(^)(void))completion {
 
-- (void)commitTopCardArchived:(BOOL)archived velocity:(CGPoint)velocity {
-    if (self.cardAnimating) return; // 防连点 / 防重复
+    SwipeCardView *mid    = self.cards.count > 1 ? self.cards[1] : nil;
+    SwipeCardView *bottom = self.cards.count > 2 ? self.cards[2] : nil;
+
+    NSTimeInterval dur = 0.30;
+
+    for (SwipeCardView *c in @[mid ?: [NSNull null], bottom ?: [NSNull null]]) {
+        if ((id)c == [NSNull null]) continue;
+        [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:(UIView *)c];
+        ((SwipeCardView *)c).transform = CGAffineTransformIdentity;
+        ((SwipeCardView *)c).hintLabel.alpha = 0;
+        ((SwipeCardView *)c).alpha = 1.0;
+    }
+
+    [self sw_setAnchorPoint:CGPointMake(0.5, 0.0) forView:outTop];
+
+    [self.cardsHost bringSubviewToFront:outTop];
+
+    CGRect fTop    = SWCardFrameForIndex(0);
+    CGRect fMid    = SWCardFrameForIndex(1);
+    CGRect fBottom = SWCardFrameForIndex(2);
+
+    CGFloat dir = archived ? -1.0 : 1.0;
+    CGFloat w = MAX(1.0, self.cardArea.bounds.size.width);
+
+    CGFloat x0 = translation.x;
+    CGFloat y0 = translation.y;
+
+    CGFloat xEnd = dir * (w * 5.0) + velocity.x * 0.25;
+    if (dir > 0) xEnd = MAX(xEnd,  w * 4.5);
+    else         xEnd = MIN(xEnd, -w * 4.5);
+
+    outTop.transform = [self sw_pendulumTransformForX:x0 y:y0 width:w clampProgress:YES];
+
+    [UIView animateKeyframesWithDuration:dur
+                                   delay:0
+                                 options:UIViewKeyframeAnimationOptionCalculationModeCubicPaced | UIViewAnimationOptionCurveEaseIn
+                              animations:^{
+
+        [UIView addKeyframeWithRelativeStartTime:0.0 relativeDuration:1.0 animations:^{
+            if (mid && !mid.hidden)    mid.frame    = fTop;
+            if (bottom && !bottom.hidden) bottom.frame = fMid;
+        }];
+
+        [UIView addKeyframeWithRelativeStartTime:0.0 relativeDuration:0.60 animations:^{
+            CGFloat x1 = x0 + (xEnd - x0) * 0.60;
+            CGFloat y1 = y0;
+            outTop.transform = [self sw_pendulumTransformForX:x1 y:y1 width:w clampProgress:NO];
+            outTop.alpha = 0.75;
+            outTop.hintLabel.alpha = 0;
+        }];
+
+        [UIView addKeyframeWithRelativeStartTime:0.60 relativeDuration:0.40 animations:^{
+            outTop.transform = [self sw_pendulumTransformForX:xEnd y:0 width:w clampProgress:NO];
+            outTop.alpha = 0.0;
+        }];
+
+    } completion:^(__unused BOOL finished) {
+
+        outTop.hidden = YES;
+        outTop.alpha = 1.0;
+        outTop.transform = CGAffineTransformIdentity;
+        [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:outTop];
+
+        if (self.cards.count >= 3) {
+            self.cards[0] = mid;
+            self.cards[1] = bottom;
+            self.cards[2] = outTop;
+        }
+
+        outTop.frame = fBottom;
+
+        NSString *newBottomAid = (self.unprocessedIDs.count >= 3) ? self.unprocessedIDs[2] : nil;
+        if (newBottomAid.length) {
+            [self sw_setCard:outTop assetID:newBottomAid targetSize:fBottom.size showWhenReady:YES];
+        } else {
+            outTop.hidden = YES;
+        }
+
+        if (self.cards.count >= 3) {
+            [self.cardsHost bringSubviewToFront:self.cards[2]];
+            [self.cardsHost bringSubviewToFront:self.cards[1]];
+            [self.cardsHost bringSubviewToFront:self.cards[0]];
+        }
+
+        [self sw_updateStackVisibility];
+        [self attachPanToTopCard];
+        [self sw_refreshVisibleThumbCells];
+        [self scrollThumbsToTopIfNeededAnimated:YES];
+
+        if (completion) completion();
+        [self sw_updateCardBlurAppearance];
+    }];
+}
+
+- (void)onArchiveBtn { [self commitTopCardArchived:YES velocity:CGPointZero translation:CGPointZero]; }
+- (void)onKeepBtn    { [self commitTopCardArchived:NO  velocity:CGPointZero translation:CGPointZero]; }
+
+- (void)commitTopCardArchived:(BOOL)archived velocity:(CGPoint)velocity translation:(CGPoint)translation {
+    if (self.cardAnimating) return;
     self.sw_hasOperated = YES;
+
     SwipeCardView *top = self.cards.firstObject;
     if (!top) return;
 
     self.cardAnimating = YES;
 
-    // 如果手势结束时支点已复位，这里确保是顶部中心（钟摆飞出一致）
-    [self sw_setAnchorPoint:CGPointMake(0.5, 0.0) forView:top];
-
-    // 预取下一张（更稳）
-    NSString *prefetchAid = (self.unprocessedIDs.count >= 4) ? self.unprocessedIDs[3] : nil;
-    if (prefetchAid.length) {
-        [self sw_prefetchCardImageForAssetID:prefetchAid targetSize:SWCardFrameForIndex(2).size];
-    }
-
     top.userInteractionEnabled = NO;
     self.archiveBtn.userInteractionEnabled = NO;
     self.keepBtn.userInteractionEnabled = NO;
 
-    CGFloat dir = archived ? -1.0 : 1.0;
+    NSString *aid = top.assetID ?: @"";
 
-    // 飞出：x 方向更大，y 给一点“向下/斜飞”的趋势（更像从顶部甩出去）
-    CGFloat viewW = self.view.bounds.size.width;
-    CGFloat offX = dir * (viewW * 1.35) + velocity.x * 0.22; // 甩得快飞更远
-    CGFloat offY = velocity.y * 0.01;
+    SwipeAssetStatus st = archived ? SwipeAssetStatusArchived : SwipeAssetStatusKept;
+    [[SwipeManager shared] setStatus:st forAssetID:aid sourceModule:self.module.moduleID recordUndo:YES];
+    [self sw_updateThumbForAssetIDNoFlicker:aid];
 
-    // 额外旋转：右滑顺时针（负角度）
-    CGFloat extraRot = -dir * (CGFloat)(M_PI / 8.5);
+    if (self.unprocessedIDs.count > 0 && [self.unprocessedIDs.firstObject isEqualToString:aid]) {
+        [self.unprocessedIDs removeObjectAtIndex:0];
+    } else {
+        [self.unprocessedIDs removeObject:aid];
+    }
 
-    [UIView animateWithDuration:0.28
-                          delay:0
-                        options:UIViewAnimationOptionCurveEaseIn
-                     animations:^{
-        top.center = CGPointMake(top.center.x + offX, top.center.y + offY);
-        top.transform = CGAffineTransformRotate(top.transform, extraRot);
-        top.alpha = 0.0;
-    } completion:^(__unused BOOL finished) {
+    NSString *topID = self.unprocessedIDs.firstObject;
+    [[SwipeManager shared] setCurrentUnprocessedAssetID:(topID.length ? topID : @"")
+                                            forModuleID:self.module.moduleID];
+    [self scrollThumbsToTopIfNeededAnimated:YES];
 
-        NSString *aid = top.assetID ?: @"";
+    __weak typeof(self) ws = self;
+    [self sw_animateAdvanceStackWithOutgoingTop:top
+                                       archived:archived
+                                       velocity:velocity
+                                    translation:translation
+                                     completion:^{
+        __strong typeof(ws) self = ws;
+        if (!self) return;
 
-        // 飞出后立刻隐藏+清图，避免复用时“像回到底部”
-        top.hidden = YES;
-        top.imageView.image = nil;
-        top.alpha = 1.0;
-        top.transform = CGAffineTransformIdentity;
-        [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:top];
+        [self updateTopUIFromManager];
 
-        SwipeAssetStatus st = archived ? SwipeAssetStatusArchived : SwipeAssetStatusKept;
-        [[SwipeManager shared] setStatus:st forAssetID:aid sourceModule:self.module.moduleID recordUndo:YES];
+        BOOL done = (self.unprocessedIDs.count == 0);
+        [self showDoneState:done];
 
-        [self sw_updateThumbForAssetIDNoFlicker:aid];
-
-        // 更新本地队列
-        if (self.unprocessedIDs.count > 0 && [self.unprocessedIDs.firstObject isEqualToString:aid]) {
-            [self.unprocessedIDs removeObjectAtIndex:0];
-        } else {
-            [self.unprocessedIDs removeObject:aid];
-        }
-
-        NSString *topID = self.unprocessedIDs.firstObject;
-        [[SwipeManager shared] setCurrentUnprocessedAssetID:(topID.length ? topID : @"")
-                                                forModuleID:self.module.moduleID];
-
-        // 刷新卡
-        [self sw_refreshCardStackAfterRemovingTopAnimated:YES completion:^{
-            self.archiveBtn.userInteractionEnabled = YES;
-            self.keepBtn.userInteractionEnabled = YES;
-            self.cardAnimating = NO; // 动画真正结束才解锁
-        }];
+        self.archiveBtn.userInteractionEnabled = YES;
+        self.keepBtn.userInteractionEnabled = YES;
+        self.cardAnimating = NO;
     }];
 }
+
 
 - (void)sw_prefetchCardImageForAssetID:(NSString *)assetID targetSize:(CGSize)targetSize {
     if (assetID.length == 0) return;
@@ -1518,7 +1817,12 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     NSIndexPath *ip = [NSIndexPath indexPathForItem:(NSInteger)idx inSection:0];
     SwipeThumbCell *cell = (SwipeThumbCell *)[self.thumbs cellForItemAtIndexPath:ip];
-
+    
+    if (!cell) {
+        [self.thumbs reloadItemsAtIndexPaths:@[ip]];
+        return;
+    }
+    
     SwipeAssetStatus st = [[SwipeManager shared] statusForAssetID:aid];
     BOOL processed = (st != SwipeAssetStatusUnknown);
 
@@ -1529,7 +1833,14 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     }
 
     [self sw_reloadThumbForAssetIDNoFlicker:aid];
+    
+    NSString *key = SWImgKey(@"thumb_", aid, CGSizeMake(SW(140), SW(140)));
+    UIImage *cached = [self.thumbImageCache objectForKey:key];
+    if (!cached) {
+        [self loadImageForAssetID:aid intoImageView:cell.imageView targetSize:CGSizeMake(SW(140), SW(140))];
+    }
 }
+
 
 #pragma mark - Exit Popup
 
@@ -1721,7 +2032,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         [laterBtn.bottomAnchor constraintEqualToAnchor:popup.bottomAnchor constant:-SW(30)],
     ]];
 
-    // 填充数值（Archive/Keep + bytes）
     [self sw_updateExitPopupNumbers];
 
     [UIView animateWithDuration:0.18 animations:^{
@@ -1802,7 +2112,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         self.sw_exitKeepValue = nil;
         self.sw_exitViewArchivedBtn = nil;
 
-        // 解除锁（如果此时没 pop）
         [self sw_unlockAction];
 
         if (completion) completion();
@@ -1953,7 +2262,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     hdr.textColor = SWHexRGBA(0xEBEBF599);
     [panel addSubview:hdr];
 
-    // header 下分割线（你原来就有）
     UIView *line = [UIView new];
     line.translatesAutoresizingMaskIntoConstraints = NO;
     line.backgroundColor = [UIColor.whiteColor colorWithAlphaComponent:0.15];
@@ -2021,18 +2329,15 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 - (void)sw_forceRebuildFromManagerAnimated:(BOOL)animated keepFocusTop:(NSString *)focusIDOrNil {
     SwipeManager *mgr = [SwipeManager shared];
 
-    // 1) 取最新 module
     SwipeModule *latest = nil;
     for (SwipeModule *m in mgr.modules) {
         if ([m.moduleID isEqualToString:self.module.moduleID]) { latest = m; break; }
     }
     if (latest) self.module = latest;
 
-    // 2) 重新拿“排序后的展示数组”
     NSArray<NSString *> *newAll = self.module.assetIDs ?: @[];
     self.allAssetIDs = newAll;
 
-    // 3) 重算 unprocessedIDs（按照 allAssetIDs 的顺序筛 Unknown）
     [self.unprocessedIDs removeAllObjects];
     for (NSString *aid in self.allAssetIDs) {
         if ([mgr statusForAssetID:aid] == SwipeAssetStatusUnknown) {
@@ -2040,7 +2345,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         }
     }
 
-    // 4) 若传入 focus，则把 focus 提到最前（用于撤回/点缩略图）
     if (focusIDOrNil.length > 0) {
         NSUInteger idx = [self.unprocessedIDs indexOfObject:focusIDOrNil];
         if (idx != NSNotFound && idx != 0) {
@@ -2050,7 +2354,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         }
         [mgr setCurrentUnprocessedAssetID:focusIDOrNil forModuleID:self.module.moduleID];
     } else {
-        // 否则按游标把当前未处理放在最前（保持用户进度）
         NSString *cursor = [mgr currentUnprocessedAssetIDForModuleID:self.module.moduleID];
         if (cursor.length > 0) {
             NSUInteger idx = [self.unprocessedIDs indexOfObject:cursor];
@@ -2080,6 +2383,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         [self.view layoutIfNeeded];
 
         [self sw_applyTop3CardsAnimated:NO];
+        [self sw_updateCardBlurAppearance];
         [self sw_refreshVisibleThumbCells];
         [self scrollThumbsToTopIfNeededAnimated:animated];
     }
@@ -2111,7 +2415,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     self.focusAssetID = nil;
 
     [[SwipeManager shared] setSortAscending:NO forModuleID:self.module.moduleID];
-    // 不要立刻 rebuild，等 SwipeManagerDidUpdateNotification -> handleUpdate -> reloadFromManagerAndRender
 }
 
 - (void)sw_sortPickOldest {
@@ -2169,20 +2472,28 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     SwipeThumbCell *cell = [cv dequeueReusableCellWithReuseIdentifier:@"SwipeThumbCell" forIndexPath:indexPath];
     NSString *aid = self.allAssetIDs[indexPath.item];
 
-    // cancel old request
     if (cell.reqId != PHInvalidImageRequestID) {
         [self.imageManager cancelImageRequest:cell.reqId];
         cell.reqId = PHInvalidImageRequestID;
     }
     cell.representedAssetID = aid;
-    cell.imageView.image = nil;
-    cell.imageView.alpha = 1.0;
 
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGSize targetPt = CGSizeMake(SW(140), SW(140));
+    CGSize targetPx = CGSizeMake(targetPt.width * scale, targetPt.height * scale);
+    NSString *key = SWImgKey(@"thumb_", aid, targetPx);
+
+    UIImage *cached = [self.thumbImageCache objectForKey:key];
+    if (cached) {
+        cell.imageView.image = cached;
+    } else {
+        cell.imageView.image = [UIImage imageNamed:@"placeholder"];
+    }
+
+    cell.imageView.alpha = 1.0;
     SwipeAssetStatus st = [[SwipeManager shared] statusForAssetID:aid];
     BOOL processed = (st != SwipeAssetStatusUnknown);
-
     cell.imageView.alpha = processed ? 0.2 : 1.0;
-
     cell.checkIcon.hidden = !processed;
 
     PHAsset *asset = [self assetForID:aid];
@@ -2202,60 +2513,63 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
                                            resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
         __strong typeof(wcell) scell = wcell;
         if (!scell) return;
-
+        
         BOOL cancelled = [info[PHImageCancelledKey] boolValue];
         NSError *err = info[PHImageErrorKey];
+        
         if (cancelled || err) return;
+        
+        BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
+        
+        if (!degraded) {
+            [self.thumbImageCache setObject:result forKey:key];
+        }
 
         if (![scell.representedAssetID isEqualToString:aid]) return;
         if (!result) return;
 
-        void (^apply)(void) = ^{
+        dispatch_async(dispatch_get_main_queue(), ^{
             if (![scell.representedAssetID isEqualToString:aid]) return;
             scell.imageView.image = result;
-        };
-        if ([NSThread isMainThread]) apply();
-        else dispatch_async(dispatch_get_main_queue(), apply);
+        });
     }];
-
     return cell;
 }
 
 - (void)sw_reloadThumbForAssetIDNoFlicker:(NSString *)aid {
     if (aid.length == 0) return;
+
     NSUInteger idx = [self.allAssetIDs indexOfObject:aid];
     if (idx == NSNotFound) return;
 
     NSIndexPath *ip = [NSIndexPath indexPathForItem:(NSInteger)idx inSection:0];
+    SwipeThumbCell *cell = (SwipeThumbCell *)[self.thumbs cellForItemAtIndexPath:ip];
 
-    [UIView performWithoutAnimation:^{
-        [CATransaction begin];
-        [CATransaction setDisableActions:YES];
-        [self.thumbs performBatchUpdates:^{
-            [self.thumbs reloadItemsAtIndexPaths:@[ip]];
-        } completion:nil];
-        [CATransaction commit];
-    }];
+    NSString *key = SWImgKey(@"thumb_", aid, CGSizeMake(SW(140), SW(140)));
+    UIImage *cachedImage = [self.thumbImageCache objectForKey:key];
+    
+    if (!cachedImage) {
+        [self loadImageForAssetID:aid intoImageView:cell.imageView targetSize:CGSizeMake(SW(140), SW(140))];
+    } else {
+        cell.imageView.image = cachedImage;
+    }
 }
+
 
 - (void)sw_updateStackVisibility {
     NSInteger n = (NSInteger)self.unprocessedIDs.count;
     if (self.cards.count < 3) return;
 
-    // 默认全隐藏（保险）
     self.cards[0].hidden = YES; // top
     self.cards[1].hidden = YES; // mid
     self.cards[2].hidden = YES; // bottom
 
     if (n <= 0) return;
 
-    // 至少 1 张：显示 top
     self.cards[0].hidden = NO;
 
-    // 至少 2 张：显示 mid
     if (n >= 2) self.cards[1].hidden = NO;
 
-    // 至少 3 张：显示 bottom
     if (n >= 3) self.cards[2].hidden = NO;
 }
 
@@ -2268,7 +2582,6 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     self.undoIconBtn.userInteractionEnabled = NO;
     self.sortIconBtn.userInteractionEnabled = NO;
 
-    // 也可以顺手禁掉 top 卡的交互，避免 pan 继续改 transform
     SwipeCardView *top = self.cards.firstObject;
     top.userInteractionEnabled = NO;
 
@@ -2304,11 +2617,11 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         card.hidden = NO;
 
         if (![card.assetID isEqualToString:aid] || card.imageView.image == nil) {
-            card.assetID = aid;
-            card.imageView.image = nil;
-            [self loadImageForAssetID:aid
-                        intoImageView:card.imageView
-                           targetSize:card.bounds.size];
+            BOOL reuseFlashRisk = (i == 2); // 底卡最明显
+            [self sw_setCard:card
+                     assetID:aid
+                  targetSize:card.bounds.size
+               showWhenReady:reuseFlashRisk];
         }
 
         [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:card];
@@ -2341,10 +2654,11 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         return;
     }
 
-    [UIView animateWithDuration:0.22 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
         layoutBlock();
     } completion:^(__unused BOOL finished) {
         finish();
+        [self sw_updateCardBlurAppearance];
     }];
 }
 
@@ -2405,6 +2719,91 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 }
 
 #pragma mark - Image loading
+
+- (void)sw_setCard:(SwipeCardView *)card
+           assetID:(NSString *)assetID
+        targetSize:(CGSize)sizeInPoints
+     showWhenReady:(BOOL)showWhenReady {
+
+    if (assetID.length == 0 || !card) return;
+
+    if (card.reqId != PHInvalidImageRequestID) {
+        [self.imageManager cancelImageRequest:card.reqId];
+        card.reqId = PHInvalidImageRequestID;
+    }
+
+    card.assetID = assetID;
+    card.representedAssetID = assetID;
+
+    // ✅ 复用时先清掉旧图，避免错图闪现
+    card.rawImage = nil;
+    card.imageView.image = nil;
+
+    card.sw_revealWhenReady = showWhenReady;
+    if (showWhenReady) {
+        card.hidden = YES;
+        card.alpha = 0.0;
+    } else {
+        card.hidden = NO;
+        card.alpha = 1.0;
+    }
+
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGSize targetPx = CGSizeMake(sizeInPoints.width * scale, sizeInPoints.height * scale);
+
+    NSString *sharpKey = SWImgKey(@"card_", assetID, targetPx);
+    UIImage *sharpCached = [self.cardImageCache objectForKey:sharpKey];
+    if (sharpCached) {
+        card.rawImage = sharpCached;
+        [self sw_applyVisualForCard:card];
+        return;
+    }
+
+    PHAsset *asset = [self assetForID:assetID];
+    if (!asset) return;
+
+    PHImageRequestOptions *opt = [PHImageRequestOptions new];
+    opt.networkAccessAllowed = YES;
+    opt.resizeMode = PHImageRequestOptionsResizeModeFast;
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
+
+    __weak typeof(self) ws = self;
+    __weak typeof(card) wcard = card;
+
+    card.reqId = [self.imageManager requestImageForAsset:asset
+                                              targetSize:targetPx
+                                             contentMode:PHImageContentModeAspectFill
+                                                 options:opt
+                                           resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+        if (!result) return;
+
+        BOOL cancelled = [info[PHImageCancelledKey] boolValue];
+        NSError *err = info[PHImageErrorKey];
+        if (cancelled || err) return;
+
+        BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(ws) self = ws;
+            SwipeCardView *scard = wcard;
+            if (!self || !scard) return;
+            if (![scard.representedAssetID isEqualToString:assetID]) return;
+
+            // ✅ rawImage：先用低清顶住，高清到来再覆盖
+            if (!scard.rawImage || !degraded) {
+                scard.rawImage = result;
+            }
+
+            // ✅ 高清才进清晰缓存
+            if (!degraded) {
+                [self.cardImageCache setObject:result forKey:sharpKey];
+            }
+
+            // ✅ 不直接把 result 塞给 imageView（否则非顶卡会变清晰）
+            [self sw_applyVisualForCard:scard];
+        });
+    }];
+}
 
 - (PHAsset *)assetForID:(NSString *)assetID {
     if (assetID.length == 0) return nil;

@@ -244,7 +244,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
 
-    CGFloat gradientH = safeTop + 402.0;
+    CGFloat gradientH = safeTop + ASV(402.0);
     self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     for (UIView *v in self.shadowViews) {
@@ -268,15 +268,15 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         CGFloat w = self.view.bounds.size.width;
         CGFloat h = [self.noAuthView preferredHeightForWidth:w];
 
-        CGRect titleInView = [self.titleLab.superview convertRect:self.titleLab.frame toView:self.view];
-        CGFloat minY = CGRectGetMaxY(titleInView) + 20;
+        CGFloat y = ASV(234);
 
         CGFloat viewH = self.view.bounds.size.height;
         CGFloat safeBottom = 0;
         if (@available(iOS 11.0, *)) safeBottom = self.view.safeAreaInsets.bottom;
 
-        CGFloat y = MAX(minY, (viewH - h) * 0.5);
-        y = MIN(y, viewH - safeBottom - h - 20);
+        CGFloat bottomMargin = ASV(20);
+        y = MIN(y, viewH - safeBottom - h - bottomMargin);
+        y = MAX(0, y);
 
         self.noAuthView.frame = CGRectMake(0, y, w, h);
     }

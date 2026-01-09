@@ -49,13 +49,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     return SWFontS(size,weight);
 }
 
-
-//static const CGFloat kHomeSideInset = SW(16.0);
-//static const CGFloat kHomeGridGap   = SW(12.0);
-
-//static const CGFloat kHeaderHeight  = SW(200.0);
-//static const CGFloat kLargeCellH    = SW(260.0);
-
 #define kHomeSideInset   SW(16.0)
 #define kHomeGridGap     SW(12.0)
 #define kHeaderHeight    SW(200.0)
