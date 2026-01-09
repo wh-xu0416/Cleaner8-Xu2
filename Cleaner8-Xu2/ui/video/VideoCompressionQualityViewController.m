@@ -65,7 +65,6 @@ static inline UIColor *ASSelectCardBG(void) {
     return [UIColor colorWithRed:221/255.0 green:229/255.0 blue:247/255.0 alpha:1.0];
 }
 
-// ✅ 字体也等比例缩小（不放大）
 static inline UIFont *ASSB(CGFloat s) { return [UIFont systemFontOfSize:round(s * ASScaleDown()) weight:UIFontWeightSemibold]; }
 static inline UIFont *ASMD(CGFloat s) { return [UIFont systemFontOfSize:round(s * ASScaleDown()) weight:UIFontWeightMedium]; }
 static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s * ASScaleDown()) weight:UIFontWeightRegular]; }
@@ -414,7 +413,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
 
     // ===== bottom button =====
     self.compressBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.compressBtn setTitle:@"Compress" forState:UIControlStateNormal];
+    [self.compressBtn setTitle:NSLocalizedString(@"Compress",nil) forState:UIControlStateNormal];
     self.compressBtn.titleLabel.font = ASRG(20);
     [self.compressBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.compressBtn.backgroundColor = ASBlue();
@@ -491,11 +490,11 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
     info.translatesAutoresizingMaskIntoConstraints = NO;
     [content addSubview:info];
 
-    self.sizeKey = [self makeKey:@"Size"];
+    self.sizeKey = [self makeKey:NSLocalizedString(@"Size",nil)];
     self.sizeVal = [self makeVal];
-    self.durKey  = [self makeKey:@"Duration"];
+    self.durKey  = [self makeKey:NSLocalizedString(@"Duration",nil)];
     self.durVal  = [self makeVal];
-    self.resKey  = [self makeKey:@"Resolution"];
+    self.resKey  = [self makeKey:NSLocalizedString(@"Resolution",nil)];
     self.resVal  = [self makeVal];
 
     [info addSubview:self.sizeKey];
@@ -550,7 +549,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
     self.selectTitle = [UILabel new];
     self.selectTitle.font = ASSB(20);
     self.selectTitle.textColor = UIColor.blackColor;
-    self.selectTitle.text = @"Select size";
+    self.selectTitle.text = NSLocalizedString(@"Select size",nil);
     self.selectTitle.translatesAutoresizingMaskIntoConstraints = NO;
     [self.selectCard addSubview:self.selectTitle];
 
@@ -562,14 +561,14 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
     [self.selectCard addSubview:self.whiteBox];
 
     self.rowSmall = [[ASQualityRow alloc] initWithQuality:ASCompressionQualitySmall
-                                                   title:@"Small Size"
-                                                subtitle:@"Compact and shareable"];
+                                                   title:NSLocalizedString(@"Small Size",nil)
+                                                subtitle:NSLocalizedString(@"Compact and shareable",nil)];
     self.rowMedium = [[ASQualityRow alloc] initWithQuality:ASCompressionQualityMedium
-                                                    title:@"Medium Size"
-                                                 subtitle:@"Balance quality and space"];
+                                                    title:NSLocalizedString(@"Medium Size",nil)
+                                                 subtitle:NSLocalizedString(@"Balance quality and space",nil)];
     self.rowLarge = [[ASQualityRow alloc] initWithQuality:ASCompressionQualityLarge
-                                                   title:@"Large Size"
-                                                subtitle:@"Maximum quality, larger file"];
+                                                   title:NSLocalizedString(@"Large Size",nil)
+                                                subtitle:NSLocalizedString(@"Maximum quality, larger file",nil)];
     [self.rowSmall addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
     [self.rowMedium addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
     [self.rowLarge addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
@@ -596,7 +595,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
         [header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [header.heightAnchor constraintEqualToConstant:headerH],
 
-        // ✅ back 点击区域不缩小，保持 44
         [self.backBtn.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:6],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
         [self.backBtn.widthAnchor constraintEqualToConstant:44],
@@ -721,7 +719,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
 
 - (void)loadTopInfo {
     NSInteger count = self.assets.count;
-    self.titleLabel.text = (count <= 1) ? @"1 Video Selected" : [NSString stringWithFormat:@"%ld Videos Selected",(long)count];
+    self.titleLabel.text = (count <= 1) ? NSLocalizedString(@"1 Video Selected",nil) : [NSString stringWithFormat:NSLocalizedString(@"%ld Videos Selected",nil),(long)count];
 
     uint64_t total = 0;
     for (PHAsset *a in self.assets) total += ASAssetFileSize(a);
@@ -765,7 +763,7 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
     self.afterLabel.text  = (self.totalBeforeBytes > 0) ? ASMB1(after) : @"--";
 
     NSString *saveSize = (self.totalBeforeBytes > 0 ? ASMB1(saved) : @"--");
-    NSString *prefix = @"You will save about ";
+    NSString *prefix = NSLocalizedString(@"You will save about ",nil);
 
     NSMutableAttributedString *attr =
     [[NSMutableAttributedString alloc] initWithString:prefix

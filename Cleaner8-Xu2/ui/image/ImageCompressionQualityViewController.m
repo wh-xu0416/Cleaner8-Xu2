@@ -2,8 +2,6 @@
 #import "ImageCompressionProgressViewController.h"
 #import <Photos/Photos.h>
 
-#pragma mark - Scale (Design based on iPhone Pro)
-
 static const CGFloat kASDesignBaseWidth = 402;
 
 static inline CGFloat ASScreenMinSide(void) {
@@ -407,7 +405,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
     CGFloat gridItem = ASClamp(ASV(80), 68, 80);
     CGFloat gridGap  = ASClamp(ASV(10), 8, 10);
-    CGFloat gridSide = gridItem * 3 + gridGap * 2; // ✅ 始终保持 3x3 布局，只缩小尺寸
+    CGFloat gridSide = gridItem * 3 + gridGap * 2;
 
     CGFloat rowH = ASClamp(ASV(74), 66, 74);
 
@@ -423,9 +421,8 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.bgGradient.endPoint   = CGPointMake(0.5, 1.0);
     [self.view.layer insertSublayer:self.bgGradient atIndex:0];
 
-    // 底部按钮（高度缩放，点击区域仍够大）
     self.compressBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.compressBtn setTitle:@"Compress" forState:UIControlStateNormal];
+    [self.compressBtn setTitle:NSLocalizedString(@"Compress",nil) forState:UIControlStateNormal];
     self.compressBtn.titleLabel.font = ASRG(20);
     [self.compressBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.compressBtn.backgroundColor = ASBlue();
@@ -538,7 +535,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.selectTitle = [UILabel new];
     self.selectTitle.font = ASSB(20);
     self.selectTitle.textColor = UIColor.blackColor;
-    self.selectTitle.text = @"Select size";
+    self.selectTitle.text = NSLocalizedString(@"Select size",nil);
     self.selectTitle.translatesAutoresizingMaskIntoConstraints = NO;
 
     self.whiteBox = [UIView new];
@@ -552,14 +549,14 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     [self.selectCard addSubview:self.whiteBox];
 
     self.rowSmall = [[ASImageQualityRow alloc] initWithQuality:ASImageCompressionQualitySmall
-                                                       title:@"Small Size"
-                                                    subtitle:@"Compact and shareable"];
+                                                       title:NSLocalizedString(@"Small Size",nil)
+                                                    subtitle:NSLocalizedString(@"Compact and shareable",nil)];
     self.rowMedium = [[ASImageQualityRow alloc] initWithQuality:ASImageCompressionQualityMedium
-                                                        title:@"Medium Size"
-                                                     subtitle:@"Balance quality and space"];
+                                                        title:NSLocalizedString(@"Medium Size",nil)
+                                                     subtitle:NSLocalizedString(@"Balance quality and space",nil)];
     self.rowLarge = [[ASImageQualityRow alloc] initWithQuality:ASImageCompressionQualityLarge
-                                                       title:@"Large Size"
-                                                    subtitle:@"Maximum quality, larger file"];
+                                                       title:NSLocalizedString(@"Large Size",nil)
+                                                    subtitle:NSLocalizedString(@"Maximum quality, larger file",nil)];
     [self.rowSmall addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
     [self.rowMedium addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
     [self.rowLarge addTarget:self action:@selector(onRowTap:) forControlEvents:UIControlEventTouchUpInside];
@@ -671,7 +668,7 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     self.afterLabel.text  = (self.totalBeforeBytes > 0) ? ASMB1(after) : @"--";
 
     NSString *saveSize = (self.totalBeforeBytes > 0) ? ASMB1(saved) : @"--";
-    NSString *prefix = @"You will save about ";
+    NSString *prefix = NSLocalizedString(@"You will save about ",nil);
 
     NSMutableAttributedString *attr =
     [[NSMutableAttributedString alloc] initWithString:prefix
@@ -757,7 +754,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
     opt.networkAccessAllowed = YES;
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
 
-    // targetSize 可保持大一点避免糊；也可按缩放略调
     CGFloat t = ASClamp(ASV(360), 300, 360);
     [[PHImageManager defaultManager] requestImageForAsset:a
                                               targetSize:CGSizeMake(t, t)
@@ -787,7 +783,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
     [self.assets removeObjectAtIndex:i];
 
-    // ✅ 删除就回传最新选择
     [self notifySelectionChanged];
 
     if (self.assets.count == 0) {
@@ -817,7 +812,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 - (CGSize)collectionView:(UICollectionView *)collectionView
                   layout:(UICollectionViewLayout*)collectionViewLayout
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    // ✅ 固定 3x3 布局，仅缩小 item 尺寸
     CGFloat item = ASClamp(ASV(80), 68, 80);
     return CGSizeMake(item, item);
 }

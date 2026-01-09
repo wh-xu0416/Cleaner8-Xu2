@@ -122,7 +122,7 @@ static inline UIColor *ASSecondaryLabel(void) {
 
     self.titleLabel = [UILabel new];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.text = @"My studio";
+    self.titleLabel.text = NSLocalizedString(@"My studio",nil);
     self.titleLabel.font = ASFontS(24, UIFontWeightSemibold);
     self.titleLabel.textColor = UIColor.whiteColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -158,7 +158,6 @@ static inline UIColor *ASSecondaryLabel(void) {
     self.table.tableFooterView = [UIView new];
     [self.table registerClass:[ASStudioCell class] forCellReuseIdentifier:@"ASStudioCell"];
 
-    // ✅ 保持你现有视觉：默认不额外留底部空白，安全区由 applyTableSafeBottomInset 处理
     self.baseTableInsets = UIEdgeInsetsMake(0, 0, 0, 0);
     self.table.contentInset = self.baseTableInsets;
     self.table.scrollIndicatorInsets = self.baseTableInsets;
@@ -272,12 +271,11 @@ static inline UIColor *ASSecondaryLabel(void) {
     if (!canRead) {
         self.table.hidden = YES;
         self.emptyView.hidden = NO;
-        self.emptyLabel.text = @"Photos access is required.\nPlease enable Photos permission in Settings.";
+        self.emptyLabel.text = NSLocalizedString(@"Photos access is required.\nPlease enable Photos permission in Settings.",nil);
         return;
     }
 
     self.table.hidden = NO;
-    // emptyView 是否显示由 loadData 决定
 }
 
 #pragma mark - Data
@@ -333,7 +331,7 @@ static inline UIColor *ASSecondaryLabel(void) {
     ASStudioCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ASStudioCell" forIndexPath:ip];
     ASStudioItem *it = self.data[ip.row];
 
-    cell.nameLabel.text = it.displayName.length ? it.displayName : @"(Unnamed)";
+    cell.nameLabel.text = it.displayName.length ? it.displayName : NSLocalizedString(@"(Unnamed)",nil);
 
     NSString *sizeText = [ASStudioUtils humanBytes:it.afterBytes];
     if (it.type == ASStudioMediaTypeVideo) {
@@ -365,7 +363,6 @@ static inline UIColor *ASSecondaryLabel(void) {
             opt.resizeMode = PHImageRequestOptionsResizeModeFast;
             opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
 
-            // ✅ 异步回调只更新“当前还在屏幕上的同一行”
             [self.imgMgr requestImageForAsset:asset
                                    targetSize:target
                                   contentMode:PHImageContentModeAspectFill

@@ -29,8 +29,8 @@ static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) {
         _photosBtn.translatesAutoresizingMaskIntoConstraints = NO;
         _videoBtn.translatesAutoresizingMaskIntoConstraints  = NO;
 
-        [_photosBtn setTitle:@"Photos" forState:UIControlStateNormal];
-        [_videoBtn  setTitle:@"Video"  forState:UIControlStateNormal];
+        [_photosBtn setTitle:NSLocalizedString(@"Photos",nil) forState:UIControlStateNormal];
+        [_videoBtn  setTitle:NSLocalizedString(@"Video",nil)  forState:UIControlStateNormal];
 
         _photosBtn.titleLabel.font = ASFontS(24, UIFontWeightSemibold);
         _videoBtn.titleLabel.font  = ASFontS(24, UIFontWeightSemibold);

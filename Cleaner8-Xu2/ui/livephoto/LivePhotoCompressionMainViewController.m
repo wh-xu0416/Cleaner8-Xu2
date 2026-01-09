@@ -17,10 +17,10 @@ static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat
 #pragma mark - Helpers (static)
 
 static NSString *ASImageSavePillText(uint64_t bytes) {
-    if (bytes == 0) return @"Save --MB";
+    if (bytes == 0) return NSLocalizedString(@"Save --MB",nil);
     uint64_t saveBytes = bytes / 2; // 固定 50%
     double mb = (double)saveBytes / (1024.0 * 1024.0);
-    return [NSString stringWithFormat:@"Save %.0fMB", mb];
+    return [NSString stringWithFormat:NSLocalizedString(@"Save %.0fMB",nil), mb];
 }
 
 static NSString * const kASLiveSizeCachePlist = @"as_live_size_cache_v1.plist";
@@ -167,7 +167,6 @@ static NSString *ASMBPill(uint64_t bytes) {
             [_checkBtn.widthAnchor constraintEqualToConstant:AS(23)],
             [_checkBtn.heightAnchor constraintEqualToConstant:AS(23)],
 
-            // ✅ 点击热区也缩放
             [_checkTapBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
             [_checkTapBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [_checkTapBtn.widthAnchor constraintEqualToConstant:AS(56)],
@@ -252,7 +251,6 @@ static NSString *ASMBPill(uint64_t bytes) {
     opt.networkAccessAllowed = YES;
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
 
-    // ✅ 2500 固定值改为跟屏幕相关的合理值（且不放大UI比例）
     CGFloat sc = UIScreen.mainScreen.scale;
     CGFloat maxSide = MAX(UIScreen.mainScreen.bounds.size.width, UIScreen.mainScreen.bounds.size.height) * sc;
     CGSize target = CGSizeMake(maxSide, maxSide);
@@ -446,7 +444,7 @@ static NSString *ASMBPill(uint64_t bytes) {
     NSArray<PHAsset *> *newA = selectedAssets ?: @[];
     _selectedAssets = [newA copy];
 
-    self.titleLabel.text = [NSString stringWithFormat:@"Selected %ld Live Photo", (long)newA.count];
+    self.titleLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Selected %ld Live Photo",nil), (long)newA.count];
 
     if (old.count == 0 && newA.count == 0) return;
 
@@ -687,7 +685,6 @@ UICollectionViewDataSourcePrefetching
     CGFloat safeB = 0;
     if (@available(iOS 11.0,*)) safeB = self.view.safeAreaInsets.bottom;
 
-    // ✅ 高度也按 402 缩放
     self.selectedBarHeightC.constant = AS(130.0) + safeB;
 
     [self updateThumbTargetSizeIfNeeded];
@@ -714,7 +711,7 @@ UICollectionViewDataSourcePrefetching
     [self.blueHeader addSubview:self.backBtn];
 
     self.headerTitle = [UILabel new];
-    self.headerTitle.text = @"Live Photo Compressor";
+    self.headerTitle.text = NSLocalizedString(@"Live Photo Compressor",nil);
     self.headerTitle.font = ASFontS(24, UIFontWeightSemibold);
     self.headerTitle.textColor = UIColor.whiteColor;
     self.headerTitle.textAlignment = NSTextAlignmentCenter;
@@ -730,7 +727,7 @@ UICollectionViewDataSourcePrefetching
     [self.blueHeader addSubview:self.headerTotal];
 
     self.headerSubtitle = [UILabel new];
-    self.headerSubtitle.text = @"After converting Live Photos, you can save --";
+    self.headerSubtitle.text = NSLocalizedString(@"After converting Live Photos, you can save --",nil);
     self.headerSubtitle.font = ASFontS(12, UIFontWeightRegular);
     self.headerSubtitle.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.95];
     self.headerSubtitle.textAlignment = NSTextAlignmentCenter;
@@ -756,12 +753,12 @@ UICollectionViewDataSourcePrefetching
     self.filterScroll.translatesAutoresizingMaskIntoConstraints = NO;
     [self.card addSubview:self.filterScroll];
 
-    UIButton *b0 = [self makeFilterButton:@"All" tag:0];
-    UIButton *b1 = [self makeFilterButton:@"Today" tag:1];
-    UIButton *b2 = [self makeFilterButton:@"This week" tag:2];
-    UIButton *b3 = [self makeFilterButton:@"This month" tag:3];
-    UIButton *b4 = [self makeFilterButton:@"Last month" tag:4];
-    UIButton *b5 = [self makeFilterButton:@"Past 6 months" tag:5];
+    UIButton *b0 = [self makeFilterButton:NSLocalizedString(@"All",nil) tag:0];
+    UIButton *b1 = [self makeFilterButton:NSLocalizedString(@"Today",nil) tag:1];
+    UIButton *b2 = [self makeFilterButton:NSLocalizedString(@"This week",nil) tag:2];
+    UIButton *b3 = [self makeFilterButton:NSLocalizedString(@"This month",nil) tag:3];
+    UIButton *b4 = [self makeFilterButton:NSLocalizedString(@"Last month",nil) tag:4];
+    UIButton *b5 = [self makeFilterButton:NSLocalizedString(@"Past 6 months",nil) tag:5];
     self.filterButtons = @[b0,b1,b2,b3,b4,b5];
 
     self.filterStack = [[UIStackView alloc] initWithArrangedSubviews:self.filterButtons];
@@ -910,7 +907,6 @@ UICollectionViewDataSourcePrefetching
             CGFloat rawSide = (contentW - inter * (columns - 1)) / (CGFloat)columns;
             CGFloat itemSide = floor(rawSide * scale) / scale;
 
-            // ✅ 原来 90 的兜底也缩放
             CGFloat minSide = AS(90);
             if (itemSide < minSide) itemSide = minSide;
 
@@ -952,7 +948,6 @@ UICollectionViewDataSourcePrefetching
                                                                                       alignment:NSRectAlignmentTop];
             sec.boundarySupplementaryItems = @[header];
 
-            // ✅ thumb 像素尺寸也随 itemSide 变化
             weakSelf.thumbPixelSize = CGSizeMake(itemSide * scale * 1.6, itemSide * scale * 1.6);
 
             return sec;
@@ -980,7 +975,6 @@ UICollectionViewDataSourcePrefetching
 }
 
 #pragma mark - Auth + Load
-// 下面逻辑与原代码一致（仅UI适配，不动业务）
 
 - (void)ensureAuthThenLoadFast {
     PHAuthorizationStatus st;
@@ -1003,7 +997,7 @@ UICollectionViewDataSourcePrefetching
     }
 }
 
-/// ✅ 只取 Live Photo：Image + Hidden + 多来源 + 排除非 Live + 不要 video
+/// 只取 Live Photo：Image + Hidden + 多来源 + 排除非 Live + 不要 video
 - (void)loadAssetsFast {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         PHFetchOptions *opt = [PHFetchOptions new];
@@ -1108,7 +1102,7 @@ UICollectionViewDataSourcePrefetching
     if (possiblyUnknown && known > 0 && (pending > 0 || failed > 0)) totalText = [totalText stringByAppendingString:@"+"];
 
     NSString *savedText = saved > 0 ? ASHumanSizeShort(saved) : @"--";
-    NSString *prefix = @"After converting Live Photos, you can save ";
+    NSString *prefix = NSLocalizedString(@"After converting Live Photos, you can save ",nil);
     NSString *full = [prefix stringByAppendingString:savedText];
 
     NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full];
@@ -1132,7 +1126,7 @@ UICollectionViewDataSourcePrefetching
     return n ? n.unsignedLongLongValue : 0;
 }
 
-/// ✅ Live Photo 占用：图片资源 + paired video 资源一起加
+/// Live Photo 占用：图片资源 + paired video 资源一起加
 - (uint64_t)fileSizeForAsset:(PHAsset *)asset {
     NSArray<PHAssetResource *> *resources = [PHAssetResource assetResourcesForAsset:asset];
     if (resources.count == 0) return 0;

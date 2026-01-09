@@ -3,8 +3,6 @@
 #import <UIKit/UIKit.h>
 #import <Photos/Photos.h>
 
-#pragma mark - ===== 402宽设计稿：只缩小不放大（竖屏） =====
-// 如果项目里已有同名函数/宏，请删除这一段，保留全局那份即可
 static inline CGFloat ASDesignWidth(void) { return 402.0; }
 static inline CGFloat ASScale(void) {
     CGFloat w = UIScreen.mainScreen.bounds.size.width;
@@ -134,7 +132,7 @@ static NSString *ASDurationText(NSTimeInterval duration) {
         _savePill.showsTouchWhenHighlighted = NO;
         _savePill.backgroundColor = ASBlue();
 
-        _savePill.layer.cornerRadius = AS(26); // 最终会在 layoutSubviews 里用高度/2 覆盖
+        _savePill.layer.cornerRadius = AS(26);
         _savePill.layer.masksToBounds = YES;
 
         _savePill.titleLabel.font = ASFontS(12, UIFontWeightMedium);
@@ -207,15 +205,14 @@ UICollectionViewDataSourcePrefetching
 @property (nonatomic, assign) BOOL didStartComputeAll;
 @property (nonatomic, strong) PHCachingImageManager *cachingMgr;
 
-// async token (可选，用于防止筛选切换串线程)
 @property (nonatomic, assign) NSInteger filterToken;
 
 // Header (blue)
 @property (nonatomic, strong) UIView *blueHeader;
 @property (nonatomic, strong) UIButton *backBtn;
 @property (nonatomic, strong) UILabel *headerTitle;
-@property (nonatomic, strong) UILabel *headerTotal;     // 8.91GB
-@property (nonatomic, strong) UILabel *headerSubtitle;  // Total storage... 4.45GB
+@property (nonatomic, strong) UILabel *headerTotal;
+@property (nonatomic, strong) UILabel *headerSubtitle;
 
 // White Card Container
 @property (nonatomic, strong) UIView *card;
@@ -259,7 +256,6 @@ UICollectionViewDataSourcePrefetching
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    // 永远胶囊：圆角=高度/2
     self.layer.cornerRadius = self.bounds.size.height * 0.5;
 }
 @end
@@ -334,9 +330,9 @@ UICollectionViewDataSourcePrefetching
     [self updateThumbTargetSizeIfNeeded];
 
     if (@available(iOS 11.0, *)) {
-        CGFloat bottom = self.view.safeAreaInsets.bottom; // TabBar / Home indicator
+        CGFloat bottom = self.view.safeAreaInsets.bottom;
         UIEdgeInsets insets = self.collectionView.contentInset;
-        insets.bottom = bottom; // 只留 safeArea，不多留“空白”
+        insets.bottom = bottom;
         self.collectionView.contentInset = insets;
         self.collectionView.scrollIndicatorInsets = insets;
     }
@@ -368,7 +364,7 @@ UICollectionViewDataSourcePrefetching
     [self.blueHeader addSubview:self.backBtn];
 
     self.headerTitle = [UILabel new];
-    self.headerTitle.text = @"Video Compression";
+    self.headerTitle.text = NSLocalizedString(@"Video Compression",nil);
     self.headerTitle.font = ASFontS(24, UIFontWeightSemibold);
     self.headerTitle.textColor = UIColor.whiteColor;
     self.headerTitle.textAlignment = NSTextAlignmentCenter;
@@ -384,7 +380,7 @@ UICollectionViewDataSourcePrefetching
     [self.blueHeader addSubview:self.headerTotal];
 
     self.headerSubtitle = [UILabel new];
-    self.headerSubtitle.text = @"Total storage space saved by compressed videos --";
+    self.headerSubtitle.text = NSLocalizedString(@"Total storage space saved by compressed videos --",nil);
     self.headerSubtitle.font = ASFontS(12, UIFontWeightRegular);
     self.headerSubtitle.textColor = [[UIColor whiteColor] colorWithAlphaComponent:1];
     self.headerSubtitle.textAlignment = NSTextAlignmentCenter;
@@ -415,12 +411,12 @@ UICollectionViewDataSourcePrefetching
     self.filterScroll.translatesAutoresizingMaskIntoConstraints = NO;
     [self.card addSubview:self.filterScroll];
 
-    UIButton *b0 = [self makeFilterButton:@"All" tag:0];
-    UIButton *b1 = [self makeFilterButton:@"Today" tag:1];
-    UIButton *b2 = [self makeFilterButton:@"This week" tag:2];
-    UIButton *b3 = [self makeFilterButton:@"This month" tag:3];
-    UIButton *b4 = [self makeFilterButton:@"Last month" tag:4];
-    UIButton *b5 = [self makeFilterButton:@"Past 6 months" tag:5];
+    UIButton *b0 = [self makeFilterButton:NSLocalizedString(@"All",nil) tag:0];
+    UIButton *b1 = [self makeFilterButton:NSLocalizedString(@"Today",nil) tag:1];
+    UIButton *b2 = [self makeFilterButton:NSLocalizedString(@"This week",nil) tag:2];
+    UIButton *b3 = [self makeFilterButton:NSLocalizedString(@"This month",nil) tag:3];
+    UIButton *b4 = [self makeFilterButton:NSLocalizedString(@"Last month",nil) tag:4];
+    UIButton *b5 = [self makeFilterButton:NSLocalizedString(@"Past 6 months",nil) tag:5];
     self.filterButtons = @[b0,b1,b2,b3,b4,b5];
 
     self.filterStack = [[UIStackView alloc] initWithArrangedSubviews:self.filterButtons];
@@ -432,7 +428,6 @@ UICollectionViewDataSourcePrefetching
     [self.filterScroll addSubview:self.filterStack];
 
     [NSLayoutConstraint activateConstraints:@[
-        // ✅ 筛选栏离白卡顶部 20
         [self.filterScroll.topAnchor constraintEqualToAnchor:self.card.topAnchor constant:AS(20)],
         [self.filterScroll.leadingAnchor constraintEqualToAnchor:self.card.leadingAnchor],
         [self.filterScroll.trailingAnchor constraintEqualToAnchor:self.card.trailingAnchor],
@@ -443,7 +438,6 @@ UICollectionViewDataSourcePrefetching
         [self.filterStack.topAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.topAnchor],
         [self.filterStack.bottomAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.bottomAnchor],
 
-        // ✅ 关键：scroll 的“高度”跟随 stack 的高度（按钮自适应高度）
         [self.filterScroll.heightAnchor constraintEqualToAnchor:self.filterStack.heightAnchor],
     ]];
 
@@ -489,17 +483,14 @@ UICollectionViewDataSourcePrefetching
         [self.headerSubtitle.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:sideInset],
         [self.headerSubtitle.trailingAnchor constraintEqualToAnchor:self.blueHeader.trailingAnchor constant:-sideInset],
 
-        // ✅ 白卡离上面文字 30
         [self.card.topAnchor constraintEqualToAnchor:self.headerSubtitle.bottomAnchor constant:AS(30)],
 
-        // header 刚好到白卡顶部（保证白卡圆角“露出来”）
         [self.blueHeader.bottomAnchor constraintEqualToAnchor:self.card.topAnchor constant:AS(22)],
 
         [self.card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.card.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
-        // ✅ 列表离筛选 20
         [self.collectionView.topAnchor constraintEqualToAnchor:self.filterScroll.bottomAnchor constant:AS(20)],
         [self.collectionView.leadingAnchor constraintEqualToAnchor:self.card.leadingAnchor],
         [self.collectionView.trailingAnchor constraintEqualToAnchor:self.card.trailingAnchor],
@@ -555,13 +546,10 @@ UICollectionViewDataSourcePrefetching
 
         NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
 
-        // 卡片间距 10
         section.interGroupSpacing = AS(10);
 
-        // 顺滑横滑（不分页）
         section.orthogonalScrollingBehavior = UICollectionLayoutSectionOrthogonalScrollingBehaviorContinuous;
 
-        // 卡片左边对齐 20（标题也跟随）
         section.contentInsets = NSDirectionalEdgeInsetsMake(0, AS(20), 0, 0);
         section.supplementariesFollowContentInsets = YES;
 
@@ -619,7 +607,6 @@ UICollectionViewDataSourcePrefetching
             [arr addObject:obj];
         }];
 
-        // ✅ 预热：从磁盘 metaCache 验证 modificationDate 是否匹配
         NSDictionary *metaSnap = nil;
         @synchronized (self.sizeMetaCache) { metaSnap = [self.sizeMetaCache copy]; }
 
@@ -785,7 +772,7 @@ UICollectionViewDataSourcePrefetching
     }
 
     NSString *savedText = saved > 0 ? ASHumanSizeShort(saved) : @"--";
-    NSString *prefix = @"Total storage space saved by compressed videos ";
+    NSString *prefix = NSLocalizedString(@"Total storage space saved by compressed videos ",nil);
     NSString *full = [prefix stringByAppendingString:savedText];
 
     NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full];
@@ -810,7 +797,6 @@ UICollectionViewDataSourcePrefetching
     __weak typeof(self) weakSelf = self;
     NSArray<PHAsset *> *assets = self.allVideos ?: @[];
 
-    // ✅ 只算缺失的
     NSMutableArray<PHAsset *> *missing = [NSMutableArray array];
     for (PHAsset *a in assets) {
         NSNumber *n = nil;
@@ -860,7 +846,6 @@ UICollectionViewDataSourcePrefetching
             [[NSOperationQueue mainQueue] addOperationWithBlock:^{
                 [weakSelf refreshHeaderStatsPossiblyUnknown:NO];
                 [weakSelf scheduleSaveSizeCache];
-                // ✅ 最终只刷新一次分组/列表
                 [weakSelf applyFilterIndex:weakSelf.filterIndex];
             }];
         }
@@ -982,10 +967,10 @@ UICollectionViewDataSourcePrefetching
 }
 
 - (NSString *)savePillTextForBytes:(uint64_t)bytes {
-    if (bytes == 0) return @"Save --MB";
+    if (bytes == 0) return NSLocalizedString(@"Save --MB",nil);
     uint64_t saveBytes = bytes / 2;
     double mb = (double)saveBytes / (1024.0 * 1024.0);
-    return [NSString stringWithFormat:@"Save %.0fMB", mb];
+    return [NSString stringWithFormat:NSLocalizedString(@"Save %.0fMB",nil), mb];
 }
 
 #pragma mark - UICollectionView DataSource
@@ -1055,12 +1040,10 @@ UICollectionViewDataSourcePrefetching
 
             BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
 
-            // ✅ degraded 去抖：已经有图就不要低清覆盖，避免闪一下
             if (degraded && weakCell.thumbView.image) return;
 
             weakCell.thumbView.image = result;
 
-            // ✅ 高清到达后释放 requestId
             if (!degraded) weakCell.requestId = PHInvalidImageRequestID;
         }];
     }

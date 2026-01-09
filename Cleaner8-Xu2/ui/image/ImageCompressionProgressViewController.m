@@ -104,7 +104,6 @@ static NSString *ASMB1(uint64_t bytes){
             [self.track.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
             [self.track.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
 
-            // track 底部贴 bar 底部（用于和左右文案底部对齐）
             [self.track.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:0],
             [self.track.heightAnchor constraintEqualToConstant:trackH],
 
@@ -112,7 +111,6 @@ static NSString *ASMB1(uint64_t bytes){
             [self.fill.topAnchor constraintEqualToAnchor:self.track.topAnchor],
             [self.fill.bottomAnchor constraintEqualToAnchor:self.track.bottomAnchor],
 
-            // icon 覆盖在进度条上方（不被裁切）
             [self.icon.centerYAnchor constraintEqualToAnchor:self.track.centerYAnchor constant:AS(2)],
             [self.icon.widthAnchor constraintEqualToConstant:iconS],
             [self.icon.heightAnchor constraintEqualToConstant:iconS],
@@ -120,7 +118,6 @@ static NSString *ASMB1(uint64_t bytes){
             [self.bubble.bottomAnchor constraintEqualToAnchor:self.track.topAnchor constant:-AS(10)],
             [self.bubble.heightAnchor constraintEqualToConstant:bubbleH],
 
-            // bubbleLabel：上下 8，左右 5
             [self.bubbleLabel.leadingAnchor constraintEqualToAnchor:self.bubble.leadingAnchor constant:AS(5)],
             [self.bubbleLabel.trailingAnchor constraintEqualToAnchor:self.bubble.trailingAnchor constant:-AS(5)],
             [self.bubbleLabel.topAnchor constraintEqualToAnchor:self.bubble.topAnchor constant:AS(8)],
@@ -294,10 +291,10 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
 
             UIAlertController *ac =
             [UIAlertController alertControllerWithTitle:failedTitle
-                                                message:error.localizedDescription ?: @"Unknown error"
+                                                message:error.localizedDescription ?: NSLocalizedString(@"Unknown error",nil)
                                          preferredStyle:UIAlertControllerStyleAlert];
 
-            [ac addAction:[UIAlertAction actionWithTitle:@"OK"
+            [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK",nil)
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(__unused UIAlertAction * _Nonnull action) {
                 [self.navigationController popViewControllerAnimated:YES];
@@ -421,7 +418,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     [header addSubview:self.backBtn];
 
     self.titleLabel = [UILabel new];
-    self.titleLabel.text = @"In Process";
+    self.titleLabel.text = NSLocalizedString(@"In Process",nil);
     self.titleLabel.font = ASSB(24);
     self.titleLabel.textColor = UIColor.blackColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -429,7 +426,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     [header addSubview:self.titleLabel];
 
     self.cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.cancelBtn setTitle:@"Cancel" forState:UIControlStateNormal];
+    [self.cancelBtn setTitle:NSLocalizedString(@"Cancel",nil) forState:UIControlStateNormal];
     self.cancelBtn.titleLabel.font = ASBD(20);
     [self.cancelBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.cancelBtn.backgroundColor = ASBlue();
@@ -507,7 +504,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     self.tipLabel.numberOfLines = 0;
     self.tipLabel.lineBreakMode = NSLineBreakByWordWrapping;
     self.tipLabel.textAlignment = NSTextAlignmentCenter;
-    self.tipLabel.text = @"It is recommended not to minimize or close the app...";
+    self.tipLabel.text = NSLocalizedString(@"It is recommended not to minimize or close the app...",nil);
     self.tipLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [self.scrollContentView addSubview:self.tipLabel];
 
@@ -606,7 +603,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
             });
 
         } completion:^(ASImageCompressionSummary * _Nullable summary, NSError * _Nullable error) {
-            [weakSelf as_finishWithSummary:summary error:error failedTitle:@"Convert Failed"];
+            [weakSelf as_finishWithSummary:summary error:error failedTitle:NSLocalizedString(@"Convert Failed",nil)];
         }];
         return;
     }
@@ -624,7 +621,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
         });
 
     } completion:^(ASImageCompressionSummary * _Nullable summary, NSError * _Nullable error) {
-        [weakSelf as_finishWithSummary:summary error:error failedTitle:@"Compress Failed"];
+        [weakSelf as_finishWithSummary:summary error:error failedTitle:NSLocalizedString(@"Compress Failed",nil)];
     }];
 }
 
@@ -648,14 +645,14 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
     self.showingCancelAlert = YES;
 
     UIAlertController *ac =
-    [UIAlertController alertControllerWithTitle:@"Cancel Conversion"
-                                        message:@"Are you sure you want to cancel the conversion of this Photo?"
+    [UIAlertController alertControllerWithTitle:NSLocalizedString(@"Cancel Conversion",nil)
+                                        message:NSLocalizedString(@"Are you sure you want to cancel the conversion of this Photo?",nil)
                                  preferredStyle:UIAlertControllerStyleAlert];
 
     self.cancelAlert = ac;
 
     __weak typeof(self) weakSelf = self;
-    [ac addAction:[UIAlertAction actionWithTitle:@"NO" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction * _Nonnull action) {
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"NO",nil) style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction * _Nonnull action) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
         self.showingCancelAlert = NO;
@@ -663,7 +660,7 @@ typedef NS_ENUM(NSInteger, ASProgressMode) {
         [self resetPopGesture];
     }]];
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"YES" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"YES",nil) style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
         self.showingCancelAlert = NO;

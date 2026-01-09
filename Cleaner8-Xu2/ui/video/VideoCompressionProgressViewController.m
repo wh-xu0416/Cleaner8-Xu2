@@ -4,8 +4,6 @@
 #import "VideoCompressionResultViewController.h"
 #import "VideoCompressionManager.h"
 
-#pragma mark - ===== 402宽设计稿：只缩小不放大（竖屏） =====
-
 static inline CGFloat ASDesignWidth(void) { return 402.0; }
 static inline CGFloat ASScale(void) {
     CGFloat w = UIScreen.mainScreen.bounds.size.width;
@@ -261,11 +259,11 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
             }
 
             UIAlertController *ac =
-            [UIAlertController alertControllerWithTitle:@"Compress Failed"
-                                                message:error.localizedDescription ?: @"Unknown error"
+            [UIAlertController alertControllerWithTitle:NSLocalizedString(@"Compress Failed",nil)
+                                                message:error.localizedDescription ?: NSLocalizedString(@"Unknown error",nil)
                                          preferredStyle:UIAlertControllerStyleAlert];
 
-            [ac addAction:[UIAlertAction actionWithTitle:@"OK"
+            [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK",nil)
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(__unused UIAlertAction * _Nonnull action) {
                 [self.navigationController popViewControllerAnimated:YES];
@@ -390,7 +388,7 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
     [header addSubview:self.backBtn];
 
     self.titleLabel = [UILabel new];
-    self.titleLabel.text = @"In Process";
+    self.titleLabel.text = NSLocalizedString(@"In Process",nil);
     self.titleLabel.font = ASFontS(24, UIFontWeightSemibold);
     self.titleLabel.textColor = UIColor.blackColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -398,7 +396,7 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
     [header addSubview:self.titleLabel];
 
     self.cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.cancelBtn setTitle:@"Cancel" forState:UIControlStateNormal];
+    [self.cancelBtn setTitle:NSLocalizedString(@"Cancel",nil) forState:UIControlStateNormal];
     self.cancelBtn.titleLabel.font = ASFontS(20, UIFontWeightBold);
     [self.cancelBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.cancelBtn.backgroundColor = ASBlue();
@@ -478,7 +476,7 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
     self.tipLabel.numberOfLines = 0;
     self.tipLabel.lineBreakMode = NSLineBreakByWordWrapping;
     self.tipLabel.textAlignment = NSTextAlignmentCenter;
-    self.tipLabel.text = @"It is recommended not to minimize or close the app...";
+    self.tipLabel.text = NSLocalizedString(@"It is recommended not to minimize or close the app...",nil);
     self.tipLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [self.scrollContentView addSubview:self.tipLabel];
 
@@ -571,7 +569,6 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
 
     CGFloat screenScale = UIScreen.mainScreen.scale;
 
-    // ✅ 目标尺寸跟随缩放后的 UI 尺寸（再乘屏幕 scale）
     CGSize target = CGSizeMake(AS(210) * screenScale * 2.0, AS(280) * screenScale * 2.0);
 
     [[PHImageManager defaultManager] requestImageForAsset:asset
@@ -628,15 +625,15 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
     self.showingCancelAlert = YES;
 
     UIAlertController *ac =
-    [UIAlertController alertControllerWithTitle:@"Cancel Conversion"
-                                        message:@"Are you sure you want to cancel the conversion of this Video?"
+    [UIAlertController alertControllerWithTitle:NSLocalizedString(@"Cancel Conversion",nil)
+                                        message:NSLocalizedString(@"Are you sure you want to cancel the conversion of this Video?",nil)
                                  preferredStyle:UIAlertControllerStyleAlert];
 
     self.cancelAlert = ac;
 
     __weak typeof(self) weakSelf = self;
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"NO"
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"NO",nil)
                                           style:UIAlertActionStyleCancel
                                         handler:^(__unused UIAlertAction * _Nonnull action) {
         weakSelf.showingCancelAlert = NO;
@@ -644,7 +641,7 @@ static double ASRemainRatioForQuality(ASCompressionQuality q) {
         [weakSelf resetPopGesture];
     }]];
 
-    [ac addAction:[UIAlertAction actionWithTitle:@"YES"
+    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"YES",nil)
                                           style:UIAlertActionStyleDestructive
                                         handler:^(__unused UIAlertAction * _Nonnull action) {
         weakSelf.showingCancelAlert = NO;

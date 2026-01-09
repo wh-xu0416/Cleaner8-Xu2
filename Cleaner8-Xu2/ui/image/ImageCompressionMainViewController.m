@@ -4,7 +4,6 @@
 #import <UIKit/UIKit.h>
 #import <Photos/Photos.h>
 
-#pragma mark - ===== 402宽设计稿：只缩小不放大（竖屏） =====
 static inline CGFloat ASDesignWidth(void) { return 402.0; }
 static inline CGFloat ASScale(void) {
     CGFloat w = UIScreen.mainScreen.bounds.size.width;
