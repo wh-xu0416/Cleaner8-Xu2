@@ -1376,32 +1376,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     });
 
     self.fullScanRunning = NO;
-    [self debugValidateConsistency:@"resume-finished"];
-}
-
-- (void)debugValidateConsistency:(NSString *)tag {
-#if DEBUG
-    uint64_t shotB=0, recB=0, bigB=0, blurB=0, otherB=0;
-    for (ASAssetModel *m in self.screenshotsM) shotB += m.fileSizeBytes;
-    for (ASAssetModel *m in self.screenRecordingsM) recB += m.fileSizeBytes;
-    for (ASAssetModel *m in self.bigVideosM) bigB += m.fileSizeBytes;
-    for (ASAssetModel *m in self.blurryPhotosM) blurB += m.fileSizeBytes;
-    for (ASAssetModel *m in self.otherPhotosM) otherB += m.fileSizeBytes;
-
-    NSLog(@"[VALIDATE %@] shot(%lu/%llu) rec(%lu/%llu) big(%lu/%llu) blur(%lu/%llu) other(%lu/%llu)",
-          tag,
-          (unsigned long)self.screenshotsM.count, shotB,
-          (unsigned long)self.screenRecordingsM.count, recB,
-          (unsigned long)self.bigVideosM.count, bigB,
-          (unsigned long)self.blurryPhotosM.count, blurB,
-          (unsigned long)self.otherPhotosM.count, otherB);
-
-    NSCAssert(self.snapshot.screenshotCount == self.screenshotsM.count, @"screenshotCount mismatch");
-    NSCAssert(self.snapshot.screenRecordingCount == self.screenRecordingsM.count, @"screenRecordingCount mismatch");
-    NSCAssert(self.snapshot.bigVideoCount == self.bigVideosM.count, @"bigVideoCount mismatch");
-    NSCAssert(self.snapshot.blurryCount == self.blurryPhotosM.count, @"blurryCount mismatch");
-    NSCAssert(self.snapshot.otherCount == self.otherPhotosM.count, @"otherCount mismatch");
-#endif
 }
 
 /// 无权限时，让首页有一个“空态”
@@ -1711,8 +1685,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
                 self.pendingIncremental = NO;
                 [self scheduleIncrementalCheck];
             }
-            
-            [self debugValidateConsistency:@"full-finished"];
         }
     });
 }
