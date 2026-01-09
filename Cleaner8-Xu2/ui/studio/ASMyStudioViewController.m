@@ -7,11 +7,26 @@
 #import "ASStudioCell.h"
 #import "ASStudioUtils.h"
 #import "ASTabSegmentView.h"
-#import "Common.h"
-
 #import "ASMediaPreviewViewController.h"
 
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r));
+}
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) {
+    return [UIFont systemFontOfSize:round(s * ASScale()) weight:w];
+}
+
 static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; }
+static inline UIColor *ASSecondaryLabel(void) {
+    if (@available(iOS 13.0, *)) return UIColor.secondaryLabelColor;
+    return [UIColor colorWithWhite:0.45 alpha:1.0];
+}
 
 @interface ASMyStudioViewController () <UITableViewDelegate, UITableViewDataSource, PHPhotoLibraryChangeObserver>
 
@@ -26,16 +41,19 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
 
 @property (nonatomic, strong) UIView *emptyView;
 @property (nonatomic, strong) UILabel *emptyLabel;
-//@property (nonatomic, strong) UIButton *limitedBtn;
 
 @property (nonatomic, strong) PHCachingImageManager *imgMgr;
 @property (nonatomic, strong) NSArray<ASStudioItem *> *data;
 @property (nonatomic, assign) ASStudioMediaType currentType;
 @property (nonatomic, strong) NSArray<PHAsset *> *selectedAssets;
 
+@property (nonatomic, assign) UIEdgeInsets baseTableInsets;
+
 @end
 
 @implementation ASMyStudioViewController
+
+- (UIStatusBarStyle)preferredStatusBarStyle { return UIStatusBarStyleLightContent; }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
@@ -51,6 +69,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     self.imgMgr = [PHCachingImageManager new];
     self.data = @[];
     self.currentType = ASStudioMediaTypePhoto;
+    self.baseTableInsets = UIEdgeInsetsZero;
 
     [self buildUI];
 
@@ -62,30 +81,49 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self applyTableSafeBottomInset];
+}
+
+#pragma mark - Safe bottom inset
+
+- (void)applyTableSafeBottomInset {
+    CGFloat safeB = 0;
+    if (@available(iOS 11.0,*)) safeB = self.view.safeAreaInsets.bottom;
+
+    UIEdgeInsets insets = self.baseTableInsets;
+    insets.bottom = MAX(insets.bottom, safeB);
+
+    if (!UIEdgeInsetsEqualToEdgeInsets(self.table.contentInset, insets)) {
+        self.table.contentInset = insets;
+        self.table.scrollIndicatorInsets = insets;
+    }
+}
+
 #pragma mark - UI
 
 - (void)buildUI {
+    CGFloat sideInset = AS(20);
+
     self.blueHeader = [UIView new];
     self.blueHeader.translatesAutoresizingMaskIntoConstraints = NO;
     self.blueHeader.backgroundColor = ASBlue();
     [self.view addSubview:self.blueHeader];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-
     UIImage *backImg = [[UIImage imageNamed:@"ic_return_white"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.backBtn setImage:backImg forState:UIControlStateNormal];
-
-    self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.backBtn.contentEdgeInsets = ASEdgeInsets(10, 10, 10, 10);
     self.backBtn.adjustsImageWhenHighlighted = NO;
-
     [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.blueHeader addSubview:self.backBtn];
 
     self.titleLabel = [UILabel new];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.text = NSLocalizedString(@"My studio", nil);
-    self.titleLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
+    self.titleLabel.text = @"My studio";
+    self.titleLabel.font = ASFontS(24, UIFontWeightSemibold);
     self.titleLabel.textColor = UIColor.whiteColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.blueHeader addSubview:self.titleLabel];
@@ -93,8 +131,11 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     self.whiteCard = [UIView new];
     self.whiteCard.translatesAutoresizingMaskIntoConstraints = NO;
     self.whiteCard.backgroundColor = UIColor.whiteColor;
-    self.whiteCard.layer.cornerRadius = 16;
+    self.whiteCard.layer.cornerRadius = AS(16);
     self.whiteCard.layer.masksToBounds = YES;
+    if (@available(iOS 11.0,*)) {
+        self.whiteCard.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+    }
     [self.view addSubview:self.whiteCard];
 
     self.tabs = [ASTabSegmentView new];
@@ -113,9 +154,17 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     self.table.dataSource = self;
     self.table.backgroundColor = UIColor.whiteColor;
     self.table.separatorStyle = UITableViewCellSeparatorStyleNone;
-    self.table.rowHeight = 110;
+    self.table.rowHeight = AS(110);
     self.table.tableFooterView = [UIView new];
     [self.table registerClass:[ASStudioCell class] forCellReuseIdentifier:@"ASStudioCell"];
+
+    // ✅ 保持你现有视觉：默认不额外留底部空白，安全区由 applyTableSafeBottomInset 处理
+    self.baseTableInsets = UIEdgeInsetsMake(0, 0, 0, 0);
+    self.table.contentInset = self.baseTableInsets;
+    self.table.scrollIndicatorInsets = self.baseTableInsets;
+
+    if (@available(iOS 11.0,*)) self.table.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+
     [self.whiteCard addSubview:self.table];
 
     self.emptyView = [UIView new];
@@ -126,58 +175,56 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     self.emptyLabel = [UILabel new];
     self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
-    self.emptyLabel.textColor = [UIColor secondaryLabelColor];
+    self.emptyLabel.textColor = ASSecondaryLabel();
+    self.emptyLabel.font = ASFontS(15, UIFontWeightRegular);
     self.emptyLabel.numberOfLines = 0;
     [self.emptyView addSubview:self.emptyLabel];
 
-//    self.limitedBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-//    self.limitedBtn.translatesAutoresizingMaskIntoConstraints = NO;
-//    [self.limitedBtn setTitle:@"Manage Limited Photos Access" forState:UIControlStateNormal];
-//    [self.limitedBtn addTarget:self action:@selector(onLimited:) forControlEvents:UIControlEventTouchUpInside];
-//    self.limitedBtn.hidden = YES;
-//    [self.emptyView addSubview:self.limitedBtn];
-
     [NSLayoutConstraint activateConstraints:@[
+        // blue header
         [self.blueHeader.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.blueHeader.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.blueHeader.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:6],
-        [self.backBtn.topAnchor constraintEqualToAnchor:self.blueHeader.safeAreaLayoutGuide.topAnchor constant:10],
-        [self.backBtn.widthAnchor constraintEqualToConstant:44],
-        [self.backBtn.heightAnchor constraintEqualToConstant:44],
+        // back
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:AS(6)],
+        [self.backBtn.topAnchor constraintEqualToAnchor:self.blueHeader.safeAreaLayoutGuide.topAnchor constant:AS(10)],
+        [self.backBtn.widthAnchor constraintEqualToConstant:AS(44)],
+        [self.backBtn.heightAnchor constraintEqualToConstant:AS(44)],
 
+        // title centered with back
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.blueHeader.centerXAnchor],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.backBtn.centerYAnchor],
 
-        [self.whiteCard.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:20],
-        [self.blueHeader.bottomAnchor constraintEqualToAnchor:self.whiteCard.topAnchor constant:22],
-        [self.whiteCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:0],
-        [self.whiteCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:0],
-        [self.whiteCard.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:0],
+        [self.whiteCard.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:AS(20)],
+        [self.blueHeader.bottomAnchor constraintEqualToAnchor:self.whiteCard.topAnchor constant:AS(22)],
 
-        [self.tabs.topAnchor constraintEqualToAnchor:self.whiteCard.topAnchor constant:-5],
+        [self.whiteCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.whiteCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.whiteCard.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+
+        // tabs
+        [self.tabs.topAnchor constraintEqualToAnchor:self.whiteCard.topAnchor constant:-AS(5)],
         [self.tabs.leadingAnchor constraintEqualToAnchor:self.whiteCard.leadingAnchor],
         [self.tabs.trailingAnchor constraintEqualToAnchor:self.whiteCard.trailingAnchor],
-        [self.tabs.heightAnchor constraintEqualToConstant:62],
+        [self.tabs.heightAnchor constraintEqualToConstant:AS(62)],
 
-        [self.table.topAnchor constraintEqualToAnchor:self.tabs.bottomAnchor constant:0],
+        // table
+        [self.table.topAnchor constraintEqualToAnchor:self.tabs.bottomAnchor],
         [self.table.leadingAnchor constraintEqualToAnchor:self.whiteCard.leadingAnchor],
         [self.table.trailingAnchor constraintEqualToAnchor:self.whiteCard.trailingAnchor],
         [self.table.bottomAnchor constraintEqualToAnchor:self.whiteCard.bottomAnchor],
 
+        // empty view overlays table area
         [self.emptyView.topAnchor constraintEqualToAnchor:self.table.topAnchor],
         [self.emptyView.leadingAnchor constraintEqualToAnchor:self.whiteCard.leadingAnchor],
         [self.emptyView.trailingAnchor constraintEqualToAnchor:self.whiteCard.trailingAnchor],
         [self.emptyView.bottomAnchor constraintEqualToAnchor:self.whiteCard.bottomAnchor],
 
         [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.emptyView.centerXAnchor],
-        [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.emptyView.centerYAnchor constant:-20],
-        [self.emptyLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.emptyView.leadingAnchor constant:20],
-        [self.emptyLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.emptyView.trailingAnchor constant:-20],
-
-//        [self.limitedBtn.topAnchor constraintEqualToAnchor:self.emptyLabel.bottomAnchor constant:14],
-//        [self.limitedBtn.centerXAnchor constraintEqualToAnchor:self.emptyView.centerXAnchor],
+        [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.emptyView.centerYAnchor constant:-AS(20)],
+        [self.emptyLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.emptyView.leadingAnchor constant:sideInset],
+        [self.emptyLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.emptyView.trailingAnchor constant:-sideInset],
     ]];
 
     self.emptyView.hidden = YES;
@@ -221,22 +268,16 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
 
 - (void)refreshUIForAuth:(PHAuthorizationStatus)st {
     BOOL canRead = (st == PHAuthorizationStatusAuthorized) || (st == PHAuthorizationStatusLimited);
-//    self.limitedBtn.hidden = !(st == PHAuthorizationStatusLimited);
 
     if (!canRead) {
         self.table.hidden = YES;
         self.emptyView.hidden = NO;
-        self.emptyLabel.text = NSLocalizedString(@"Photos access is required.\nPlease enable Photos permission in Settings.", nil);
+        self.emptyLabel.text = @"Photos access is required.\nPlease enable Photos permission in Settings.";
         return;
     }
 
     self.table.hidden = NO;
-}
-
-- (void)onLimited:(id)sender {
-    if (@available(iOS 14, *)) {
-        [[PHPhotoLibrary sharedPhotoLibrary] presentLimitedLibraryPickerFromViewController:self];
-    }
+    // emptyView 是否显示由 loadData 决定
 }
 
 #pragma mark - Data
@@ -257,7 +298,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
         PHFetchResult<PHAsset *> *r = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
         NSMutableSet<NSString *> *existing = [NSMutableSet setWithCapacity:r.count];
         [r enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-            [existing addObject:obj.localIdentifier];
+            if (obj.localIdentifier) [existing addObject:obj.localIdentifier];
         }];
         [[ASStudioStore shared] removeItemsNotInAssetIdSet:existing];
     }
@@ -274,10 +315,11 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
 
     BOOL has = (self.data.count > 0);
     self.emptyView.hidden = has;
+
     if (!has) {
         self.emptyLabel.text = (self.currentType == ASStudioMediaTypePhoto)
-        ? NSLocalizedString(@"No photos yet.\nCompress photos to see them here.", nil)
-        : NSLocalizedString(@"No videos yet.\nCompress videos to see them here.", nil);
+        ? @"No photos yet.\nCompress photos to see them here."
+        : @"No videos yet.\nCompress videos to see them here.";
     }
 }
 
@@ -291,7 +333,7 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     ASStudioCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ASStudioCell" forIndexPath:ip];
     ASStudioItem *it = self.data[ip.row];
 
-    cell.nameLabel.text = it.displayName.length ? it.displayName : NSLocalizedString(@"(Unnamed)", nil);
+    cell.nameLabel.text = it.displayName.length ? it.displayName : @"(Unnamed)";
 
     NSString *sizeText = [ASStudioUtils humanBytes:it.afterBytes];
     if (it.type == ASStudioMediaTypeVideo) {
@@ -308,19 +350,22 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     [cell.deleteButton removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
     [cell.deleteButton addTarget:self action:@selector(onDelete:) forControlEvents:UIControlEventTouchUpInside];
 
+    // thumb
     cell.thumbView.image = nil;
+
     if (it.assetId.length > 0) {
         PHFetchResult<PHAsset *> *r = [PHAsset fetchAssetsWithLocalIdentifiers:@[it.assetId] options:nil];
         PHAsset *asset = r.firstObject;
         if (asset) {
-            CGFloat scale = UIScreen.mainScreen.scale;
-            CGSize target = CGSizeMake(70 * scale, 70 * scale);
+            CGFloat sc = UIScreen.mainScreen.scale;
+            CGSize target = CGSizeMake(AS(70) * sc, AS(70) * sc);
 
             PHImageRequestOptions *opt = [PHImageRequestOptions new];
             opt.networkAccessAllowed = YES;
             opt.resizeMode = PHImageRequestOptionsResizeModeFast;
             opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
 
+            // ✅ 异步回调只更新“当前还在屏幕上的同一行”
             [self.imgMgr requestImageForAsset:asset
                                    targetSize:target
                                   contentMode:PHImageContentModeAspectFill
@@ -338,7 +383,22 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     return cell;
 }
 
-// 进入预览页
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)ip {
+    [tableView deselectRowAtIndexPath:ip animated:YES];
+
+    ASStudioItem *it = self.data[ip.row];
+    if (it.assetId.length == 0) return;
+
+    PHFetchResult<PHAsset *> *r = [PHAsset fetchAssetsWithLocalIdentifiers:@[it.assetId] options:nil];
+    PHAsset *asset = r.firstObject;
+    if (!asset) return;
+
+    self.selectedAssets = @[asset];
+    [self goPreviewAssets:self.selectedAssets];
+}
+
+#pragma mark - Preview
+
 - (void)goPreviewAssets:(NSArray<PHAsset *> *)assets {
     if (assets.count == 0) return;
 
@@ -359,65 +419,6 @@ static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green
     };
 
     [self.navigationController pushViewController:p animated:YES];
-}
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)ip {
-    [tableView deselectRowAtIndexPath:ip animated:YES];
-
-    ASStudioItem *it = self.data[ip.row];
-    if (it.assetId.length == 0) return;
-
-    PHFetchResult<PHAsset *> *r = [PHAsset fetchAssetsWithLocalIdentifiers:@[it.assetId] options:nil];
-    PHAsset *asset = r.firstObject;
-    if (!asset) return;
-
-    self.selectedAssets = @[asset];
-    [self goPreviewAssets:self.selectedAssets];
-}
-
-#pragma mark - Preview
-
-- (void)previewPhotoAsset:(PHAsset *)asset {
-    PHImageRequestOptions *opt = [PHImageRequestOptions new];
-    opt.networkAccessAllowed = YES;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
-
-    CGSize target = CGSizeMake(asset.pixelWidth, asset.pixelHeight);
-    [self.imgMgr requestImageForAsset:asset
-                           targetSize:target
-                          contentMode:PHImageContentModeAspectFit
-                              options:opt
-                        resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
-        if (!result) return;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            UIViewController *vc = [UIViewController new];
-            vc.view.backgroundColor = UIColor.blackColor;
-
-            UIImageView *iv = [[UIImageView alloc] initWithImage:result];
-            iv.contentMode = UIViewContentModeScaleAspectFit;
-            iv.frame = vc.view.bounds;
-            iv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-            [vc.view addSubview:iv];
-
-            [self.navigationController pushViewController:vc animated:YES];
-        });
-    }];
-}
-
-- (void)previewVideoAsset:(PHAsset *)asset {
-    PHVideoRequestOptions *opt = [PHVideoRequestOptions new];
-    opt.networkAccessAllowed = YES;
-
-    [[PHImageManager defaultManager] requestAVAssetForVideo:asset options:opt resultHandler:^(AVAsset * _Nullable avAsset, AVAudioMix * _Nullable audioMix, NSDictionary * _Nullable info) {
-        if (!avAsset) return;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            AVPlayerViewController *pvc = [AVPlayerViewController new];
-            pvc.player = [AVPlayer playerWithPlayerItem:[AVPlayerItem playerItemWithAsset:avAsset]];
-            [self presentViewController:pvc animated:YES completion:^{
-                [pvc.player play];
-            }];
-        });
-    }];
 }
 
 #pragma mark - Delete

@@ -1,16 +1,26 @@
 #import "ImageCompressionMainViewController.h"
 #import "ImageCompressionQualityViewController.h"
 #import "ASMediaPreviewViewController.h"
-#import "Common.h"
 #import <UIKit/UIKit.h>
 #import <Photos/Photos.h>
 
-#pragma mark - Helpers (static)
+#pragma mark - ===== 402宽设计稿：只缩小不放大（竖屏） =====
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
+#pragma mark - Helpers
+
 static NSString *ASImageSavePillText(uint64_t bytes) {
-    if (bytes == 0) return NSLocalizedString(@"Save --MB", nil);
+    if (bytes == 0) return NSLocalizedString(@"Save --MB",nil);
     uint64_t saveBytes = bytes / 2; // 固定 50%
     double mb = (double)saveBytes / (1024.0 * 1024.0);
-    return [NSString stringWithFormat:NSLocalizedString(@"Save %.0fMB", nil), mb];
+    return [NSString stringWithFormat:NSLocalizedString(@"Save %.0fMB",nil), mb];
 }
 
 static NSString * const kASImgSizeCachePlist = @"as_img_size_cache_v2.plist";
@@ -55,7 +65,7 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 @implementation ASPaddingLabel
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
-        _textInsets = UIEdgeInsetsMake(5, 10, 5, 10);
+        _textInsets = ASEdgeInsets(5, 10, 5, 10);
     }
     return self;
 }
@@ -90,29 +100,29 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         self.backgroundColor = UIColor.clearColor;
 
         _titleLabel = [UILabel new];
-        _titleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightSemibold];
+        _titleLabel.font = ASFontS(22, UIFontWeightSemibold);
         _titleLabel.textColor = UIColor.blackColor;
         _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         [self addSubview:_titleLabel];
 
         [NSLayoutConstraint activateConstraints:@[
-            [_titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
-            [_titleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-20],
-            [_titleLabel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-8],
+            [_titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:AS(20)],
+            [_titleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-AS(20)],
+            [_titleLabel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-AS(8)],
         ]];
     }
     return self;
 }
 @end
 
-#pragma mark - Cell
+#pragma mark - Cell (corner 12, check top-right, pill bottom-right)
 
 @interface ASImgCell : UICollectionViewCell
 @property (nonatomic, assign) PHImageRequestID requestId;
 @property (nonatomic, strong) UIImageView *thumbView;
 @property (nonatomic, strong) ASPaddingLabel *pill;
-@property (nonatomic, strong) UIButton *checkBtn;
-@property (nonatomic, strong) UIButton *checkTapBtn;
+@property (nonatomic, strong) UIButton *checkBtn;     // icon only
+@property (nonatomic, strong) UIButton *checkTapBtn;  // bigger tap area
 @property (nonatomic, copy) NSString *representedAssetIdentifier;
 - (void)applySelectedUI:(BOOL)sel;
 @end
@@ -121,7 +131,7 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
         self.contentView.backgroundColor = UIColor.whiteColor;
-        self.contentView.layer.cornerRadius = 12;
+        self.contentView.layer.cornerRadius = AS(12);
         self.contentView.layer.masksToBounds = YES;
         _requestId = PHInvalidImageRequestID;
 
@@ -142,11 +152,11 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         [self.contentView addSubview:_checkTapBtn];
 
         _pill = [ASPaddingLabel new];
-        _pill.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+        _pill.font = ASFontS(13, UIFontWeightSemibold);
         _pill.textColor = UIColor.whiteColor;
         _pill.backgroundColor = ASBlue();
         _pill.textAlignment = NSTextAlignmentCenter;
-        _pill.layer.cornerRadius = 14;
+        _pill.layer.cornerRadius = AS(14);
         _pill.layer.masksToBounds = YES;
         _pill.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:_pill];
@@ -157,19 +167,19 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
             [_thumbView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
             [_thumbView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            [_checkBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-10],
-            [_checkBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:10],
-            [_checkBtn.widthAnchor constraintEqualToConstant:23],
-            [_checkBtn.heightAnchor constraintEqualToConstant:23],
+            [_checkBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-AS(10)],
+            [_checkBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:AS(10)],
+            [_checkBtn.widthAnchor constraintEqualToConstant:AS(23)],
+            [_checkBtn.heightAnchor constraintEqualToConstant:AS(23)],
 
             [_checkTapBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
             [_checkTapBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
-            [_checkTapBtn.widthAnchor constraintEqualToConstant:56],
-            [_checkTapBtn.heightAnchor constraintEqualToConstant:56],
+            [_checkTapBtn.widthAnchor constraintEqualToConstant:AS(56)],
+            [_checkTapBtn.heightAnchor constraintEqualToConstant:AS(56)],
 
-            [_pill.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-10],
-            [_pill.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-10],
-            [_pill.heightAnchor constraintEqualToConstant:28],
+            [_pill.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-AS(10)],
+            [_pill.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-AS(10)],
+            [_pill.heightAnchor constraintEqualToConstant:AS(28)],
         ]];
 
         self.thumbView.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1];
@@ -199,7 +209,6 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 
     [self.checkBtn setImage:(sel ? onImg : offImg) forState:UIControlStateNormal];
 }
-
 @end
 
 #pragma mark - Preview VC (tap to preview)
@@ -237,18 +246,22 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         [_iv.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [_iv.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
-        [close.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:10],
-        [close.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [close.widthAnchor constraintEqualToConstant:34],
-        [close.heightAnchor constraintEqualToConstant:34],
+        [close.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:AS(10)],
+        [close.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(16)],
+        [close.widthAnchor constraintEqualToConstant:AS(34)],
+        [close.heightAnchor constraintEqualToConstant:AS(34)],
     ]];
 
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.networkAccessAllowed = YES;
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
 
+    CGFloat sc = UIScreen.mainScreen.scale;
+    CGFloat maxSide = MAX(UIScreen.mainScreen.bounds.size.width, UIScreen.mainScreen.bounds.size.height) * sc;
+    CGSize target = CGSizeMake(maxSide, maxSide);
+
     [[PHImageManager defaultManager] requestImageForAsset:self.asset
-                                              targetSize:CGSizeMake(2500, 2500)
+                                              targetSize:target
                                              contentMode:PHImageContentModeAspectFit
                                                  options:opt
                                            resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
@@ -257,6 +270,8 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 }
 - (void)dismissSelf { [self dismissViewControllerAnimated:YES completion:nil]; }
 @end
+
+#pragma mark - Mini Cell (selected bar)
 
 @interface ASMiniCell : UICollectionViewCell
 @property (nonatomic, strong) UIImageView *iv;
@@ -279,7 +294,7 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         self.iv = [UIImageView new];
         self.iv.contentMode = UIViewContentModeScaleAspectFill;
         self.iv.clipsToBounds = YES;
-        self.iv.layer.cornerRadius = 8;
+        self.iv.layer.cornerRadius = AS(8);
         self.iv.layer.masksToBounds = YES;
         self.iv.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:self.iv];
@@ -287,13 +302,13 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         self.delBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         self.delBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
-        self.delBtn.layer.cornerRadius = 12;
+        self.delBtn.layer.cornerRadius = AS(12);
         self.delBtn.layer.masksToBounds = YES;
 
         UIImage *del = [[UIImage imageNamed:@"ic_delete"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         [self.delBtn setImage:del forState:UIControlStateNormal];
 
-        self.delBtn.contentEdgeInsets = UIEdgeInsetsMake(4, 4, 4, 4);
+        self.delBtn.contentEdgeInsets = ASEdgeInsets(4,4,4,4);
         self.delBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
 
         self.delBtn.layer.zPosition = 1000;
@@ -306,10 +321,10 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
             [self.iv.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.iv.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            [self.delBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-8],
-            [self.delBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:8],
-            [self.delBtn.widthAnchor constraintEqualToConstant:24],
-            [self.delBtn.heightAnchor constraintEqualToConstant:24],
+            [self.delBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-AS(8)],
+            [self.delBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:AS(8)],
+            [self.delBtn.widthAnchor constraintEqualToConstant:AS(24)],
+            [self.delBtn.heightAnchor constraintEqualToConstant:AS(24)],
         ]];
     }
     return self;
@@ -324,7 +339,6 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
     if ([super pointInside:point withEvent:event]) return YES;
-
     CGPoint p = [self convertPoint:point toView:self.contentView];
     return CGRectContainsPoint(self.delBtn.frame, p);
 }
@@ -349,10 +363,11 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
+
         UIView *cardView = [UIView new];
         cardView.backgroundColor = UIColor.whiteColor;
         cardView.translatesAutoresizingMaskIntoConstraints = NO;
-        cardView.layer.cornerRadius = 16;
+        cardView.layer.cornerRadius = AS(16);
         if (@available(iOS 11.0,*)) {
             cardView.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
         }
@@ -364,8 +379,8 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 
         self.layer.shadowColor = [UIColor blackColor].CGColor;
         self.layer.shadowOpacity = (0x33 / 255.0);        // ≈0.2
-        self.layer.shadowOffset = CGSizeMake(0, -5);
-        self.layer.shadowRadius = 10;
+        self.layer.shadowOffset = CGSizeMake(0, -AS(5));
+        self.layer.shadowRadius = AS(10);
 
         [self addSubview:cardView];
         [NSLayoutConstraint activateConstraints:@[
@@ -378,13 +393,13 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         self.cachingMgr = [PHCachingImageManager new];
 
         self.titleLabel = [UILabel new];
-        self.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+        self.titleLabel.font = ASFontS(17, UIFontWeightMedium);
         self.titleLabel.textColor = UIColor.blackColor;
 
         UICollectionViewFlowLayout *lay = [UICollectionViewFlowLayout new];
         lay.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-        lay.minimumLineSpacing = 10;
-        lay.sectionInset = UIEdgeInsetsMake(0, 20, 0, 20);
+        lay.minimumLineSpacing = AS(10);
+        lay.sectionInset = UIEdgeInsetsMake(0, AS(20), 0, AS(20));
 
         self.cv = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:lay];
         self.cv.backgroundColor = UIColor.clearColor;
@@ -394,18 +409,14 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         [self.cv registerClass:ASMiniCell.class forCellWithReuseIdentifier:@"mini"];
         self.cv.clipsToBounds = NO;
         self.cv.layer.masksToBounds = NO;
-        
+
         self.goBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-
-        UIImage *todoImg = [[UIImage imageNamed:@"ic_todo_big"]
-                            imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        UIImage *todoImg = [[UIImage imageNamed:@"ic_todo_big"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         [self.goBtn setImage:todoImg forState:UIControlStateNormal];
-
         self.goBtn.backgroundColor = UIColor.clearColor;
         self.goBtn.adjustsImageWhenHighlighted = NO;
         self.goBtn.showsTouchWhenHighlighted = NO;
         self.goBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
-
         [self.goBtn addTarget:self action:@selector(onGoTap) forControlEvents:UIControlEventTouchUpInside];
 
         [cardView addSubview:self.titleLabel];
@@ -419,20 +430,21 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         UILayoutGuide *safe = self.safeAreaLayoutGuide;
 
         [NSLayoutConstraint activateConstraints:@[
-            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
-            [self.titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:20],
+            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:AS(20)],
+            [self.titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:AS(20)],
 
-            [self.goBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16],
+            [self.goBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-AS(16)],
             [self.goBtn.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
-            [self.goBtn.widthAnchor constraintEqualToConstant:60],
-            [self.goBtn.heightAnchor constraintEqualToConstant:36],
+            [self.goBtn.widthAnchor constraintEqualToConstant:AS(60)],
+            [self.goBtn.heightAnchor constraintEqualToConstant:AS(36)],
 
             [self.cv.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
             [self.cv.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-            [self.cv.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:10],
-            [self.cv.heightAnchor constraintEqualToConstant:64],
+            [self.cv.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:AS(10)],
+            [self.cv.heightAnchor constraintEqualToConstant:AS(64)],
 
-            [self.cv.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-8],
+            // content bottom sits on safeArea (background still reaches screen bottom)
+            [self.cv.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-AS(8)],
         ]];
     }
     return self;
@@ -445,7 +457,7 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
     NSArray<PHAsset *> *newA = selectedAssets ?: @[];
     _selectedAssets = [newA copy];
 
-    self.titleLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Selected %ld Image", nil), (long)newA.count];
+    self.titleLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Selected %ld Image",nil), (long)newA.count];
 
     if (old.count == 0 && newA.count == 0) return;
 
@@ -472,6 +484,7 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
             if (rm != NSNotFound) break;
         }
         if (rm == NSNotFound) rm = old.count-1;
+
         BOOL ok = YES;
         for (NSInteger k=rm;k<newA.count;k++) {
             if (![old[k+1].localIdentifier isEqualToString:newA[k].localIdentifier]) { ok = NO; break; }
@@ -530,7 +543,7 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
         opt.resizeMode = PHImageRequestOptionsResizeModeFast;
         opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
 
-        CGFloat px = 64.0 * UIScreen.mainScreen.scale * 2.0;
+        CGFloat px = AS(64.0) * UIScreen.mainScreen.scale * 2.0;
         CGSize target = CGSizeMake(px, px);
 
         __weak typeof(cell) weakCell = cell;
@@ -558,7 +571,7 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 }
 
 - (void)onDelTap:(UIButton *)btn {
-    CGPoint p = [btn convertPoint:CGPointMake(12, 12) toView:self.cv];
+    CGPoint p = [btn convertPoint:CGPointMake(AS(12), AS(12)) toView:self.cv];
     NSIndexPath *ip = [self.cv indexPathForItemAtPoint:p];
     if (!ip) return;
     PHAsset *a = self.selectedAssets[ip.item];
@@ -566,9 +579,8 @@ static NSString *ASMBPillSaved(uint64_t bytes) {
 }
 
 - (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout*)collectionViewLayout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    return CGSizeMake(64, 64);
+    return CGSizeMake(AS(64), AS(64));
 }
-
 @end
 
 #pragma mark - Pill Button (filter)
@@ -697,7 +709,8 @@ UICollectionViewDataSourcePrefetching
 
         BOOL already = NO;
         for (PHAsset *x in self.selectedAssets) {
-            if ([x.localIdentifier ?: @"" isEqualToString:aid]) { already = YES; break; }
+            NSString *xid = x.localIdentifier ?: @"";
+            if ([xid isEqualToString:aid]) { already = YES; break; }
         }
         if (!already) [self.selectedAssets addObject:a];
     }
@@ -745,7 +758,7 @@ UICollectionViewDataSourcePrefetching
 
     CGFloat safeB = 0;
     if (@available(iOS 11.0,*)) safeB = self.view.safeAreaInsets.bottom;
-    self.selectedBarHeightC.constant = 130.0 + safeB;
+    self.selectedBarHeightC.constant = AS(130.0) + safeB;
 
     [self updateThumbTargetSizeIfNeeded];
     [self updateBottomInsetsForSelectedBarAnimated:NO];
@@ -754,7 +767,7 @@ UICollectionViewDataSourcePrefetching
 #pragma mark - UI
 
 - (void)setupHeaderAndCardUI {
-    CGFloat sideInset = 20;
+    CGFloat sideInset = AS(20);
 
     self.blueHeader = [UIView new];
     self.blueHeader.backgroundColor = ASBlue();
@@ -762,21 +775,17 @@ UICollectionViewDataSourcePrefetching
     [self.view addSubview:self.blueHeader];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-
     UIImage *backImg = [[UIImage imageNamed:@"ic_return_white"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.backBtn setImage:backImg forState:UIControlStateNormal];
-
-    self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.backBtn.contentEdgeInsets = ASEdgeInsets(10, 10, 10, 10);
     self.backBtn.adjustsImageWhenHighlighted = NO;
-
     [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
-
     [self.blueHeader addSubview:self.backBtn];
 
     self.headerTitle = [UILabel new];
-    self.headerTitle.text = NSLocalizedString(@"Image Compressor", nil);
-    self.headerTitle.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
+    self.headerTitle.text = NSLocalizedString(@"Image Compressor",nil);
+    self.headerTitle.font = ASFontS(24, UIFontWeightSemibold);
     self.headerTitle.textColor = UIColor.whiteColor;
     self.headerTitle.textAlignment = NSTextAlignmentCenter;
     self.headerTitle.translatesAutoresizingMaskIntoConstraints = NO;
@@ -784,15 +793,15 @@ UICollectionViewDataSourcePrefetching
 
     self.headerTotal = [UILabel new];
     self.headerTotal.text = @"--";
-    self.headerTotal.font = [UIFont systemFontOfSize:34 weight:UIFontWeightSemibold];
+    self.headerTotal.font = ASFontS(34, UIFontWeightSemibold);
     self.headerTotal.textColor = UIColor.whiteColor;
     self.headerTotal.textAlignment = NSTextAlignmentCenter;
     self.headerTotal.translatesAutoresizingMaskIntoConstraints = NO;
     [self.blueHeader addSubview:self.headerTotal];
 
     self.headerSubtitle = [UILabel new];
-    self.headerSubtitle.text = NSLocalizedString(@"Total storage space saved by compressed photos --", nil);
-    self.headerSubtitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
+    self.headerSubtitle.text = NSLocalizedString(@"Total storage space saved by compressed photos --",nil);
+    self.headerSubtitle.font = ASFontS(12, UIFontWeightRegular);
     self.headerSubtitle.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.95];
     self.headerSubtitle.textAlignment = NSTextAlignmentCenter;
     self.headerSubtitle.translatesAutoresizingMaskIntoConstraints = NO;
@@ -801,7 +810,7 @@ UICollectionViewDataSourcePrefetching
     self.card = [UIView new];
     self.card.backgroundColor = UIColor.whiteColor;
     self.card.translatesAutoresizingMaskIntoConstraints = NO;
-    self.card.layer.cornerRadius = 16;
+    self.card.layer.cornerRadius = AS(16);
     self.card.layer.masksToBounds = YES;
     if (@available(iOS 11.0,*)) {
         self.card.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
@@ -815,28 +824,28 @@ UICollectionViewDataSourcePrefetching
     self.filterScroll.translatesAutoresizingMaskIntoConstraints = NO;
     [self.card addSubview:self.filterScroll];
 
-    UIButton *b0 = [self makeFilterButton:NSLocalizedString(@"All", nil) tag:0];
-    UIButton *b1 = [self makeFilterButton:NSLocalizedString(@"Today", nil) tag:1];
-    UIButton *b2 = [self makeFilterButton:NSLocalizedString(@"This week", nil) tag:2];
-    UIButton *b3 = [self makeFilterButton:NSLocalizedString(@"This month", nil) tag:3];
-    UIButton *b4 = [self makeFilterButton:NSLocalizedString(@"Last month", nil) tag:4];
-    UIButton *b5 = [self makeFilterButton:NSLocalizedString(@"Past 6 months", nil) tag:5];
+    UIButton *b0 = [self makeFilterButton:NSLocalizedString(@"All",nil) tag:0];
+    UIButton *b1 = [self makeFilterButton:NSLocalizedString(@"Today",nil) tag:1];
+    UIButton *b2 = [self makeFilterButton:NSLocalizedString(@"This week",nil) tag:2];
+    UIButton *b3 = [self makeFilterButton:NSLocalizedString(@"This month",nil) tag:3];
+    UIButton *b4 = [self makeFilterButton:NSLocalizedString(@"Last month",nil) tag:4];
+    UIButton *b5 = [self makeFilterButton:NSLocalizedString(@"Past 6 months",nil) tag:5];
     self.filterButtons = @[b0,b1,b2,b3,b4,b5];
 
     self.filterStack = [[UIStackView alloc] initWithArrangedSubviews:self.filterButtons];
     self.filterStack.axis = UILayoutConstraintAxisHorizontal;
-    self.filterStack.spacing = 12;
+    self.filterStack.spacing = AS(12);
     self.filterStack.alignment = UIStackViewAlignmentCenter;
     self.filterStack.translatesAutoresizingMaskIntoConstraints = NO;
     [self.filterScroll addSubview:self.filterStack];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.filterScroll.topAnchor constraintEqualToAnchor:self.card.topAnchor constant:20],
+        [self.filterScroll.topAnchor constraintEqualToAnchor:self.card.topAnchor constant:AS(20)],
         [self.filterScroll.leadingAnchor constraintEqualToAnchor:self.card.leadingAnchor],
         [self.filterScroll.trailingAnchor constraintEqualToAnchor:self.card.trailingAnchor],
 
-        [self.filterStack.leadingAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.leadingAnchor constant:20],
-        [self.filterStack.trailingAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.trailingAnchor constant:-20],
+        [self.filterStack.leadingAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.leadingAnchor constant:AS(20)],
+        [self.filterStack.trailingAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.trailingAnchor constant:-AS(20)],
         [self.filterStack.topAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.topAnchor],
         [self.filterStack.bottomAnchor constraintEqualToAnchor:self.filterScroll.contentLayoutGuide.bottomAnchor],
 
@@ -872,39 +881,39 @@ UICollectionViewDataSourcePrefetching
         [self.blueHeader.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.blueHeader.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:6],
-        [self.backBtn.topAnchor constraintEqualToAnchor:self.blueHeader.safeAreaLayoutGuide.topAnchor constant:10],
-        [self.backBtn.widthAnchor constraintEqualToConstant:44],
-        [self.backBtn.heightAnchor constraintEqualToConstant:44],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:AS(6)],
+        [self.backBtn.topAnchor constraintEqualToAnchor:self.blueHeader.safeAreaLayoutGuide.topAnchor constant:AS(10)],
+        [self.backBtn.widthAnchor constraintEqualToConstant:AS(44)],
+        [self.backBtn.heightAnchor constraintEqualToConstant:AS(44)],
 
         [self.headerTitle.centerXAnchor constraintEqualToAnchor:self.blueHeader.centerXAnchor],
         [self.headerTitle.centerYAnchor constraintEqualToAnchor:self.backBtn.centerYAnchor],
 
         [self.headerTotal.centerXAnchor constraintEqualToAnchor:self.blueHeader.centerXAnchor],
-        [self.headerTotal.topAnchor constraintEqualToAnchor:self.headerTitle.bottomAnchor constant:14],
+        [self.headerTotal.topAnchor constraintEqualToAnchor:self.headerTitle.bottomAnchor constant:AS(14)],
 
         [self.headerSubtitle.centerXAnchor constraintEqualToAnchor:self.blueHeader.centerXAnchor],
-        [self.headerSubtitle.topAnchor constraintEqualToAnchor:self.headerTotal.bottomAnchor constant:10],
+        [self.headerSubtitle.topAnchor constraintEqualToAnchor:self.headerTotal.bottomAnchor constant:AS(10)],
         [self.headerSubtitle.leadingAnchor constraintEqualToAnchor:self.blueHeader.leadingAnchor constant:sideInset],
         [self.headerSubtitle.trailingAnchor constraintEqualToAnchor:self.blueHeader.trailingAnchor constant:-sideInset],
 
-        [self.card.topAnchor constraintEqualToAnchor:self.headerSubtitle.bottomAnchor constant:28],
-        [self.blueHeader.bottomAnchor constraintEqualToAnchor:self.card.topAnchor constant:22],
+        [self.card.topAnchor constraintEqualToAnchor:self.headerSubtitle.bottomAnchor constant:AS(28)],
+        [self.blueHeader.bottomAnchor constraintEqualToAnchor:self.card.topAnchor constant:AS(22)],
 
         [self.card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.card.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
-        [self.collectionView.topAnchor constraintEqualToAnchor:self.filterScroll.bottomAnchor constant:20],
+        [self.collectionView.topAnchor constraintEqualToAnchor:self.filterScroll.bottomAnchor constant:AS(20)],
         [self.collectionView.leadingAnchor constraintEqualToAnchor:self.card.leadingAnchor],
         [self.collectionView.trailingAnchor constraintEqualToAnchor:self.card.trailingAnchor],
         [self.collectionView.bottomAnchor constraintEqualToAnchor:self.card.bottomAnchor],
 
-        [self.selectedBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:0],
-        [self.selectedBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:0],
+        [self.selectedBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.selectedBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
     ]];
 
-    self.selectedBarHeightC = [self.selectedBar.heightAnchor constraintEqualToConstant:150];
+    self.selectedBarHeightC = [self.selectedBar.heightAnchor constraintEqualToConstant:AS(150)];
     self.selectedBarHeightC.active = YES;
 
     self.selectedBarHiddenC = [self.selectedBar.topAnchor constraintEqualToAnchor:self.view.bottomAnchor];
@@ -919,8 +928,8 @@ UICollectionViewDataSourcePrefetching
 - (UIButton *)makeFilterButton:(NSString *)title tag:(NSInteger)tag {
     ASImagePillButton *b = [ASImagePillButton new];
     [b setTitle:title forState:UIControlStateNormal];
-    b.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightRegular];
-    b.contentEdgeInsets = UIEdgeInsetsMake(7, 15, 7, 15);
+    b.titleLabel.font = ASFontS(17, UIFontWeightRegular);
+    b.contentEdgeInsets = ASEdgeInsets(7, 15, 7, 15);
     b.tag = tag;
     [b addTarget:self action:@selector(onFilterTap:) forControlEvents:UIControlEventTouchUpInside];
     return b;
@@ -948,8 +957,8 @@ UICollectionViewDataSourcePrefetching
         UICollectionViewCompositionalLayout *layout =
         [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection * _Nullable(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment>  _Nonnull environment) {
 
-            CGFloat inter   = 5.0;
-            CGFloat leading = 20.0;
+            CGFloat inter   = AS(5.0);
+            CGFloat leading = AS(20.0);
             NSInteger columns = 3;
 
             NSInteger itemCount = 0;
@@ -1005,7 +1014,7 @@ UICollectionViewDataSourcePrefetching
 
             NSCollectionLayoutSize *headerSize =
             [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:40]];
+                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:AS(40)]];
             NSCollectionLayoutBoundarySupplementaryItem *header =
             [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize
                                                                                      elementKind:UICollectionElementKindSectionHeader
@@ -1018,20 +1027,20 @@ UICollectionViewDataSourcePrefetching
         }];
 
         UICollectionViewCompositionalLayoutConfiguration *config = [UICollectionViewCompositionalLayoutConfiguration new];
-        config.interSectionSpacing = 18;
+        config.interSectionSpacing = AS(18);
         layout.configuration = config;
         return layout;
     }
 
     UICollectionViewFlowLayout *fl = [UICollectionViewFlowLayout new];
     fl.scrollDirection = UICollectionViewScrollDirectionVertical;
-    fl.sectionInset = UIEdgeInsetsMake(0, 20, 0, 20);
-    fl.minimumLineSpacing = 5;
-    fl.minimumInteritemSpacing = 5;
+    fl.sectionInset = UIEdgeInsetsMake(0, AS(20), 0, AS(20));
+    fl.minimumLineSpacing = AS(5);
+    fl.minimumInteritemSpacing = AS(5);
 
-    CGFloat contentW = UIScreen.mainScreen.bounds.size.width - 20*2;
+    CGFloat contentW = UIScreen.mainScreen.bounds.size.width - AS(20)*2;
     NSInteger columns = 3;
-    CGFloat side = floor((contentW - 5*(columns-1)) / columns);
+    CGFloat side = floor((contentW - AS(5)*(columns-1)) / columns);
     fl.itemSize = CGSizeMake(side, side);
     return fl;
 }
@@ -1039,10 +1048,10 @@ UICollectionViewDataSourcePrefetching
 - (void)updateThumbTargetSizeIfNeeded {
     if (!CGSizeEqualToSize(self.thumbPixelSize, CGSizeZero)) return;
     CGFloat scale = UIScreen.mainScreen.scale;
-    self.thumbPixelSize = CGSizeMake(120 * scale, 120 * scale);
+    self.thumbPixelSize = CGSizeMake(AS(120) * scale, AS(120) * scale);
 }
 
-#pragma mark - Auth + Load
+#pragma mark - Auth + Load (不卡 UI)
 
 - (void)ensureAuthThenLoadFast {
     PHAuthorizationStatus st;
@@ -1090,7 +1099,7 @@ UICollectionViewDataSourcePrefetching
         [result enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
             [arr addObject:obj];
         }];
-        
+
         NSDictionary *metaSnap = nil;
         @synchronized (self.sizeMetaCache) { metaSnap = [self.sizeMetaCache copy]; }
 
@@ -1135,37 +1144,6 @@ UICollectionViewDataSourcePrefetching
     });
 }
 
-
-- (void)prewarmStatsFromDiskCache {
-    uint64_t known = 0;
-    NSInteger pending = 0;
-
-    for (PHAsset *a in self.allImages) {
-        NSString *aid = a.localIdentifier ?: @"";
-        NSDictionary *rec = nil;
-        @synchronized (self.sizeMetaCache) { rec = self.sizeMetaCache[aid]; }
-
-        if (rec) {
-            uint64_t s = [rec[@"s"] unsignedLongLongValue];
-            NSTimeInterval cachedM = [rec[@"m"] doubleValue];
-            NSTimeInterval curM = a.modificationDate ? a.modificationDate.timeIntervalSince1970 : 0;
-
-            if (s > 0 && fabs(curM - cachedM) < 1.0) {
-                @synchronized (self.sizeCache) { self.sizeCache[aid] = @(s); }
-                known += s;
-                continue;
-            }
-        }
-        pending += 1;
-    }
-
-    @synchronized(self.statsLock) {
-        self.statsKnownBytes = known;
-        self.statsPending = pending;
-        self.statsFailed = 0;
-    }
-}
-
 - (void)scheduleSaveSizeCache {
     @synchronized (self) {
         if (self.sizeCacheSaveScheduled) return;
@@ -1200,13 +1178,13 @@ UICollectionViewDataSourcePrefetching
     if (possiblyUnknown && known > 0 && (pending > 0 || failed > 0)) totalText = [totalText stringByAppendingString:@"+"];
 
     NSString *savedText = saved > 0 ? ASHumanSizeShort(saved) : @"--";
-    NSString *prefix = NSLocalizedString(@"Total storage space saved by compressed photos ", nil);
+    NSString *prefix = NSLocalizedString(@"Total storage space saved by compressed photos ",nil);
     NSString *full = [prefix stringByAppendingString:savedText];
 
     NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full];
     [att addAttribute:NSForegroundColorAttributeName value:[[UIColor whiteColor] colorWithAlphaComponent:0.85] range:NSMakeRange(0, full.length)];
-    [att addAttribute:NSFontAttributeName value:[UIFont systemFontOfSize:12 weight:UIFontWeightRegular] range:NSMakeRange(0, full.length)];
-    [att addAttribute:NSFontAttributeName value:[UIFont systemFontOfSize:12 weight:UIFontWeightSemibold] range:NSMakeRange(prefix.length, savedText.length)];
+    [att addAttribute:NSFontAttributeName value:ASFontS(12, UIFontWeightRegular) range:NSMakeRange(0, full.length)];
+    [att addAttribute:NSFontAttributeName value:ASFontS(12, UIFontWeightSemibold) range:NSMakeRange(prefix.length, savedText.length)];
     [att addAttribute:NSForegroundColorAttributeName value:UIColor.whiteColor range:NSMakeRange(prefix.length, savedText.length)];
 
     [CATransaction begin];
@@ -1222,13 +1200,13 @@ UICollectionViewDataSourcePrefetching
     UILabel *lab = [UILabel new];
     lab.text = text;
     lab.textColor = UIColor.whiteColor;
-    lab.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    lab.font = ASFontS(14, UIFontWeightMedium);
     lab.numberOfLines = 0;
     lab.textAlignment = NSTextAlignmentCenter;
 
     UIView *bg = [UIView new];
     bg.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.75];
-    bg.layer.cornerRadius = 10;
+    bg.layer.cornerRadius = AS(10);
     bg.layer.masksToBounds = YES;
 
     [bg addSubview:lab];
@@ -1236,17 +1214,17 @@ UICollectionViewDataSourcePrefetching
     bg.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:bg];
 
-    CGFloat side = 24;
+    CGFloat side = AS(24);
     [NSLayoutConstraint activateConstraints:@[
-        [lab.leadingAnchor constraintEqualToAnchor:bg.leadingAnchor constant:12],
-        [lab.trailingAnchor constraintEqualToAnchor:bg.trailingAnchor constant:-12],
-        [lab.topAnchor constraintEqualToAnchor:bg.topAnchor constant:10],
-        [lab.bottomAnchor constraintEqualToAnchor:bg.bottomAnchor constant:-10],
+        [lab.leadingAnchor constraintEqualToAnchor:bg.leadingAnchor constant:AS(12)],
+        [lab.trailingAnchor constraintEqualToAnchor:bg.trailingAnchor constant:-AS(12)],
+        [lab.topAnchor constraintEqualToAnchor:bg.topAnchor constant:AS(10)],
+        [lab.bottomAnchor constraintEqualToAnchor:bg.bottomAnchor constant:-AS(10)],
 
         [bg.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:side],
         [bg.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-side],
         [bg.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [bg.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-90],
+        [bg.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-AS(90)],
     ]];
 
     bg.alpha = 0;
@@ -1355,6 +1333,7 @@ UICollectionViewDataSourcePrefetching
 
         PHAsset *a = arr[ip.item];
         ASImgCell *cell = (ASImgCell *)[self.collectionView cellForItemAtIndexPath:ip];
+        if (!cell) continue;
         if (![cell.representedAssetIdentifier isEqualToString:a.localIdentifier]) continue;
 
         uint64_t bytes = [self cachedFileSizeForAsset:a];
@@ -1363,7 +1342,7 @@ UICollectionViewDataSourcePrefetching
     }
 }
 
-#pragma mark - Filter
+#pragma mark - Filter (async,不卡 UI)
 
 - (void)onFilterTap:(UIButton *)sender {
     self.filterIndex = sender.tag;
@@ -1427,7 +1406,7 @@ UICollectionViewDataSourcePrefetching
     return [out copy];
 }
 
-#pragma mark - Sections (>10MB / 5-10 / 1-5 / <1 & unknown)
+#pragma mark - Sections (>10MB / 8-10 / 5-8 / 3-5 / 1-3 / <1 & unknown)
 
 - (NSArray<ASImgSizeSection *> *)buildSectionsFromImages:(NSArray<PHAsset *> *)imgs {
     NSMutableArray<PHAsset *> *g10p = [NSMutableArray array]; // >10
@@ -1444,25 +1423,12 @@ UICollectionViewDataSourcePrefetching
         double mb = (double)s / (1024.0 * 1024.0);
 
         if (mb > 10.0) [g10p addObject:a];
-        else if (mb >= 8.0) [g8 addObject:a];        // [8,10]
-        else if (mb >= 5.0) [g5 addObject:a];        // [5,8)
-        else if (mb >= 3.0) [g3 addObject:a];        // [3,5)
-        else if (mb >= 1.0) [g1 addObject:a];        // [1,3)
-        else [g0 addObject:a];                        // <1
+        else if (mb >= 8.0) [g8 addObject:a];
+        else if (mb >= 5.0) [g5 addObject:a];
+        else if (mb >= 3.0) [g3 addObject:a];
+        else if (mb >= 1.0) [g1 addObject:a];
+        else [g0 addObject:a];
     }
-    
-    NSComparator descBySize = ^NSComparisonResult(PHAsset *a1, PHAsset *a2) {
-        uint64_t s1 = [self cachedFileSizeForAsset:a1];
-        uint64_t s2 = [self cachedFileSizeForAsset:a2];
-
-        if (s1 == 0 && s2 == 0) return NSOrderedSame;
-        if (s1 == 0) return NSOrderedDescending;
-        if (s2 == 0) return NSOrderedAscending;
-
-        if (s1 > s2) return NSOrderedAscending;
-        if (s1 < s2) return NSOrderedDescending;
-        return NSOrderedSame;
-    };
 
     NSMutableArray<ASImgSizeSection *> *secs = [NSMutableArray array];
 
@@ -1488,7 +1454,7 @@ UICollectionViewDataSourcePrefetching
         if (isSel) [self.selectedAssets removeObjectAtIndex:idx];
     } else {
         if (self.selectedAssets.count >= 9) {
-            [self as_showToast:NSLocalizedString(@"Only 9 images allowed.", nil)];
+            [self as_showToast:NSLocalizedString(@"Only 9 images allowed.",nil)];
             return;
         }
         [self.selectedAssets addObject:asset];
@@ -1497,7 +1463,6 @@ UICollectionViewDataSourcePrefetching
     self.selectedBar.selectedAssets = self.selectedAssets;
     [self showSelectedBar:(self.selectedAssets.count > 0) animated:YES];
 
-    NSArray<NSIndexPath *> *visible = self.collectionView.indexPathsForVisibleItems;
     [self updateVisibleSelectionOnly];
 }
 
@@ -1517,7 +1482,6 @@ UICollectionViewDataSourcePrefetching
         [cell applySelectedUI:sel];
     }
 }
-
 
 - (void)showSelectedBar:(BOOL)show animated:(BOOL)animated {
     if (show == self.selectedBarVisible) return;
@@ -1613,13 +1577,11 @@ UICollectionViewDataSourcePrefetching
     }
     cell.representedAssetIdentifier = newId;
 
-    // selection + pill（不 reload）
     BOOL sel = [self.selectedAssets containsObject:asset];
     [cell applySelectedUI:sel];
     uint64_t bytes = [self cachedFileSizeForAsset:asset];
     cell.pill.text = ASImageSavePillText(bytes);
 
-    // thumb：只有当当前没有图时才请求
     if (!cell.thumbView.image && cell.requestId == PHInvalidImageRequestID) {
         PHImageRequestOptions *opt = [PHImageRequestOptions new];
         opt.networkAccessAllowed = YES;
@@ -1641,17 +1603,13 @@ UICollectionViewDataSourcePrefetching
             if (cancelled) return;
 
             BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
-            if (degraded) {
-                if (cell.thumbView.image) return;
-            }
+            if (degraded && cell.thumbView.image) return;
 
             cell.thumbView.image = result;
-
             if (!degraded) cell.requestId = PHInvalidImageRequestID;
         }];
     }
 
-    // check tap
     cell.checkTapBtn.tag = (indexPath.section<<16) | indexPath.item;
     [cell.checkTapBtn removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
     [cell.checkTapBtn addTarget:self action:@selector(onCheckTap:) forControlEvents:UIControlEventTouchUpInside];

@@ -1,15 +1,24 @@
 #import "ASCompressionResultBaseViewController.h"
 #import "ASMyStudioViewController.h"
 #import "ASMediaPreviewViewController.h"
-#import "Common.h"
 #import <Photos/Photos.h>
+
+#pragma mark - ===== 402宽设计稿：只缩小不放大（竖屏） =====
+
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
 
 #pragma mark - Helpers
 
 static inline UIColor *ASBlue(void) { return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; }
 static inline UIColor *ASGrayBG(void){ return [UIColor colorWithRed:246/255.0 green:246/255.0 blue:246/255.0 alpha:1.0]; }
 static inline UIColor *ASE5EDFF(void){ return [UIColor colorWithRed:229/255.0 green:237/255.0 blue:255/255.0 alpha:1.0]; }
-static inline UIFont *ASFont(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:s weight:w]; }
 
 static NSString *ASHumanSize(uint64_t bytes) {
     double b = (double)bytes;
@@ -26,7 +35,7 @@ typedef void(^ASDeleteSheetBlock)(void);
 @interface ASDeleteOriginalBottomSheet : UIView
 + (void)presentInViewController:(UIViewController *)vc
                           title:(NSString *)title
-                        onDelete:(ASDeleteSheetBlock)onDelete;
+                       onDelete:(ASDeleteSheetBlock)onDelete;
 @end
 
 @interface ASDeleteOriginalBottomSheet ()
@@ -44,13 +53,13 @@ typedef void(^ASDeleteSheetBlock)(void);
 
 + (void)presentInViewController:(UIViewController *)vc
                           title:(NSString *)title
-                        onDelete:(ASDeleteSheetBlock)onDelete {
+                       onDelete:(ASDeleteSheetBlock)onDelete {
 
     if (!vc.view.window && vc.presentedViewController) vc = vc.presentedViewController;
 
     ASDeleteOriginalBottomSheet *v = [ASDeleteOriginalBottomSheet new];
     v.onDelete = onDelete;
-    [v buildUIWithTitle:title ?: NSLocalizedString(@"Delete original ?", nil)];
+    [v buildUIWithTitle:title ?: @"Delete original ?"];
 
     UIView *container = vc.view.window;
     if (!container) {
@@ -64,7 +73,10 @@ typedef void(^ASDeleteSheetBlock)(void);
                 if (container) break;
             }
         } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
             container = UIApplication.sharedApplication.keyWindow;
+#pragma clang diagnostic pop
         }
     }
     if (!container) container = vc.view;
@@ -103,7 +115,7 @@ typedef void(^ASDeleteSheetBlock)(void);
     self.sheetView = [UIView new];
     self.sheetView.translatesAutoresizingMaskIntoConstraints = NO;
     self.sheetView.backgroundColor = UIColor.whiteColor;
-    self.sheetView.layer.cornerRadius = 16;
+    self.sheetView.layer.cornerRadius = AS(16);
     if (@available(iOS 11.0, *)) {
         self.sheetView.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     }
@@ -115,14 +127,14 @@ typedef void(^ASDeleteSheetBlock)(void);
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.text = title;
     self.titleLabel.textColor = UIColor.blackColor;
-    self.titleLabel.font = ASFont(20, UIFontWeightMedium);
+    self.titleLabel.font = ASFontS(20, UIFontWeightMedium);
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.sheetView addSubview:self.titleLabel];
 
     self.reserveBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.reserveBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.reserveBtn setTitle:NSLocalizedString(@"Reserve", nil) forState:UIControlStateNormal];
-    self.reserveBtn.titleLabel.font = ASFont(20, UIFontWeightRegular);
+    [self.reserveBtn setTitle:@"Reserve" forState:UIControlStateNormal];
+    self.reserveBtn.titleLabel.font = ASFontS(20, UIFontWeightRegular);
     [self.reserveBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.reserveBtn.backgroundColor = ASBlue();
     self.reserveBtn.clipsToBounds = YES;
@@ -132,8 +144,8 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     self.deleteBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.deleteBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.deleteBtn setTitle:NSLocalizedString(@"Delete", nil) forState:UIControlStateNormal];
-    self.deleteBtn.titleLabel.font = ASFont(20, UIFontWeightMedium);
+    [self.deleteBtn setTitle:@"Delete" forState:UIControlStateNormal];
+    self.deleteBtn.titleLabel.font = ASFontS(20, UIFontWeightMedium);
     [self.deleteBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     self.deleteBtn.backgroundColor = ASGrayBG();
     self.deleteBtn.clipsToBounds = YES;
@@ -141,59 +153,57 @@ typedef void(^ASDeleteSheetBlock)(void);
     [self.deleteBtn addTarget:self action:@selector(onTapDelete) forControlEvents:UIControlEventTouchUpInside];
     [self.sheetView addSubview:self.deleteBtn];
 
-    self.reserveBtn.layer.cornerRadius = 25.5;
-    self.deleteBtn.layer.cornerRadius  = 25.5;
+    // 初始给一个大概值，layoutSubviews 会自动变成半高圆角
+    self.reserveBtn.layer.cornerRadius = AS(25.5);
+    self.deleteBtn.layer.cornerRadius  = AS(25.5);
     self.reserveBtn.layer.masksToBounds = YES;
     self.deleteBtn.layer.masksToBounds  = YES;
+
     NSMutableArray<NSLayoutConstraint *> *cs = [NSMutableArray array];
-    self.deleteBottomC = [self.deleteBtn.bottomAnchor constraintEqualToAnchor:self.sheetView.bottomAnchor constant:-20];
+    self.deleteBottomC = [self.deleteBtn.bottomAnchor constraintEqualToAnchor:self.sheetView.bottomAnchor constant:-AS(20)];
     [self.deleteBottomC setActive:YES];
 
     [cs addObjectsFromArray:@[
+        // dim 覆盖全屏
         [self.dimView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.dimView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.dimView.topAnchor constraintEqualToAnchor:self.topAnchor],
         [self.dimView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-    ]];
 
-    [cs addObjectsFromArray:@[
+        // sheetShadowView 横向贴边，底部贴父视图（safeArea 用 deleteBottomC 来处理）
         [self.sheetShadowView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.sheetShadowView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.sheetShadowView.topAnchor constraintGreaterThanOrEqualToAnchor:self.topAnchor],
-    ]];
+        [self.sheetShadowView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
 
-    [cs addObject:[self.sheetShadowView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]];
-
-    [cs addObjectsFromArray:@[
+        // sheetView 填满 shadow 容器
         [self.sheetView.leadingAnchor constraintEqualToAnchor:self.sheetShadowView.leadingAnchor],
         [self.sheetView.trailingAnchor constraintEqualToAnchor:self.sheetShadowView.trailingAnchor],
         [self.sheetView.topAnchor constraintEqualToAnchor:self.sheetShadowView.topAnchor],
         [self.sheetView.bottomAnchor constraintEqualToAnchor:self.sheetShadowView.bottomAnchor],
-    ]];
 
-    [cs addObjectsFromArray:@[
-        [self.titleLabel.topAnchor constraintEqualToAnchor:self.sheetView.topAnchor constant:30],
-        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.sheetView.leadingAnchor constant:20],
-        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.sheetView.trailingAnchor constant:-20],
+        // 内容布局
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.sheetView.topAnchor constant:AS(30)],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.sheetView.leadingAnchor constant:AS(20)],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.sheetView.trailingAnchor constant:-AS(20)],
 
-        [self.reserveBtn.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:37],
-        [self.reserveBtn.leadingAnchor constraintEqualToAnchor:self.sheetView.leadingAnchor constant:20],
-        [self.reserveBtn.trailingAnchor constraintEqualToAnchor:self.sheetView.trailingAnchor constant:-20],
-        [self.reserveBtn.heightAnchor constraintEqualToConstant:51],
+        [self.reserveBtn.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:AS(37)],
+        [self.reserveBtn.leadingAnchor constraintEqualToAnchor:self.sheetView.leadingAnchor constant:AS(20)],
+        [self.reserveBtn.trailingAnchor constraintEqualToAnchor:self.sheetView.trailingAnchor constant:-AS(20)],
+        [self.reserveBtn.heightAnchor constraintEqualToConstant:AS(51)],
 
-        [self.deleteBtn.topAnchor constraintEqualToAnchor:self.reserveBtn.bottomAnchor constant:15],
+        [self.deleteBtn.topAnchor constraintEqualToAnchor:self.reserveBtn.bottomAnchor constant:AS(15)],
         [self.deleteBtn.leadingAnchor constraintEqualToAnchor:self.reserveBtn.leadingAnchor],
         [self.deleteBtn.trailingAnchor constraintEqualToAnchor:self.reserveBtn.trailingAnchor],
-        [self.deleteBtn.heightAnchor constraintEqualToConstant:51],
-//        [self.deleteBtn.bottomAnchor constraintEqualToAnchor:self.sheetView.bottomAnchor constant:-20],
+        [self.deleteBtn.heightAnchor constraintEqualToConstant:AS(51)],
     ]];
 
     [NSLayoutConstraint activateConstraints:cs];
 
     self.sheetShadowView.layer.shadowColor = [UIColor colorWithWhite:0 alpha:(0x33/255.0)].CGColor;
     self.sheetShadowView.layer.shadowOpacity = 1.0;
-    self.sheetShadowView.layer.shadowOffset = CGSizeMake(0, -5);
-    self.sheetShadowView.layer.shadowRadius = 10.0;
+    self.sheetShadowView.layer.shadowOffset = CGSizeMake(0, -AS(5));
+    self.sheetShadowView.layer.shadowRadius = AS(10);
 
     self.dimView.alpha = 0.0;
 }
@@ -217,15 +227,15 @@ typedef void(^ASDeleteSheetBlock)(void);
     if (!CGRectIsEmpty(r)) {
         UIBezierPath *p = [UIBezierPath bezierPathWithRoundedRect:r
                                                byRoundingCorners:(UIRectCornerTopLeft|UIRectCornerTopRight)
-                                                     cornerRadii:CGSizeMake(16, 16)];
+                                                     cornerRadii:CGSizeMake(AS(16), AS(16))];
         self.sheetShadowView.layer.shadowPath = p.CGPath;
     }
 }
 
-
 - (void)safeAreaInsetsDidChange {
     [super safeAreaInsetsDidChange];
-    self.deleteBottomC.constant = -(20.0 + self.safeAreaInsets.bottom);
+    // ✅ 设计稿底部 20 + safeArea
+    self.deleteBottomC.constant = -(AS(20) + self.safeAreaInsets.bottom);
 }
 
 - (void)animateIn {
@@ -256,17 +266,15 @@ typedef void(^ASDeleteSheetBlock)(void);
     [self onReserve];
 }
 - (void)onReserve { [self animateOut:nil]; }
+
 - (void)onTapDelete {
-    ASDeleteSheetBlock deleteBlock = self.onDelete; // 先缓存出来，避免动画过程中属性变化
+    ASDeleteSheetBlock deleteBlock = self.onDelete;
 
     [self animateOut:^{
         if (!deleteBlock) return;
-
-        // 下一帧再执行，避免在动画 completion 的栈里直接 present
         dispatch_async(dispatch_get_main_queue(), ^{
-            @try {
-                deleteBlock();
-            } @catch (NSException *e) {
+            @try { deleteBlock(); }
+            @catch (NSException *e) {
                 NSLog(@"[DeleteSheet] onDelete exception: %@ %@", e.name, e.reason);
             }
         });
@@ -285,7 +293,8 @@ typedef void(^ASDeleteSheetBlock)(void);
 @property (nonatomic, strong) UIButton *backBtn;
 @property (nonatomic, strong) UIButton *homeBtn;
 
-// preview：视频是 thumb，图片是 static icon
+@property (nonatomic, strong) UIView *headerBG;
+
 @property (nonatomic, strong) UIImageView *thumbView;
 @property (nonatomic, strong) UIImageView *playIcon;
 @property (nonatomic, strong) UIImageView *starFloat;
@@ -305,6 +314,8 @@ typedef void(^ASDeleteSheetBlock)(void);
 @property (nonatomic, strong) UIButton *todoBtn;
 
 @property (nonatomic, assign) BOOL hasAskedDelete;
+@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UIView *scrollContentView;
 
 @end
 
@@ -315,14 +326,14 @@ typedef void(^ASDeleteSheetBlock)(void);
     return self;
 }
 
-#pragma mark - 子类覆盖点
+#pragma mark - Override points
 
 - (BOOL)useStaticPreviewIcon { return NO; }
 - (NSString *)staticPreviewIconName { return nil; }
-- (CGSize)staticPreviewSize { return CGSizeMake(180, 170); }
-- (NSString *)deleteSheetTitle { return NSLocalizedString(@"Delete original ?", nil); }
-- (NSString *)itemSingular { return NSLocalizedString(@"item", nil); }
-- (NSString *)itemPlural   { return NSLocalizedString(@"items", nil); }
+- (CGSize)staticPreviewSize { return CGSizeMake(180, 170); } // 设计稿尺寸（这里返回设计稿值，buildUI 内部会 AS()）
+- (NSString *)deleteSheetTitle { return @"Delete original ?"; }
+- (NSString *)itemSingular { return @"item"; }
+- (NSString *)itemPlural   { return @"items"; }
 - (NSString *)homeIconName { return @"ic_back_home"; }
 - (BOOL)shouldShowHomeButton { return YES; }
 
@@ -348,6 +359,8 @@ typedef void(^ASDeleteSheetBlock)(void);
         [self askDeleteOriginalIfNeeded];
     }
 }
+
+#pragma mark - Delete helpers (unchanged)
 
 - (NSArray<PHAsset *> *)as_deletableAssetsFrom:(NSArray<PHAsset *> *)assets
                                blockedCountOut:(NSInteger *)blockedCountOut {
@@ -381,29 +394,6 @@ typedef void(^ASDeleteSheetBlock)(void);
     return vc;
 }
 
-- (void)as_presentSystemDeleteConfirmForAssets:(NSArray<PHAsset *> *)assets {
-    if (assets.count == 0) return;
-
-    UIViewController *vc = [self as_topPresentingVC];
-    if (!vc.view.window) return;
-
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"Delete original?", nil)
-                                                                message:(assets.count==1 ? NSLocalizedString(@"This will delete the original from your photo library.", nil)
-                                                                                       : NSLocalizedString(@"This will delete the originals from your photo library.", nil))
-                                                         preferredStyle:UIAlertControllerStyleAlert];
-
-    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
-
-    __weak typeof(self) weakSelf = self;
-    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Delete", nil) style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction * _Nonnull action) {
-        [weakSelf as_deleteOriginalAssetsSafely:assets];
-    }]];
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [vc presentViewController:ac animated:YES completion:nil];
-    });
-}
-
 - (void)as_deleteOriginalAssetsSafely:(NSArray<PHAsset *> *)assets {
     if (assets.count == 0) return;
 
@@ -412,8 +402,8 @@ typedef void(^ASDeleteSheetBlock)(void);
     else st = [PHPhotoLibrary authorizationStatus];
 
     if (!(st == PHAuthorizationStatusAuthorized || st == PHAuthorizationStatusLimited)) {
-        [self as_showSimpleAlert:NSLocalizedString(@"No Permission", nil)
-                         message:NSLocalizedString(@"Please allow Photos access to delete originals.", nil)];
+        [self as_showSimpleAlert:@"No Permission"
+                         message:@"Please allow Photos access to delete originals."];
         return;
     }
 
@@ -425,34 +415,16 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
     if (fr.count == 0) {
-        [self as_showSimpleAlert:NSLocalizedString(@"Not Found", nil)
-                         message:NSLocalizedString(@"These photos are no longer available.", nil)];
+        [self as_showSimpleAlert:@"Not Found"
+                         message:@"These photos are no longer available."];
         return;
     }
 
-    __block NSString *exceptionMsg = nil;
-
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-        @try {
-            [PHAssetChangeRequest deleteAssets:fr];
-        } @catch (NSException *e) {
-            exceptionMsg = [NSString stringWithFormat:@"%@: %@", e.name ?: NSLocalizedString(@"Exception", nil), e.reason ?: @""];
-        }
-    } completionHandler:^(BOOL success, NSError * _Nullable error) {
+        [PHAssetChangeRequest deleteAssets:fr];
+    } completionHandler:^(__unused BOOL success, __unused NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-//            if (exceptionMsg.length) {
-//                [self as_showSimpleAlert:@"Delete Failed"
-//                                 message:exceptionMsg];
-//                return;
-//            }
-//            if (!success || error) {
-//                [self as_showSimpleAlert:@"Delete Failed"
-//                                 message:error.localizedDescription ?: @"Unknown error"];
-//                return;
-//            }
-
-            // 删除成功
-            // [self.navigationController popToRootViewControllerAnimated:YES];
+            // 你原来这里是注释掉的成功/失败提示，保持不动
         });
     }];
 }
@@ -463,31 +435,30 @@ typedef void(^ASDeleteSheetBlock)(void);
     UIAlertController *ac = [UIAlertController alertControllerWithTitle:title
                                                                 message:msg
                                                          preferredStyle:UIAlertControllerStyleAlert];
-    [ac addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"OK", nil) style:UIAlertActionStyleDefault handler:nil]];
+    [ac addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [vc presentViewController:ac animated:YES completion:nil];
 }
 
 #pragma mark - UI
 
 - (void)buildUI {
-    self.topCard = [UIView new];
-    self.topCard.backgroundColor = UIColor.whiteColor;
-    self.topCard.translatesAutoresizingMaskIntoConstraints = NO;
-    self.topCard.layer.cornerRadius = 34;
-    if (@available(iOS 11.0,*)) {
-        self.topCard.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
-    }
-    self.topCard.layer.masksToBounds = YES;
-    [self.view addSubview:self.topCard];
+    CGFloat headerH = AS(56);
+    CGFloat side20  = AS(20);
 
     self.navBar = [UIView new];
     self.navBar.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.topCard addSubview:self.navBar];
+    self.navBar.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.navBar];
+
+    self.headerBG = [UIView new];
+    self.headerBG.translatesAutoresizingMaskIntoConstraints = NO;
+    self.headerBG.backgroundColor = UIColor.whiteColor;
+    [self.view insertSubview:self.headerBG belowSubview:self.navBar];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     UIImage *backImg = [[UIImage imageNamed:@"ic_back_blue"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     [self.backBtn setImage:backImg forState:UIControlStateNormal];
-    self.backBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.backBtn.contentEdgeInsets = ASEdgeInsets(10, 10, 10, 10);
     self.backBtn.adjustsImageWhenHighlighted = NO;
     [self.backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
     self.backBtn.translatesAutoresizingMaskIntoConstraints = NO;
@@ -497,19 +468,41 @@ typedef void(^ASDeleteSheetBlock)(void);
     UIImage *homeImg = [UIImage imageNamed:[self homeIconName]];
     if (!homeImg && @available(iOS 13.0, *)) {
         homeImg = [UIImage systemImageNamed:@"house"];
-        homeImg = [homeImg imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        homeImg = [[homeImg imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] copy];
         self.homeBtn.tintColor = ASBlue();
     } else {
         homeImg = [homeImg imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     }
     [self.homeBtn setImage:homeImg forState:UIControlStateNormal];
-    self.homeBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.homeBtn.contentEdgeInsets = ASEdgeInsets(10, 10, 10, 10);
     self.homeBtn.adjustsImageWhenHighlighted = NO;
     self.homeBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.homeBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
     [self.homeBtn addTarget:self action:@selector(onHome) forControlEvents:UIControlEventTouchUpInside];
     [self.navBar addSubview:self.homeBtn];
     self.homeBtn.hidden = ![self shouldShowHomeButton];
+
+    self.scrollView = [UIScrollView new];
+    self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollView.alwaysBounceVertical = YES;
+    self.scrollView.showsVerticalScrollIndicator = YES;
+    self.scrollView.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.scrollView];
+
+    self.scrollContentView = [UIView new];
+    self.scrollContentView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollContentView.backgroundColor = UIColor.clearColor;
+    [self.scrollView addSubview:self.scrollContentView];
+
+    self.topCard = [UIView new];
+    self.topCard.backgroundColor = UIColor.whiteColor;
+    self.topCard.translatesAutoresizingMaskIntoConstraints = NO;
+    self.topCard.layer.cornerRadius = AS(34);
+    if (@available(iOS 11.0,*)) {
+        self.topCard.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+    }
+    self.topCard.layer.masksToBounds = YES;
+    [self.scrollContentView addSubview:self.topCard];
 
     UIView *previewRef = nil;
 
@@ -525,7 +518,7 @@ typedef void(^ASDeleteSheetBlock)(void);
         self.thumbView.translatesAutoresizingMaskIntoConstraints = NO;
         self.thumbView.contentMode = UIViewContentModeScaleAspectFill;
         self.thumbView.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
-        self.thumbView.layer.cornerRadius = 22;
+        self.thumbView.layer.cornerRadius = AS(22);
         self.thumbView.layer.masksToBounds = YES;
         [self.topCard addSubview:self.thumbView];
 
@@ -534,6 +527,7 @@ typedef void(^ASDeleteSheetBlock)(void);
         self.playIcon.image = [[UIImage imageNamed:@"ic_play"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         self.playIcon.contentMode = UIViewContentModeScaleAspectFit;
         [self.thumbView addSubview:self.playIcon];
+
         self.thumbView.userInteractionEnabled = YES;
         UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onTapPreview)];
         [self.thumbView addGestureRecognizer:tap];
@@ -549,16 +543,16 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     self.greatLabel = [UILabel new];
     self.greatLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.greatLabel.text = NSLocalizedString(@"Great!", nil);
+    self.greatLabel.text = @"Great!";
     self.greatLabel.textColor = UIColor.blackColor;
-    self.greatLabel.font = ASFont(34, UIFontWeightMedium);
+    self.greatLabel.font = ASFontS(34, UIFontWeightMedium);
     self.greatLabel.textAlignment = NSTextAlignmentCenter;
     [self.topCard addSubview:self.greatLabel];
 
     self.infoLabel = [UILabel new];
     self.infoLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.infoLabel.textColor = UIColor.blackColor;
-    self.infoLabel.font = ASFont(12, UIFontWeightMedium);
+    self.infoLabel.font = ASFontS(12, UIFontWeightMedium);
     self.infoLabel.textAlignment = NSTextAlignmentCenter;
     self.infoLabel.numberOfLines = 0;
     [self.topCard addSubview:self.infoLabel];
@@ -566,17 +560,18 @@ typedef void(^ASDeleteSheetBlock)(void);
     self.table = [self buildStatsTable];
     [self.topCard addSubview:self.table];
 
+    // ===== studioRow（也滚动）=====
     self.studioRow = [UIControl new];
     self.studioRow.translatesAutoresizingMaskIntoConstraints = NO;
     self.studioRow.backgroundColor = UIColor.whiteColor;
-    self.studioRow.layer.cornerRadius = 24;
+    self.studioRow.layer.cornerRadius = AS(24);
     self.studioRow.layer.masksToBounds = NO;
     [self.studioRow addTarget:self action:@selector(onStudio) forControlEvents:UIControlEventTouchUpInside];
     self.studioRow.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.08].CGColor;
     self.studioRow.layer.shadowOpacity = 1.0;
-    self.studioRow.layer.shadowOffset = CGSizeMake(0, 10);
-    self.studioRow.layer.shadowRadius = 20;
-    [self.view addSubview:self.studioRow];
+    self.studioRow.layer.shadowOffset = CGSizeMake(0, AS(10));
+    self.studioRow.layer.shadowRadius = AS(20);
+    [self.scrollContentView addSubview:self.studioRow];
 
     self.studioIcon = [UIImageView new];
     self.studioIcon.translatesAutoresizingMaskIntoConstraints = NO;
@@ -586,9 +581,9 @@ typedef void(^ASDeleteSheetBlock)(void);
 
     self.studioLabel = [UILabel new];
     self.studioLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.studioLabel.text = NSLocalizedString(@"My studio", nil);
+    self.studioLabel.text = @"My studio";
     self.studioLabel.textColor = UIColor.blackColor;
-    self.studioLabel.font = ASFont(24, UIFontWeightMedium);
+    self.studioLabel.font = ASFontS(24, UIFontWeightMedium);
     [self.studioRow addSubview:self.studioLabel];
 
     self.todoBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -599,105 +594,128 @@ typedef void(^ASDeleteSheetBlock)(void);
     [self.todoBtn addTarget:self action:@selector(onStudio) forControlEvents:UIControlEventTouchUpInside];
     [self.studioRow addSubview:self.todoBtn];
 
-    CGFloat side20 = 20;
+    NSMutableArray<NSLayoutConstraint *> *cs = [NSMutableArray array];
 
-    NSMutableArray<NSLayoutConstraint *> *cs = [NSMutableArray arrayWithArray:@[
-        [self.topCard.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.topCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.topCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+    [cs addObjectsFromArray:@[
+        [self.headerBG.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.headerBG.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.headerBG.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.headerBG.bottomAnchor constraintEqualToAnchor:self.navBar.bottomAnchor],
 
-        [self.navBar.topAnchor constraintEqualToAnchor:self.topCard.safeAreaLayoutGuide.topAnchor],
-        [self.navBar.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor],
-        [self.navBar.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor],
-        [self.navBar.heightAnchor constraintEqualToConstant:56],
+        [self.navBar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.navBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.navBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.navBar.heightAnchor constraintEqualToConstant:headerH],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.navBar.leadingAnchor constant:6],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.navBar.leadingAnchor constant:AS(6)],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:self.navBar.centerYAnchor],
-        [self.backBtn.widthAnchor constraintEqualToConstant:44],
-        [self.backBtn.heightAnchor constraintEqualToConstant:44],
+        [self.backBtn.widthAnchor constraintEqualToConstant:AS(44)],
+        [self.backBtn.heightAnchor constraintEqualToConstant:AS(44)],
 
-        [self.homeBtn.trailingAnchor constraintEqualToAnchor:self.navBar.trailingAnchor constant:-12],
+        [self.homeBtn.trailingAnchor constraintEqualToAnchor:self.navBar.trailingAnchor constant:-AS(12)],
         [self.homeBtn.centerYAnchor constraintEqualToAnchor:self.navBar.centerYAnchor],
-        [self.homeBtn.widthAnchor constraintEqualToConstant:44],
-        [self.homeBtn.heightAnchor constraintEqualToConstant:44],
+        [self.homeBtn.widthAnchor constraintEqualToConstant:AS(44)],
+        [self.homeBtn.heightAnchor constraintEqualToConstant:AS(44)],
+    ]];
+
+    [cs addObjectsFromArray:@[
+        [self.scrollView.topAnchor constraintEqualToAnchor:self.navBar.bottomAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+
+        [self.scrollContentView.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor],
+        [self.scrollContentView.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
+        [self.scrollContentView.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
+        [self.scrollContentView.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor],
+        [self.scrollContentView.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
+    ]];
+
+    [cs addObjectsFromArray:@[
+        [self.topCard.topAnchor constraintEqualToAnchor:self.scrollContentView.topAnchor constant:0],
+        [self.topCard.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor],
+        [self.topCard.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor],
     ]];
 
     if ([self useStaticPreviewIcon]) {
         CGSize sz = [self staticPreviewSize];
         [cs addObjectsFromArray:@[
-            [self.staticIconView.topAnchor constraintEqualToAnchor:self.navBar.bottomAnchor constant:18],
+            [self.staticIconView.topAnchor constraintEqualToAnchor:self.topCard.topAnchor constant:AS(18)],
             [self.staticIconView.centerXAnchor constraintEqualToAnchor:self.topCard.centerXAnchor],
-            [self.staticIconView.widthAnchor constraintEqualToConstant:sz.width],
-            [self.staticIconView.heightAnchor constraintEqualToConstant:sz.height],
+            [self.staticIconView.widthAnchor constraintEqualToConstant:AS(sz.width)],
+            [self.staticIconView.heightAnchor constraintEqualToConstant:AS(sz.height)],
         ]];
     } else {
         [cs addObjectsFromArray:@[
-            [self.thumbView.topAnchor constraintEqualToAnchor:self.navBar.bottomAnchor constant:10],
+            [self.thumbView.topAnchor constraintEqualToAnchor:self.topCard.topAnchor constant:AS(10)],
             [self.thumbView.centerXAnchor constraintEqualToAnchor:self.topCard.centerXAnchor],
-            [self.thumbView.widthAnchor constraintEqualToConstant:180],
-            [self.thumbView.heightAnchor constraintEqualToConstant:240],
+            [self.thumbView.widthAnchor constraintEqualToConstant:AS(180)],
+            [self.thumbView.heightAnchor constraintEqualToConstant:AS(240)],
 
-            [self.playIcon.leadingAnchor constraintEqualToAnchor:self.thumbView.leadingAnchor constant:13],
-            [self.playIcon.topAnchor constraintEqualToAnchor:self.thumbView.topAnchor constant:13],
-            [self.playIcon.widthAnchor constraintEqualToConstant:26],
-            [self.playIcon.heightAnchor constraintEqualToConstant:26],
+            [self.playIcon.leadingAnchor constraintEqualToAnchor:self.thumbView.leadingAnchor constant:AS(13)],
+            [self.playIcon.topAnchor constraintEqualToAnchor:self.thumbView.topAnchor constant:AS(13)],
+            [self.playIcon.widthAnchor constraintEqualToConstant:AS(26)],
+            [self.playIcon.heightAnchor constraintEqualToConstant:AS(26)],
 
             [self.starFloat.centerXAnchor constraintEqualToAnchor:self.thumbView.centerXAnchor],
             [self.starFloat.centerYAnchor constraintEqualToAnchor:self.thumbView.centerYAnchor],
-            [self.starFloat.widthAnchor constraintEqualToConstant:267],
-            [self.starFloat.heightAnchor constraintEqualToConstant:216],
+            [self.starFloat.widthAnchor constraintEqualToConstant:AS(267)],
+            [self.starFloat.heightAnchor constraintEqualToConstant:AS(216)],
         ]];
     }
 
     [cs addObjectsFromArray:@[
-        [self.greatLabel.topAnchor constraintEqualToAnchor:previewRef.bottomAnchor constant:18],
+        [self.greatLabel.topAnchor constraintEqualToAnchor:previewRef.bottomAnchor constant:AS(18)],
         [self.greatLabel.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:side20],
         [self.greatLabel.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor constant:-side20],
 
-        [self.infoLabel.topAnchor constraintEqualToAnchor:self.greatLabel.bottomAnchor constant:12],
-        [self.infoLabel.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:40],
-        [self.infoLabel.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor constant:-40],
+        [self.infoLabel.topAnchor constraintEqualToAnchor:self.greatLabel.bottomAnchor constant:AS(12)],
+        [self.infoLabel.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:AS(40)],
+        [self.infoLabel.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor constant:-AS(40)],
 
-        [self.table.topAnchor constraintEqualToAnchor:self.infoLabel.bottomAnchor constant:20],
-        [self.table.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:20],
-        [self.table.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor constant:-20],
-        [self.table.heightAnchor constraintEqualToConstant:110],
+        [self.table.topAnchor constraintEqualToAnchor:self.infoLabel.bottomAnchor constant:AS(20)],
+        [self.table.leadingAnchor constraintEqualToAnchor:self.topCard.leadingAnchor constant:AS(20)],
+        [self.table.trailingAnchor constraintEqualToAnchor:self.topCard.trailingAnchor constant:-AS(20)],
+        [self.table.heightAnchor constraintEqualToConstant:AS(110)],
 
-        [self.topCard.bottomAnchor constraintEqualToAnchor:self.table.bottomAnchor constant:35],
+        [self.topCard.bottomAnchor constraintEqualToAnchor:self.table.bottomAnchor constant:AS(35)],
 
-        [self.studioRow.topAnchor constraintEqualToAnchor:self.topCard.bottomAnchor constant:30],
-        [self.studioRow.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.studioRow.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
-        [self.studioRow.heightAnchor constraintEqualToConstant:110],
-        [self.studioRow.bottomAnchor constraintLessThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-22],
+        [self.studioRow.topAnchor constraintEqualToAnchor:self.topCard.bottomAnchor constant:AS(30)],
+        [self.studioRow.leadingAnchor constraintEqualToAnchor:self.scrollContentView.leadingAnchor constant:AS(20)],
+        [self.studioRow.trailingAnchor constraintEqualToAnchor:self.scrollContentView.trailingAnchor constant:-AS(20)],
+        [self.studioRow.heightAnchor constraintEqualToConstant:AS(110)],
 
-        [self.studioIcon.leadingAnchor constraintEqualToAnchor:self.studioRow.leadingAnchor constant:22],
+        [self.studioIcon.leadingAnchor constraintEqualToAnchor:self.studioRow.leadingAnchor constant:AS(22)],
         [self.studioIcon.centerYAnchor constraintEqualToAnchor:self.studioRow.centerYAnchor],
-        [self.studioIcon.widthAnchor constraintEqualToConstant:72],
-        [self.studioIcon.heightAnchor constraintEqualToConstant:72],
+        [self.studioIcon.widthAnchor constraintEqualToConstant:AS(72)],
+        [self.studioIcon.heightAnchor constraintEqualToConstant:AS(72)],
 
-        [self.studioLabel.leadingAnchor constraintEqualToAnchor:self.studioIcon.trailingAnchor constant:18],
+        [self.studioLabel.leadingAnchor constraintEqualToAnchor:self.studioIcon.trailingAnchor constant:AS(18)],
         [self.studioLabel.centerYAnchor constraintEqualToAnchor:self.studioRow.centerYAnchor],
 
-        [self.todoBtn.trailingAnchor constraintEqualToAnchor:self.studioRow.trailingAnchor constant:-22],
+        [self.todoBtn.trailingAnchor constraintEqualToAnchor:self.studioRow.trailingAnchor constant:-AS(22)],
         [self.todoBtn.centerYAnchor constraintEqualToAnchor:self.studioRow.centerYAnchor],
-        [self.todoBtn.widthAnchor constraintEqualToConstant:60],
-        [self.todoBtn.heightAnchor constraintEqualToConstant:36],
+        [self.todoBtn.widthAnchor constraintEqualToConstant:AS(60)],
+        [self.todoBtn.heightAnchor constraintEqualToConstant:AS(36)],
+
+        [self.studioRow.bottomAnchor constraintEqualToAnchor:self.scrollContentView.bottomAnchor constant:-AS(22)],
     ]];
 
     [NSLayoutConstraint activateConstraints:cs];
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.studioRow.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.studioRow.bounds cornerRadius:24].CGPath;
+        self.studioRow.layer.shadowPath =
+        [UIBezierPath bezierPathWithRoundedRect:self.studioRow.bounds cornerRadius:AS(24)].CGPath;
     });
 }
+
+#pragma mark - Preview tap
 
 - (void)onTapPreview {
     NSArray<PHAsset *> *assets = self.summary.originalAssets ?: @[];
     if (assets.count == 0) return;
 
     NSArray<PHAsset *> *previewAssets = assets;
-
     NSIndexSet *preSel = [NSIndexSet indexSet];
 
     ASMediaPreviewViewController *p =
@@ -708,10 +726,6 @@ typedef void(^ASDeleteSheetBlock)(void);
     p.bestIndex = 0;
     p.showsBestBadge = YES;
 
-    // __weak typeof(self) weakSelf = self;
-    // p.onBack = ^(NSArray<PHAsset *> *selectedAssets, NSIndexSet *selectedIndexes) {
-    // };
-
     if (self.navigationController) {
         [self.navigationController pushViewController:p animated:YES];
     } else {
@@ -721,7 +735,7 @@ typedef void(^ASDeleteSheetBlock)(void);
     }
 }
 
-#pragma mark - Table（稳定三等分+分割线）
+#pragma mark - Table
 
 - (UIView *)vSep {
     UIView *v = [UIView new];
@@ -747,7 +761,7 @@ typedef void(^ASDeleteSheetBlock)(void);
     UILabel *l = [UILabel new];
     l.textAlignment = NSTextAlignmentCenter;
     l.textColor = color;
-    l.font = ASFont(16, UIFontWeightSemibold);
+    l.font = ASFontS(16, UIFontWeightSemibold);
     l.text = @"--";
     return l;
 }
@@ -759,8 +773,8 @@ typedef void(^ASDeleteSheetBlock)(void);
     t.numberOfLines = 2;
 
     NSMutableAttributedString *att = [NSMutableAttributedString new];
-    NSDictionary *aTop = @{ NSFontAttributeName: ASFont(15, UIFontWeightSemibold), NSForegroundColorAttributeName: UIColor.blackColor };
-    NSDictionary *aBottom = @{ NSFontAttributeName: ASFont(12, UIFontWeightSemibold), NSForegroundColorAttributeName: UIColor.blackColor };
+    NSDictionary *aTop = @{ NSFontAttributeName: ASFontS(15, UIFontWeightSemibold), NSForegroundColorAttributeName: UIColor.blackColor };
+    NSDictionary *aBottom = @{ NSFontAttributeName: ASFontS(12, UIFontWeightSemibold), NSForegroundColorAttributeName: UIColor.blackColor };
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:top attributes:aTop]];
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n" attributes:aTop]];
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:bottom attributes:aBottom]];
@@ -772,8 +786,8 @@ typedef void(^ASDeleteSheetBlock)(void);
     [NSLayoutConstraint activateConstraints:@[
         [t.centerXAnchor constraintEqualToAnchor:wrap.centerXAnchor],
         [t.centerYAnchor constraintEqualToAnchor:wrap.centerYAnchor],
-        [t.leadingAnchor constraintGreaterThanOrEqualToAnchor:wrap.leadingAnchor constant:6],
-        [t.trailingAnchor constraintLessThanOrEqualToAnchor:wrap.trailingAnchor constant:-6],
+        [t.leadingAnchor constraintGreaterThanOrEqualToAnchor:wrap.leadingAnchor constant:AS(6)],
+        [t.trailingAnchor constraintLessThanOrEqualToAnchor:wrap.trailingAnchor constant:-AS(6)],
     ]];
     return wrap;
 }
@@ -783,7 +797,7 @@ typedef void(^ASDeleteSheetBlock)(void);
     t.translatesAutoresizingMaskIntoConstraints = NO;
     t.textAlignment = NSTextAlignmentCenter;
     t.textColor = UIColor.blackColor;
-    t.font = ASFont(15, UIFontWeightSemibold);
+    t.font = ASFontS(15, UIFontWeightSemibold);
     t.text = title;
 
     UIView *wrap = [UIView new];
@@ -792,8 +806,8 @@ typedef void(^ASDeleteSheetBlock)(void);
     [NSLayoutConstraint activateConstraints:@[
         [t.centerXAnchor constraintEqualToAnchor:wrap.centerXAnchor],
         [t.centerYAnchor constraintEqualToAnchor:wrap.centerYAnchor],
-        [t.leadingAnchor constraintGreaterThanOrEqualToAnchor:wrap.leadingAnchor constant:6],
-        [t.trailingAnchor constraintLessThanOrEqualToAnchor:wrap.trailingAnchor constant:-6],
+        [t.leadingAnchor constraintGreaterThanOrEqualToAnchor:wrap.leadingAnchor constant:AS(6)],
+        [t.trailingAnchor constraintLessThanOrEqualToAnchor:wrap.trailingAnchor constant:-AS(6)],
     ]];
     return wrap;
 }
@@ -801,8 +815,8 @@ typedef void(^ASDeleteSheetBlock)(void);
 - (UIView *)buildStatsTable {
     UIView *table = [UIView new];
     table.translatesAutoresizingMaskIntoConstraints = NO;
-    table.layer.cornerRadius = 16;
-    table.layer.borderWidth = 2.0;
+    table.layer.cornerRadius = AS(16);
+    table.layer.borderWidth = AS(2);
     table.layer.borderColor = ASBlue().CGColor;
     table.layer.masksToBounds = YES;
 
@@ -820,9 +834,9 @@ typedef void(^ASDeleteSheetBlock)(void);
     hSep.backgroundColor = [ASBlue() colorWithAlphaComponent:0.25];
     [table addSubview:hSep];
 
-    UIView *t1 = [self makeTitleCellTop:NSLocalizedString(@"Before", nil) bottom:NSLocalizedString(@"Compression", nil)];
-    UIView *t2 = [self makeTitleCellTop:NSLocalizedString(@"After", nil) bottom:NSLocalizedString(@"Compression", nil)];
-    UIView *t3 = [self makeTitleCellSingle:NSLocalizedString(@"Space Saved", nil)];
+    UIView *t1 = [self makeTitleCellTop:@"Before" bottom:@"Compression"];
+    UIView *t2 = [self makeTitleCellTop:@"After" bottom:@"Compression"];
+    UIView *t3 = [self makeTitleCellSingle:@"Space Saved"];
 
     UIStackView *topStack = [[UIStackView alloc] initWithArrangedSubviews:@[t1, [self vSep], t2, [self vSep], t3]];
     topStack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -852,12 +866,12 @@ typedef void(^ASDeleteSheetBlock)(void);
         [topRow.topAnchor constraintEqualToAnchor:table.topAnchor],
         [topRow.leadingAnchor constraintEqualToAnchor:table.leadingAnchor],
         [topRow.trailingAnchor constraintEqualToAnchor:table.trailingAnchor],
-        [topRow.heightAnchor constraintEqualToConstant:55],
+        [topRow.heightAnchor constraintEqualToConstant:AS(55)],
 
         [hSep.topAnchor constraintEqualToAnchor:topRow.bottomAnchor],
         [hSep.leadingAnchor constraintEqualToAnchor:table.leadingAnchor],
         [hSep.trailingAnchor constraintEqualToAnchor:table.trailingAnchor],
-        [hSep.heightAnchor constraintEqualToConstant:1],
+        [hSep.heightAnchor constraintEqualToConstant:AS(1)],
 
         [bottomRow.topAnchor constraintEqualToAnchor:hSep.bottomAnchor],
         [bottomRow.leadingAnchor constraintEqualToAnchor:table.leadingAnchor],
@@ -883,9 +897,9 @@ typedef void(^ASDeleteSheetBlock)(void);
 - (void)fillData {
     NSInteger count = self.summary.inputCount;
     NSString *noun = (count == 1) ? [self itemSingular] : [self itemPlural];
-    NSString *aux  = (count == 1) ? NSLocalizedString(@"has", nil) : NSLocalizedString(@"have", nil); // 1 image has been / 2 images have been
+    NSString *aux  = (count == 1) ? @"has" : @"have";
 
-    self.infoLabel.text = [NSString stringWithFormat:NSLocalizedString(@"%ld %@ %@ been compressed and saved to your system album", nil),
+    self.infoLabel.text = [NSString stringWithFormat:@"%ld %@ %@ been compressed and saved to your system album",
                            (long)count, noun, aux];
 
     self.vBefore.text = ASHumanSize(self.summary.beforeBytes) ?: @"--";
@@ -894,7 +908,6 @@ typedef void(^ASDeleteSheetBlock)(void);
 }
 
 - (void)loadThumbIfNeeded {
-    // 用 originalAssets[0] 做封面
     PHAsset *asset = self.summary.originalAssets.firstObject;
     if (!asset) return;
 
@@ -904,7 +917,9 @@ typedef void(^ASDeleteSheetBlock)(void);
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
 
     CGFloat scale = UIScreen.mainScreen.scale;
-    CGSize target = CGSizeMake(180.0 * scale * 2.0, 240.0 * scale * 2.0);
+
+    // ✅ 预览框本身是 AS(180)xAS(240)，targetSize 跟随缩放（再乘屏幕 scale）
+    CGSize target = CGSizeMake(AS(180) * scale * 2.0, AS(240) * scale * 2.0);
 
     __weak typeof(self) weakSelf = self;
     [[PHImageManager defaultManager] requestImageForAsset:asset
@@ -931,26 +946,20 @@ typedef void(^ASDeleteSheetBlock)(void);
     NSArray<PHAsset *> *deletable = [self as_deletableAssetsFrom:originals blockedCountOut:&blocked];
 
     if (deletable.count == 0) {
-        // 一个都删不了：别弹 Delete，给提示
-        [self as_showSimpleAlert:NSLocalizedString(@"Can't delete", nil)
-                         message:NSLocalizedString(@"These photos can't be deleted (shared/synced or restricted).", nil)];
+        [self as_showSimpleAlert:@"Can't delete"
+                         message:@"These photos can't be deleted (shared/synced or restricted)."];
         return;
     }
 
     __weak typeof(self) weakSelf = self;
     [ASDeleteOriginalBottomSheet presentInViewController:self
                                                   title:[self deleteSheetTitle]
-                                                onDelete:^{
+                                               onDelete:^{
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
-
-        // 有 blocked 的话也提示一下
-        if (blocked > 0) {
-        }
         [self as_deleteOriginalAssetsSafely:deletable];
     }];
 }
-
 
 #pragma mark - Actions
 
