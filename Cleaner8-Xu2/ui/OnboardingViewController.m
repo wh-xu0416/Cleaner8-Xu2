@@ -7,12 +7,24 @@
 static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 static NSString * const kHasRequestedATTKey = @"hasRequestedATT";
 
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 #pragma mark - UI Helpers
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
 }
 static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
+    return SWFontS(size, weight);
 }
 
 @interface OnboardingViewController ()
@@ -64,7 +76,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     self.continueBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.continueBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.continueBtn.backgroundColor = ASRGB(43, 127, 255); // #2B7FFF
-    self.continueBtn.layer.cornerRadius = 20;
+    self.continueBtn.layer.cornerRadius = SW(20);
     self.continueBtn.layer.masksToBounds = YES;
 
     [self.continueBtn setTitle:NSLocalizedString(@"Continue", nil) forState:UIControlStateNormal];
@@ -82,10 +94,10 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         [self.bgImageView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
         // button
-        [self.continueBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:45],
-        [self.continueBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-45],
-        [self.continueBtn.heightAnchor constraintEqualToConstant:56],
-        [self.continueBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-113],
+        [self.continueBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(45)],
+        [self.continueBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(45)],
+        [self.continueBtn.heightAnchor constraintEqualToConstant:SW(56)],
+        [self.continueBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-SW(113)],
     ]];
 }
 

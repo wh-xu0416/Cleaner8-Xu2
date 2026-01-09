@@ -1,24 +1,36 @@
 #import "ContactCell.h"
 
+#pragma mark - Adapt Helpers
+
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+
 @implementation ContactCell
 
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        self.contentView.backgroundColor = [UIColor whiteColor];
-        self.contentView.layer.cornerRadius = 10;
+        self.contentView.backgroundColor = UIColor.whiteColor;
+        self.contentView.layer.cornerRadius = AS(10);
         self.contentView.clipsToBounds = YES;
-        
+
         self.nameLabel = [[UILabel alloc] init];
-        self.nameLabel.font = [UIFont boldSystemFontOfSize:16];
-        self.nameLabel.textColor = [UIColor blackColor];
+        self.nameLabel.font = ASFontS(16, UIFontWeightBold);
+        self.nameLabel.textColor = UIColor.blackColor;
+        self.nameLabel.numberOfLines = 1;
         [self.contentView addSubview:self.nameLabel];
-        
+
         self.phoneLabel = [[UILabel alloc] init];
-        self.phoneLabel.font = [UIFont systemFontOfSize:14];
-        self.phoneLabel.textColor = [UIColor darkGrayColor];
+        self.phoneLabel.font = ASFontS(14, UIFontWeightRegular);
+        self.phoneLabel.textColor = UIColor.darkGrayColor;
+        self.phoneLabel.numberOfLines = 1;
         [self.contentView addSubview:self.phoneLabel];
-        
+
         self.checkButton = [UIButton buttonWithType:UIButtonTypeCustom];
         [self.checkButton setImage:[UIImage systemImageNamed:@"checkmark.circle"] forState:UIControlStateNormal];
         [self.checkButton setImage:[UIImage systemImageNamed:@"checkmark.circle.fill"] forState:UIControlStateSelected];
@@ -30,14 +42,35 @@
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    
-    CGFloat padding = 10;
-    
-    self.nameLabel.frame = CGRectMake(padding, padding, self.contentView.bounds.size.width - 80, 20);
-    
-    self.phoneLabel.frame = CGRectMake(padding, CGRectGetMaxY(self.nameLabel.frame) + 5, self.contentView.bounds.size.width - 80, 20);
-    
-    self.checkButton.frame = CGRectMake(self.contentView.bounds.size.width - 40, (self.contentView.bounds.size.height - 30) / 2, 30, 30);
+
+    CGFloat padding = AS(10);
+
+    CGFloat rightPad = AS(40);  
+    CGFloat nameH = AS(20);
+    CGFloat gap = AS(5);
+    CGFloat phoneH = AS(20);
+
+    CGFloat contentW = self.contentView.bounds.size.width;
+    CGFloat contentH = self.contentView.bounds.size.height;
+
+    self.nameLabel.frame = CGRectMake(padding,
+                                      padding,
+                                      contentW - padding - rightPad,
+                                      nameH);
+
+    self.phoneLabel.frame = CGRectMake(padding,
+                                       CGRectGetMaxY(self.nameLabel.frame) + gap,
+                                       contentW - padding - rightPad,
+                                       phoneH);
+
+    CGFloat btnW = AS(30);
+    CGFloat btnH = AS(30);
+    CGFloat btnX = contentW - AS(40);
+    CGFloat btnY = (contentH - btnH) * 0.5;
+
+    self.checkButton.frame = CGRectMake(btnX, btnY, btnW, btnH);
+
+    self.checkButton.contentEdgeInsets = UIEdgeInsetsMake(AS(8), AS(8), AS(8), AS(8));
 }
 
 - (void)selectButtonTapped {

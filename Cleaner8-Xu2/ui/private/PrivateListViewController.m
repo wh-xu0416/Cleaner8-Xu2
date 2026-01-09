@@ -11,6 +11,17 @@
 #import <AVFoundation/AVFoundation.h>
 #import "ASMediaPreviewViewController.h"
 
+#pragma mark - Adapt Helpers (402)
+
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
 static inline UIColor *ASHexBlack(void) {
     return [UIColor colorWithRed:0 green:0 blue:0 alpha:1.0];
 }
@@ -105,22 +116,25 @@ static inline UIColor *ASHexBlack(void) {
     [super viewDidLayoutSubviews];
     [self as_updatePrivateBackgroundLayout];
 
+    // grid size: 4 columns, spacing = AS(2), left/right inset = AS(15)
     UICollectionViewFlowLayout *lay = (UICollectionViewFlowLayout *)self.cv.collectionViewLayout;
     CGFloat w = self.cv.bounds.size.width;
-    CGFloat item = floor((w - 2*3) / 4.0);
+
+    CGFloat spacing = AS(2);
+    NSInteger columns = 4;
+    CGFloat item = floor((w - (columns - 1) * spacing) / (CGFloat)columns);
     lay.itemSize = CGSizeMake(item, item);
-    
-    CGFloat bottomInset = 70 + self.view.safeAreaInsets.bottom;
+
+    CGFloat bottomInset = AS(70) + self.view.safeAreaInsets.bottom; // 原 70
 
     self.cv.contentInset = UIEdgeInsetsMake(0, 0, bottomInset, 0);
-    self.cv.scrollIndicatorInsets = UIEdgeInsetsMake(0, 0, bottomInset, 0);
+    self.cv.scrollIndicatorInsets = self.cv.contentInset;
 
     [self.view bringSubviewToFront:self.bottomBtn];
 }
 
 - (void)buildUI {
     __weak typeof(self) ws = self;
-    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
 
     self.navBar = [[ASCustomNavBar alloc] initWithTitle:self.navTitleText ?: NSLocalizedString(@"Secret", nil)];
     self.navBar.translatesAutoresizingMaskIntoConstraints = NO;
@@ -132,7 +146,7 @@ static inline UIColor *ASHexBlack(void) {
     };
 
     self.navBar.showRightButton = YES;
-    self.navBar.onRight = ^(BOOL allSelected) {
+    self.navBar.onRight = ^(__unused BOOL allSelected) {
         UINavigationController *nav = [ws as_rootNav];
         if (![nav isKindOfClass:UINavigationController.class]) return;
         [nav popToRootViewControllerAnimated:YES];
@@ -144,19 +158,19 @@ static inline UIColor *ASHexBlack(void) {
         [self.navBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.navBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.navBar.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.navBar.heightAnchor constraintEqualToConstant:88],
+        [self.navBar.heightAnchor constraintEqualToConstant:AS(88)],
     ]];
 
     self.countLabel = [UILabel new];
     self.countLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.countLabel.textColor = UIColor.blackColor;
-    self.countLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightRegular];
+    self.countLabel.font = ASFontS(15, UIFontWeightRegular);
     [self.view addSubview:self.countLabel];
 
     self.selectAllButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.selectAllButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.selectAllButton.backgroundColor = UIColor.whiteColor;
-    self.selectAllButton.layer.cornerRadius = 18;
+    self.selectAllButton.layer.cornerRadius = AS(18);
     self.selectAllButton.layer.masksToBounds = YES;
     self.selectAllButton.adjustsImageWhenHighlighted = NO;
     self.selectAllButton.showsTouchWhenHighlighted = NO;
@@ -170,35 +184,35 @@ static inline UIColor *ASHexBlack(void) {
 
     self.selectTextLabel = [UILabel new];
     self.selectTextLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.selectTextLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    self.selectTextLabel.font = ASFontS(14, UIFontWeightMedium);
     self.selectTextLabel.textColor = ASHexBlack();
     [self.selectAllButton addSubview:self.selectTextLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.countLabel.topAnchor constraintEqualToAnchor:self.navBar.bottomAnchor constant:25],
-        [self.countLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
+        [self.countLabel.topAnchor constraintEqualToAnchor:self.navBar.bottomAnchor constant:AS(25)],
+        [self.countLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(20)],
 
-        [self.selectAllButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.selectAllButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(20)],
         [self.selectAllButton.centerYAnchor constraintEqualToAnchor:self.countLabel.centerYAnchor],
-        [self.selectAllButton.heightAnchor constraintEqualToConstant:36],
+        [self.selectAllButton.heightAnchor constraintEqualToConstant:AS(36)],
 
-        [self.selectIconView.leadingAnchor constraintEqualToAnchor:self.selectAllButton.leadingAnchor constant:6],
+        [self.selectIconView.leadingAnchor constraintEqualToAnchor:self.selectAllButton.leadingAnchor constant:AS(6)],
         [self.selectIconView.centerYAnchor constraintEqualToAnchor:self.selectAllButton.centerYAnchor],
-        [self.selectIconView.widthAnchor constraintEqualToConstant:24],
-        [self.selectIconView.heightAnchor constraintEqualToConstant:24],
+        [self.selectIconView.widthAnchor constraintEqualToConstant:AS(24)],
+        [self.selectIconView.heightAnchor constraintEqualToConstant:AS(24)],
 
-        [self.selectTextLabel.leadingAnchor constraintEqualToAnchor:self.selectIconView.trailingAnchor constant:6],
+        [self.selectTextLabel.leadingAnchor constraintEqualToAnchor:self.selectIconView.trailingAnchor constant:AS(6)],
         [self.selectTextLabel.centerYAnchor constraintEqualToAnchor:self.selectAllButton.centerYAnchor],
-        [self.selectTextLabel.trailingAnchor constraintEqualToAnchor:self.selectAllButton.trailingAnchor constant:-15],
+        [self.selectTextLabel.trailingAnchor constraintEqualToAnchor:self.selectAllButton.trailingAnchor constant:-AS(15)],
 
-        [self.selectAllButton.widthAnchor constraintGreaterThanOrEqualToConstant:36],
+        [self.selectAllButton.widthAnchor constraintGreaterThanOrEqualToConstant:AS(36)],
 
-        [self.countLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectAllButton.leadingAnchor constant:-12],
+        [self.countLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectAllButton.leadingAnchor constant:-AS(12)],
     ]];
 
     UICollectionViewFlowLayout *lay = [UICollectionViewFlowLayout new];
-    lay.minimumInteritemSpacing = 2;
-    lay.minimumLineSpacing = 2;
+    lay.minimumInteritemSpacing = AS(2);
+    lay.minimumLineSpacing = AS(2);
     lay.sectionInset = UIEdgeInsetsZero;
 
     self.cv = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:lay];
@@ -213,28 +227,29 @@ static inline UIColor *ASHexBlack(void) {
     self.bottomBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.bottomBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.bottomBtn.backgroundColor = ASBlue();
-    self.bottomBtn.layer.cornerRadius = 35;
+    self.bottomBtn.layer.cornerRadius = AS(35);
     self.bottomBtn.layer.masksToBounds = YES;
-    self.bottomBtn.contentEdgeInsets = UIEdgeInsetsMake(23, 15, 23, 15);
-    self.bottomBtn.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+    self.bottomBtn.contentEdgeInsets = ASEdgeInsets(23, 15, 23, 15);
+    self.bottomBtn.titleLabel.font = ASFontS(20, UIFontWeightRegular);
     [self.bottomBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.bottomBtn addTarget:self action:@selector(bottomTap) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.bottomBtn];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.bottomBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:15],
-        [self.bottomBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-15],
+        [self.bottomBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(15)],
+        [self.bottomBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(15)],
         [self.bottomBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:0],
-        [self.bottomBtn.heightAnchor constraintEqualToConstant:70],
+        [self.bottomBtn.heightAnchor constraintEqualToConstant:AS(70)],
     ]];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.cv.topAnchor constraintEqualToAnchor:self.selectAllButton.bottomAnchor constant:10],
-        [self.cv.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:15],
-        [self.cv.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-15],
+        [self.cv.topAnchor constraintEqualToAnchor:self.selectAllButton.bottomAnchor constant:AS(10)],
+        [self.cv.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(15)],
+        [self.cv.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(15)],
         [self.cv.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
     ]];
-    
+
+    // Empty
     self.emptyView = [UIView new];
     self.emptyView.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyView.hidden = YES;
@@ -250,20 +265,20 @@ static inline UIColor *ASHexBlack(void) {
     self.emptyTextLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyTextLabel.text = NSLocalizedString(@"No Content", nil);
     self.emptyTextLabel.textColor = UIColor.blackColor;
-    self.emptyTextLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightMedium];
+    self.emptyTextLabel.font = ASFontS(24, UIFontWeightMedium);
     self.emptyTextLabel.textAlignment = NSTextAlignmentCenter;
     [self.emptyView addSubview:self.emptyTextLabel];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.emptyView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.emptyView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-10],
+        [self.emptyView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-AS(10)],
 
         [self.emptyImageView.topAnchor constraintEqualToAnchor:self.emptyView.topAnchor],
         [self.emptyImageView.centerXAnchor constraintEqualToAnchor:self.emptyView.centerXAnchor],
-        [self.emptyImageView.widthAnchor constraintEqualToConstant:182],
-        [self.emptyImageView.heightAnchor constraintEqualToConstant:168],
+        [self.emptyImageView.widthAnchor constraintEqualToConstant:AS(182)],
+        [self.emptyImageView.heightAnchor constraintEqualToConstant:AS(168)],
 
-        [self.emptyTextLabel.topAnchor constraintEqualToAnchor:self.emptyImageView.bottomAnchor constant:2],
+        [self.emptyTextLabel.topAnchor constraintEqualToAnchor:self.emptyImageView.bottomAnchor constant:AS(2)],
         [self.emptyTextLabel.centerXAnchor constraintEqualToAnchor:self.emptyView.centerXAnchor],
         [self.emptyTextLabel.bottomAnchor constraintEqualToAnchor:self.emptyView.bottomAnchor],
     ]];
@@ -297,7 +312,6 @@ static inline UIColor *ASHexBlack(void) {
     NSString *suffix = (self.mediaType == ASPrivateMediaTypePhoto) ? NSLocalizedString(@"Photos", nil) : NSLocalizedString(@"Videos", nil);
     self.countLabel.text = [NSString stringWithFormat:@"%lu %@", (unsigned long)self.items.count, suffix];
 
-    // 修正 selected
     NSMutableSet *valid = [NSMutableSet set];
     for (NSURL *u in self.items) { [valid addObject:u.path ?: @""]; }
     [self.selectedPaths intersectSet:valid];
@@ -424,15 +438,12 @@ static inline UIColor *ASHexBlack(void) {
 #pragma mark - Bottom Action
 
 - (void)bottomTap {
-    // Delete mode
     if (self.selectedPaths.count > 0) {
         NSArray<NSURL *> *toDelete = [self selectedURLs];
         if (toDelete.count == 0) return;
 
-        // 1) 先删文件
         [[ASPrivateMediaStore shared] deleteItems:toDelete];
 
-        // 2) 计算要删的 index
         NSMutableIndexSet *rm = [NSMutableIndexSet indexSet];
         [self.items enumerateObjectsUsingBlock:^(NSURL *obj, NSUInteger idx, BOOL *stop) {
             if ([self.selectedPaths containsObject:(obj.path ?: @"")]) [rm addIndex:idx];
@@ -444,11 +455,10 @@ static inline UIColor *ASHexBlack(void) {
             [ips addObject:[NSIndexPath indexPathForItem:idx inSection:0]];
         }];
 
-        // 3) 更新 UI：只在 batchUpdates 里改数据源一次
         [self.cv performBatchUpdates:^{
             [self.items removeObjectsAtIndexes:rm];
             [self.cv deleteItemsAtIndexPaths:ips];
-        } completion:^(BOOL finished) {
+        } completion:^(__unused BOOL finished) {
             [self.selectedPaths removeAllObjects];
             self.allSelected = NO;
 
@@ -463,7 +473,6 @@ static inline UIColor *ASHexBlack(void) {
         return;
     }
 
-    // Add mode
     [self ensurePhotoAuthThen:^(BOOL ok) {
         if (!ok) { [self handlePermissionCTA]; return; }
         [self presentPicker];
@@ -471,8 +480,6 @@ static inline UIColor *ASHexBlack(void) {
 }
 
 - (void)presentPicker {
-    fprintf(stderr, " presentPicker called\n");
-
     PHPickerConfiguration *cfg =
     [[PHPickerConfiguration alloc] initWithPhotoLibrary:PHPhotoLibrary.sharedPhotoLibrary];
     cfg.preferredAssetRepresentationMode = PHPickerConfigurationAssetRepresentationModeCurrent;
@@ -488,10 +495,7 @@ static inline UIColor *ASHexBlack(void) {
 #pragma mark - PHPickerDelegate
 
 - (void)picker:(PHPickerViewController *)picker didFinishPicking:(NSArray<PHPickerResult *> *)results {
-    fprintf(stderr, " didFinishPicking count=%lu\n", (unsigned long)results.count);
-
     __weak typeof(self) ws = self;
-
     NSArray<PHPickerResult *> *picked = [results copy];
 
     [picker dismissViewControllerAnimated:YES completion:^{
@@ -510,7 +514,7 @@ static inline UIColor *ASHexBlack(void) {
                 [ws.cv performBatchUpdates:^{
                     [ws.items addObject:dstURL];
                     [ws.cv insertItemsAtIndexPaths:@[ip]];
-                } completion:^(BOOL finished) {
+                } completion:^(__unused BOOL finished) {
                     ws.pendingBatchUpdates -= 1;
                     if (ws.importNeedsReload && ws.pendingBatchUpdates == 0) {
                         ws.importNeedsReload = NO;
@@ -525,7 +529,7 @@ static inline UIColor *ASHexBlack(void) {
                 [ws updateSelectAllUI];
             });
 
-        } completion:^(BOOL ok) {
+        } completion:^(__unused BOOL ok) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 ws.importNeedsReload = YES;
                 if (ws.pendingBatchUpdates == 0) {
@@ -563,7 +567,6 @@ static inline UIColor *ASHexBlack(void) {
 
     cell.thumb.image = nil;
 
-    // maxPixel 按 cell 大小*scale
     CGSize s = ((UICollectionViewFlowLayout *)collectionView.collectionViewLayout).itemSize;
     CGFloat maxPixel = MAX(s.width, s.height) * UIScreen.mainScreen.scale;
 
@@ -572,7 +575,6 @@ static inline UIColor *ASHexBlack(void) {
         cell.thumb.image = cached;
         return cell;
     }
-
 
     dispatch_async(self.thumbQueue, ^{
         NSIndexPath *reqIP = indexPath;

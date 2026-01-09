@@ -10,6 +10,19 @@
 NS_ASSUME_NONNULL_BEGIN
 
 #pragma mark - UI Helpers
+
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 static NSString *ASHumanSizeTight(uint64_t bytes) {
     double b = (double)bytes;
     double kb = b / 1024.0;
@@ -112,12 +125,12 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
         _shadowContainer.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.10].CGColor;
         _shadowContainer.layer.shadowOpacity = 1;
         _shadowContainer.layer.shadowOffset = CGSizeMake(0, 2);
-        _shadowContainer.layer.shadowRadius = 8;
+        _shadowContainer.layer.shadowRadius = SW(8);
         [self.contentView addSubview:_shadowContainer];
 
         _cardContainer = [UIView new];
         _cardContainer.backgroundColor = UIColor.clearColor;
-        _cardContainer.layer.cornerRadius = 22;
+        _cardContainer.layer.cornerRadius = SW(22);
         _cardContainer.clipsToBounds = YES;
         [_shadowContainer addSubview:_cardContainer];
 
@@ -128,7 +141,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
         _whiteContent = [UIView new];
         _whiteContent.backgroundColor = UIColor.whiteColor;
-        _whiteContent.layer.cornerRadius = 22;
+        _whiteContent.layer.cornerRadius = SW(22);
         if (@available(iOS 11.0, *)) {
             _whiteContent.layer.maskedCorners = (kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner);
         }
@@ -140,34 +153,34 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
         _titleLabel.adjustsFontSizeToFitWidth = YES;
         _titleLabel.minimumScaleFactor = 0.75;
         _titleLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
-        _titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+        _titleLabel.font = SWFontS(20, UIFontWeightRegular);
         _titleLabel.textColor = UIColor.blackColor;
         [_whiteContent addSubview:_titleLabel];
 
         _countLabel = [UILabel new];
-        _countLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
+        _countLabel.font = SWFontS(12, UIFontWeightRegular);
         _countLabel.textColor = ASRGB(102, 102, 102);
         [_whiteContent addSubview:_countLabel];
 
         _badgeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         _badgeBtn.backgroundColor = ASBlue();
-        _badgeBtn.layer.cornerRadius = 18;
+        _badgeBtn.layer.cornerRadius = SW(18);
         _badgeBtn.clipsToBounds = YES;
-        _badgeBtn.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+        _badgeBtn.titleLabel.font = SWFontS(20, UIFontWeightRegular);
         [_badgeBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         _badgeBtn.userInteractionEnabled = NO;
-        _badgeBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 16, 10, 18);
+        _badgeBtn.contentEdgeInsets = SWInsets(10, 16, 10, 18);
         _badgeBtn.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
 
         UIImage *todo = [[UIImage imageNamed:@"ic_todo"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         if (todo) {
-            UIGraphicsBeginImageContextWithOptions(CGSizeMake(9, 16), NO, 0);
-            [todo drawInRect:CGRectMake(0, 0, 9, 16)];
+            UIGraphicsBeginImageContextWithOptions(CGSizeMake(SW(9), SW(16)), NO, 0);
+            [todo drawInRect:CGRectMake(0, 0, SW(9), SW(16))];
             UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext();
             UIGraphicsEndImageContext();
             [_badgeBtn setImage:scaled forState:UIControlStateNormal];
 
-            CGFloat spacing = 8;
+            CGFloat spacing = SW(8);
             _badgeBtn.imageEdgeInsets = UIEdgeInsetsMake(0, spacing, 0, 0);
             _badgeBtn.titleEdgeInsets = UIEdgeInsetsMake(0, 0, 0, spacing);
         }
@@ -179,11 +192,11 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
         _img2.contentMode = UIViewContentModeScaleAspectFill;
         _img1.clipsToBounds = YES;
         _img2.clipsToBounds = YES;
-        _img1.layer.cornerRadius = 10;
-        _img2.layer.cornerRadius = 10;
+        _img1.layer.cornerRadius = SW(10);
+        _img2.layer.cornerRadius = SW(10);
 
-        _img1.layer.borderWidth = 1;
-        _img2.layer.borderWidth = 1;
+        _img1.layer.borderWidth = SW(1);
+        _img2.layer.borderWidth = SW(1);
         _img1.layer.borderColor = UIColor.whiteColor.CGColor;
         _img2.layer.borderColor = UIColor.whiteColor.CGColor;
 
@@ -215,28 +228,28 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     CGFloat w = self.cardContainer.bounds.size.width;
     CGFloat h = self.cardContainer.bounds.size.height;
 
-    CGFloat topDecorH = 30;
-    CGFloat gap = 6;
+    CGFloat topDecorH = SW(30);
+    CGFloat gap = SW(6);
 
     self.topDecor.frame = CGRectMake(0, 0, w, topDecorH);
 
     CGFloat contentY = topDecorH + gap;
 
-    CGFloat whiteH = MIN(150.0, h - contentY);
+    CGFloat whiteH = MIN(SW(150.0), h - contentY);
     self.whiteContent.frame = CGRectMake(0, contentY, w, whiteH);
 
-    CGFloat padX = 16;
-    CGFloat padY = 20;
+    CGFloat padX = SW(16);
+    CGFloat padY = SW(20);
 
-    CGFloat bigW = 92,  bigH = 120;
-    CGFloat smallW = 60, smallH = 80;
+    CGFloat bigW = SW(92),  bigH = SW(120);
+    CGFloat smallW = SW(60), smallH = SW(80);
 
-    CGFloat rightInset = 22;
+    CGFloat rightInset = SW(22);
     CGFloat bigY = padY;
 
     CGFloat smallX = w - rightInset - smallW;
 
-    CGFloat bigX = smallX + 30 - bigW;
+    CGFloat bigX = smallX + SW(30) - bigW;
 
     CGFloat smallY = bigY + (bigH - smallH) * 0.5;
 
@@ -247,22 +260,22 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     [self.whiteContent bringSubviewToFront:self.img1];
     [self.whiteContent bringSubviewToFront:self.play1];
 
-    self.play1.frame = CGRectMake(CGRectGetMinX(self.img1.frame) + 10, CGRectGetMinY(self.img1.frame) + 10, 18, 18);
-    self.play2.frame = CGRectMake(CGRectGetMinX(self.img2.frame) + 10, CGRectGetMinY(self.img2.frame) + 10, 18, 18);
+    self.play1.frame = CGRectMake(CGRectGetMinX(self.img1.frame) + SW(10), CGRectGetMinY(self.img1.frame) + SW(10), SW(18), SW(18));
+    self.play2.frame = CGRectMake(CGRectGetMinX(self.img2.frame) + SW(10), CGRectGetMinY(self.img2.frame) + SW(10), SW(18), SW(18));
 
-    CGFloat textW = MAX(0, bigX - padX - 12);
-    self.titleLabel.frame = CGRectMake(padX, padY, textW, 24);
-    self.countLabel.frame = CGRectMake(padX, CGRectGetMaxY(self.titleLabel.frame) + 4, textW, 16);
+    CGFloat textW = MAX(0, bigX - padX - SW(12));
+    self.titleLabel.frame = CGRectMake(padX, padY, textW, SW(24));
+    self.countLabel.frame = CGRectMake(padX, CGRectGetMaxY(self.titleLabel.frame) + SW(4), textW, SW(16));
 
     NSString *t = self.badgeBtn.currentTitle ?: @"";
-    CGSize ts = [t sizeWithAttributes:@{NSFontAttributeName:self.badgeBtn.titleLabel.font ?: [UIFont systemFontOfSize:20]}];
+    CGSize ts = [t sizeWithAttributes:@{NSFontAttributeName:self.badgeBtn.titleLabel.font ?: [UIFont systemFontOfSize:SW(20)]}];
     UIImage *bi = [self.badgeBtn imageForState:UIControlStateNormal];
     CGFloat spacing = bi ? 8 : 0;
     UIEdgeInsets in = self.badgeBtn.contentEdgeInsets;
     CGFloat badgeW = ceil(in.left + ts.width + spacing + (bi?bi.size.width:0) + in.right);
-    CGFloat badgeH = 48;
+    CGFloat badgeH = SW(48);
     self.badgeBtn.layer.cornerRadius = badgeH / 2.0;
-    self.badgeBtn.frame = CGRectMake(padX, CGRectGetMaxY(self.countLabel.frame) + 14, badgeW, badgeH);
+    self.badgeBtn.frame = CGRectMake(padX, CGRectGetMaxY(self.countLabel.frame) + SW(14), badgeW, badgeH);
 }
 
 - (void)prepareForReuse {
@@ -419,7 +432,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 }
 
 - (NSAttributedString *)as_attrSummary2WithString:(NSString *)s {
-    UIFont *font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    UIFont *font = SWFontS(16, UIFontWeightMedium);
     UIColor *gray = ASRGB(102, 102, 102);
     UIColor *blue = ASRGB(2, 77, 255);
 
@@ -467,8 +480,8 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 - (void)buildCards {
     UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
     layout.scrollDirection = UICollectionViewScrollDirectionVertical;
-    layout.minimumLineSpacing = 20;
-    layout.sectionInset = UIEdgeInsetsMake(0, 30, 30, 30);
+    layout.minimumLineSpacing = SW(20);
+    layout.sectionInset = SWInsets(0, 30, 30, 30);
 
     self.cv = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
     self.cv.backgroundColor = UIColor.clearColor;
@@ -490,27 +503,27 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     [super viewDidLayoutSubviews];
     CGFloat w = self.view.bounds.size.width;
 
-    CGFloat gradientH = 0 + 402.0;
+    CGFloat gradientH = SW(402.0);
     self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     CGFloat topSafe = self.view.safeAreaInsets.top;
-    CGFloat navH = 44 + topSafe;
+    CGFloat navH = SW(44) + topSafe;
     CGFloat h = self.view.bounds.size.height;
 
     self.navBar.frame = CGRectMake(0, 0, w, navH);
     [self.view bringSubviewToFront:self.navBar];
 
-    CGFloat y = navH + 10.0;
-    CGFloat lineH = 22.0;
+    CGFloat y = navH + SW(10.0);
+    CGFloat lineH = SW(22.0);
 
     self.summaryLine1.frame = CGRectMake(0, y, w, lineH);
-    y += lineH + 6.0;
+    y += lineH + SW(6.0);
     self.summaryLine2.frame = CGRectMake(0, y, w, lineH);
 
-    CGFloat cardsTop = CGRectGetMaxY(self.summaryLine2.frame) + 20.0;
+    CGFloat cardsTop = CGRectGetMaxY(self.summaryLine2.frame) + SW(20.0);
     self.cv.frame = CGRectMake(0, cardsTop, w, h - cardsTop);
 
-    UIEdgeInsets in = UIEdgeInsetsMake(0, 0, self.view.safeAreaInsets.bottom + 20.0, 0);
+    UIEdgeInsets in = SWInsets(0, 0, self.view.safeAreaInsets.bottom + 20.0, 0);
     self.cv.contentInset = in;
     self.cv.scrollIndicatorInsets = in;
 }
@@ -840,8 +853,8 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 - (CGSize)collectionView:(UICollectionView *)collectionView
                   layout:(UICollectionViewLayout *)collectionViewLayout
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    CGFloat cellW = collectionView.bounds.size.width - 30 * 2;
-    CGFloat cellH = 30 + 6 + 150;
+    CGFloat cellW = collectionView.bounds.size.width - SW(30) * 2;
+    CGFloat cellH = SW(30) + SW(6) + SW(150);
     return CGSizeMake(cellW, cellH);
 }
 
@@ -872,13 +885,11 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
         BOOL hasAllFinal = cell.hasFinalThumb1 && (ids.count < 2 || cell.hasFinalThumb2);
         if (hasAllFinal) return;
-        // same key 但没最终图：允许补一次（不置 placeholder）
     } else {
         [self cancelCellRequests:cell];
         cell.hasFinalThumb1 = NO;
         cell.hasFinalThumb2 = NO;
 
-        // 只有当当前没图时才放 placeholder，避免闪
         if (!cell.img1.image) cell.img1.image = [UIImage imageNamed:@"ic_placeholder"];
         if (!cell.img2.image) cell.img2.image = [UIImage imageNamed:@"ic_placeholder"];
     }
@@ -912,12 +923,12 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
     CGSize s1 = cell.img1.bounds.size;
     if (s1.width <= 1 || s1.height <= 1) s1 = cell.img1.frame.size;
-    if (s1.width <= 1 || s1.height <= 1) s1 = CGSizeMake(120, 120);
+    if (s1.width <= 1 || s1.height <= 1) s1 = CGSizeMake(SW(120), SW(120));
     CGSize t1 = CGSizeMake(s1.width * scale, s1.height * scale);
 
     CGSize s2 = cell.img2.bounds.size;
     if (s2.width <= 1 || s2.height <= 1) s2 = cell.img2.frame.size;
-    if (s2.width <= 1 || s2.height <= 1) s2 = CGSizeMake(120, 120);
+    if (s2.width <= 1 || s2.height <= 1) s2 = CGSizeMake(SW(120), SW(120));
     CGSize t2 = CGSizeMake(s2.width * scale, s2.height * scale);
 
     __weak typeof(self) weakSelf = self;

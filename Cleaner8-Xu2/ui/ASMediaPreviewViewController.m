@@ -5,6 +5,20 @@
 #import <AVKit/AVKit.h>
 
 #pragma mark - Helpers
+
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
+
 static uint64_t ASFileBytes(NSURL *url) {
     if (!url) return 0;
 
@@ -114,7 +128,7 @@ static UIImage *ASSelectGrayOffImg(void) {
             [self.closeBtn setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal];
         }
         self.closeBtn.tintColor = [UIColor blackColor];
-        self.closeBtn.contentEdgeInsets = UIEdgeInsetsMake(4, 4, 4, 4);
+        self.closeBtn.contentEdgeInsets = SWInsets(4, 4, 4, 4);
         [self.closeBtn addTarget:self action:@selector(onCloseTap) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:self.closeBtn];
 
@@ -131,7 +145,7 @@ static UIImage *ASSelectGrayOffImg(void) {
             self.gapW,
             [self.closeBtn.centerYAnchor constraintEqualToAnchor:self.iv.centerYAnchor],
             self.closeW,
-            [self.closeBtn.heightAnchor constraintEqualToConstant:24],
+            [self.closeBtn.heightAnchor constraintEqualToConstant:SW(24)],
             [self.closeBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         ]];
 
@@ -141,16 +155,16 @@ static UIImage *ASSelectGrayOffImg(void) {
 }
 
 - (CGSize)intrinsicContentSize {
-    CGFloat w = self.badgeSize.width + (self.showsClose ? (4 + 24) : 0);
-    CGFloat h = MAX(self.badgeSize.height, (self.showsClose ? 24 : self.badgeSize.height));
+    CGFloat w = self.badgeSize.width + (self.showsClose ? (SW(4) + SW(24)) : 0);
+    CGFloat h = MAX(self.badgeSize.height, (self.showsClose ? SW(24) : self.badgeSize.height));
     return CGSizeMake(w, h);
 }
 
 - (void)setShowsClose:(BOOL)showsClose {
     _showsClose = showsClose;
     self.closeBtn.hidden = !showsClose;
-    self.closeW.constant = showsClose ? 24 : 0;
-    self.gapW.constant   = showsClose ? 4 : 0;
+    self.closeW.constant = showsClose ? SW(24) : 0;
+    self.gapW.constant   = showsClose ? SW(4) : 0;
     [self invalidateIntrinsicContentSize];
 }
 
@@ -486,7 +500,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.liveBadge.translatesAutoresizingMaskIntoConstraints = NO;
         self.liveBadge.userInteractionEnabled = YES;
         self.liveBadge.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
-        self.liveBadge.layer.cornerRadius = 14;
+        self.liveBadge.layer.cornerRadius = SW(14);
         self.liveBadge.layer.masksToBounds = YES;
         if (@available(iOS 13.0, *)) self.liveBadge.layer.cornerCurve = kCACornerCurveContinuous;
         [self.contentView addSubview:self.liveBadge];
@@ -510,7 +524,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.liveText.userInteractionEnabled = NO;
         self.liveText.text = NSLocalizedString(@"Live", nil);
         self.liveText.textColor = UIColor.whiteColor;
-        self.liveText.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+        self.liveText.font = SWFontS(14, UIFontWeightSemibold);
         [self.liveBadge addSubview:self.liveText];
 
         self.liveBadgeTapBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -526,15 +540,15 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         [NSLayoutConstraint activateConstraints:@[
             self.liveBadgeCenterXToLPVLeading,
             self.liveBadgeBottomToLPVTop,
-            [self.liveBadge.heightAnchor constraintEqualToConstant:28],
+            [self.liveBadge.heightAnchor constraintEqualToConstant:SW(28)],
 
-            [self.liveIcon.leadingAnchor constraintEqualToAnchor:self.liveBadge.leadingAnchor constant:10],
+            [self.liveIcon.leadingAnchor constraintEqualToAnchor:self.liveBadge.leadingAnchor constant:SW(10)],
             [self.liveIcon.centerYAnchor constraintEqualToAnchor:self.liveBadge.centerYAnchor],
-            [self.liveIcon.widthAnchor constraintEqualToConstant:20],
-            [self.liveIcon.heightAnchor constraintEqualToConstant:20],
+            [self.liveIcon.widthAnchor constraintEqualToConstant:SW(20)],
+            [self.liveIcon.heightAnchor constraintEqualToConstant:SW(20)],
 
-            [self.liveText.leadingAnchor constraintEqualToAnchor:self.liveIcon.trailingAnchor constant:6],
-            [self.liveText.trailingAnchor constraintEqualToAnchor:self.liveBadge.trailingAnchor constant:-12],
+            [self.liveText.leadingAnchor constraintEqualToAnchor:self.liveIcon.trailingAnchor constant:SW(6)],
+            [self.liveText.trailingAnchor constraintEqualToAnchor:self.liveBadge.trailingAnchor constant:-SW(12)],
             [self.liveText.centerYAnchor constraintEqualToAnchor:self.liveBadge.centerYAnchor],
 
             [self.liveBadgeTapBtn.leadingAnchor constraintEqualToAnchor:self.liveBadge.leadingAnchor],
@@ -568,7 +582,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     }
 
     self.liveBadgeCenterXToLPVLeading.constant = CGRectGetMidX(imgRect);
-    self.liveBadgeBottomToLPVTop.constant = CGRectGetMaxY(imgRect) - 20.0;
+    self.liveBadgeBottomToLPVTop.constant = CGRectGetMaxY(imgRect) - SW(20.0);
 }
 
 - (void)prepareForDisplay {
@@ -704,7 +718,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.ring = [UIView new];
         self.ring.translatesAutoresizingMaskIntoConstraints = NO;
         self.ring.backgroundColor = UIColor.clearColor;
-        self.ring.layer.cornerRadius = 34;
+        self.ring.layer.cornerRadius = SW(34);
         self.ring.layer.masksToBounds = YES;
         [self.contentView addSubview:self.ring];
 
@@ -712,7 +726,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.iv.translatesAutoresizingMaskIntoConstraints = NO;
         self.iv.contentMode = UIViewContentModeScaleAspectFill;
         self.iv.clipsToBounds = YES;
-        self.iv.layer.cornerRadius = 33;
+        self.iv.layer.cornerRadius = SW(33);
         self.iv.layer.masksToBounds = YES;
         [self.ring addSubview:self.iv];
 
@@ -726,7 +740,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.checkTapBtn.backgroundColor = UIColor.clearColor;
         [self.contentView addSubview:self.checkTapBtn];
 
-        self.best = [[ASBestBadgeView alloc] initWithBadgeSize:CGSizeMake(42, 16)];
+        self.best = [[ASBestBadgeView alloc] initWithBadgeSize:CGSizeMake(SW(42), SW(16))];
         self.best.userInteractionEnabled = NO;
         self.best.showsClose = NO;
         self.best.translatesAutoresizingMaskIntoConstraints = NO;
@@ -738,20 +752,20 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
             [self.ring.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.ring.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            [self.iv.leadingAnchor constraintEqualToAnchor:self.ring.leadingAnchor constant:3],
-            [self.iv.trailingAnchor constraintEqualToAnchor:self.ring.trailingAnchor constant:-3],
-            [self.iv.topAnchor constraintEqualToAnchor:self.ring.topAnchor constant:3],
-            [self.iv.bottomAnchor constraintEqualToAnchor:self.ring.bottomAnchor constant:-3],
+            [self.iv.leadingAnchor constraintEqualToAnchor:self.ring.leadingAnchor constant:SW(3)],
+            [self.iv.trailingAnchor constraintEqualToAnchor:self.ring.trailingAnchor constant:-SW(3)],
+            [self.iv.topAnchor constraintEqualToAnchor:self.ring.topAnchor constant:SW(3)],
+            [self.iv.bottomAnchor constraintEqualToAnchor:self.ring.bottomAnchor constant:-SW(3)],
 
-            [self.checkBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-2],
-            [self.checkBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:2],
-            [self.checkBtn.widthAnchor constraintEqualToConstant:22],
-            [self.checkBtn.heightAnchor constraintEqualToConstant:22],
+            [self.checkBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-SW(2)],
+            [self.checkBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:SW(2)],
+            [self.checkBtn.widthAnchor constraintEqualToConstant:SW(22)],
+            [self.checkBtn.heightAnchor constraintEqualToConstant:SW(22)],
 
-            [self.checkTapBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-10],
-            [self.checkTapBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:10],
-            [self.checkTapBtn.widthAnchor constraintEqualToConstant:44],
-            [self.checkTapBtn.heightAnchor constraintEqualToConstant:44],
+            [self.checkTapBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:-SW(10)],
+            [self.checkTapBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:SW(10)],
+            [self.checkTapBtn.widthAnchor constraintEqualToConstant:SW(44)],
+            [self.checkTapBtn.heightAnchor constraintEqualToConstant:SW(44)],
 
             [self.best.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
             [self.best.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:0],
@@ -963,19 +977,19 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     [self.topBar addSubview:self.backBtn];
 
     self.sizeLabel = [UILabel new];
-    self.sizeLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightRegular];
+    self.sizeLabel.font = SWFontS(17, UIFontWeightRegular);
     self.sizeLabel.textColor = ASBlack();
     self.sizeLabel.textAlignment = NSTextAlignmentCenter;
 
     self.indexLabel = [UILabel new];
-    self.indexLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+    self.indexLabel.font = SWFontS(17, UIFontWeightMedium);
     self.indexLabel.textColor = ASGray666();
     self.indexLabel.textAlignment = NSTextAlignmentCenter;
 
     UIStackView *center = [[UIStackView alloc] initWithArrangedSubviews:@[self.sizeLabel, self.indexLabel]];
     center.axis = UILayoutConstraintAxisVertical;
     center.alignment = UIStackViewAlignmentCenter;
-    center.spacing = 4;
+    center.spacing = SW(4);
     center.translatesAutoresizingMaskIntoConstraints = NO;
     [self.topBar addSubview:center];
 
@@ -999,11 +1013,11 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     self.topSelectBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.topSelectBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    self.topSelectBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.topSelectBtn.contentEdgeInsets = SWInsets(10, 10, 10, 10);
     [self.topSelectBtn addTarget:self action:@selector(onToggleSelectCurrent) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.topSelectBtn];
 
-    self.bestBadge = [[ASBestBadgeView alloc] initWithBadgeSize:CGSizeMake(60, 24)];
+    self.bestBadge = [[ASBestBadgeView alloc] initWithBadgeSize:CGSizeMake(SW(60), SW(24))];
     self.bestBadge.translatesAutoresizingMaskIntoConstraints = NO;
 
     self.bestBadge.showsClose = NO;
@@ -1013,8 +1027,8 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
 
     UICollectionViewFlowLayout *tlay = [UICollectionViewFlowLayout new];
     tlay.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-    tlay.minimumLineSpacing = 10;
-    tlay.sectionInset = UIEdgeInsetsMake(0, 16, 0, 16);
+    tlay.minimumLineSpacing = SW(10);
+    tlay.sectionInset = SWInsets(0, 16, 0, 16);
 
     self.thumbs = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:tlay];
     self.thumbs.backgroundColor = UIColor.clearColor;
@@ -1034,17 +1048,17 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         [self.topBar.topAnchor constraintEqualToAnchor:safe.topAnchor],
         [self.topBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.topBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.topBar.heightAnchor constraintEqualToConstant:56],
+        [self.topBar.heightAnchor constraintEqualToConstant:SW(56)],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.topBar.leadingAnchor constant:16],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.topBar.leadingAnchor constant:SW(16)],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:self.topBar.centerYAnchor],
-        [self.backBtn.widthAnchor constraintEqualToConstant:24],
-        [self.backBtn.heightAnchor constraintEqualToConstant:24],
+        [self.backBtn.widthAnchor constraintEqualToConstant:SW(24)],
+        [self.backBtn.heightAnchor constraintEqualToConstant:SW(24)],
 
         [center.centerXAnchor constraintEqualToAnchor:self.topBar.centerXAnchor],
         [center.centerYAnchor constraintEqualToAnchor:self.topBar.centerYAnchor],
 
-        [self.pager.topAnchor constraintEqualToAnchor:self.topBar.bottomAnchor constant:10],
+        [self.pager.topAnchor constraintEqualToAnchor:self.topBar.bottomAnchor constant:SW(10)],
         [self.pager.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.pager.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
     ]];
@@ -1058,18 +1072,18 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         [self.thumbs.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.thumbs.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.thumbs.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
-        [self.thumbs.heightAnchor constraintEqualToConstant:(multi ? 120 : 0)],
+        [self.thumbs.heightAnchor constraintEqualToConstant:(multi ? SW(120) : 0)],
         [self.pager.bottomAnchor constraintEqualToAnchor:(multi ? self.thumbs.topAnchor : safe.bottomAnchor)],
     ]];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.topSelectBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.topSelectBtn.topAnchor constraintEqualToAnchor:self.pager.topAnchor constant:18],
-        [self.topSelectBtn.widthAnchor constraintEqualToConstant:44],
-        [self.topSelectBtn.heightAnchor constraintEqualToConstant:44],
+        [self.topSelectBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(16)],
+        [self.topSelectBtn.topAnchor constraintEqualToAnchor:self.pager.topAnchor constant:SW(18)],
+        [self.topSelectBtn.widthAnchor constraintEqualToConstant:SW(44)],
+        [self.topSelectBtn.heightAnchor constraintEqualToConstant:SW(44)],
 
-        [self.bestBadge.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18],
-        [self.bestBadge.bottomAnchor constraintEqualToAnchor:self.pager.bottomAnchor constant:-18],
+        [self.bestBadge.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(18)],
+        [self.bestBadge.bottomAnchor constraintEqualToAnchor:self.pager.bottomAnchor constant:-SW(18)],
     ]];
 
     self.topSelectBtn.hidden = !multi;
@@ -1296,7 +1310,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
     opt.resizeMode = PHImageRequestOptionsResizeModeFast;
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
 
-    CGFloat px = 68 * UIScreen.mainScreen.scale * 2.0;
+    CGFloat px = SW(68) * UIScreen.mainScreen.scale * 2.0;
     CGSize target = CGSizeMake(px, px);
 
     __weak typeof(cell) weakCell = cell;
@@ -1337,7 +1351,7 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
 
     if (collectionView == self.pager) return collectionView.bounds.size;
-    return CGSizeMake(68, 68);
+    return CGSizeMake(SW(68), SW(68));
 }
 
 - (void)collectionView:(UICollectionView *)collectionView willDisplayCell:(UICollectionViewCell *)cell forItemAtIndexPath:(NSIndexPath *)indexPath {

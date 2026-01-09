@@ -1,5 +1,18 @@
 #import "ASSelectTitleBar.h"
 
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
+
 static inline UIColor *ASHexBlack(void) {
     // #000000FF
     return [UIColor colorWithRed:0 green:0 blue:0 alpha:1.0];
@@ -35,36 +48,33 @@ static inline UIColor *ASHexBlack(void) {
         [self.backButton setImage:backImg forState:UIControlStateNormal];
         self.backButton.contentEdgeInsets = UIEdgeInsetsZero;
         self.backButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-        self.backButton.imageEdgeInsets = UIEdgeInsetsMake(10, 0, 10, 0);
+        self.backButton.imageEdgeInsets = SWInsets(10, 0, 10, 0);
         self.backButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
 
         [self.backButton addTarget:self action:@selector(backTap) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:self.backButton];
 
-        // ===== Title =====
         self.titleLabel = [UILabel new];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.titleLabel.text = title;
         self.titleLabel.textAlignment = NSTextAlignmentLeft;
-        self.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightSemibold];
+        self.titleLabel.font = SWFontS(20, UIFontWeightSemibold);
         self.titleLabel.textColor = ASHexBlack();
         self.titleLabel.numberOfLines = 1;
         self.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
         [self addSubview:self.titleLabel];
 
-        // ===== Select All Button (white, rounded) =====
         self.selectAllButton = [UIButton buttonWithType:UIButtonTypeCustom];
         self.selectAllButton.translatesAutoresizingMaskIntoConstraints = NO;
         self.selectAllButton.backgroundColor = UIColor.whiteColor;
         self.selectAllButton.adjustsImageWhenHighlighted = NO;
         self.selectAllButton.showsTouchWhenHighlighted = NO;
-        self.selectAllButton.layer.cornerRadius = 18; // 配合高度36
+        self.selectAllButton.layer.cornerRadius = SW(18);
         self.selectAllButton.layer.masksToBounds = YES;
 
         [self.selectAllButton addTarget:self action:@selector(selectAllTap) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:self.selectAllButton];
 
-        // inside: icon + text
         self.selectIconView = [UIImageView new];
         self.selectIconView.translatesAutoresizingMaskIntoConstraints = NO;
         self.selectIconView.contentMode = UIViewContentModeScaleAspectFit;
@@ -72,47 +82,42 @@ static inline UIColor *ASHexBlack(void) {
 
         self.selectTextLabel = [UILabel new];
         self.selectTextLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.selectTextLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+        self.selectTextLabel.font = SWFontS(14, UIFontWeightMedium);
         self.selectTextLabel.textColor = ASHexBlack();
         self.selectTextLabel.numberOfLines = 1;
         [self.selectAllButton addSubview:self.selectTextLabel];
 
-        // ===== Layout =====
         [NSLayoutConstraint activateConstraints:@[
-            // back: left inset 20
-            [self.backButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
+            [self.backButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:SW(20)],
             [self.backButton.topAnchor constraintEqualToAnchor:safe.topAnchor constant:0],
-            [self.backButton.widthAnchor constraintEqualToConstant:44],
-            [self.backButton.heightAnchor constraintEqualToConstant:44],
+            [self.backButton.widthAnchor constraintEqualToConstant:SW(44)],
+            [self.backButton.heightAnchor constraintEqualToConstant:SW(44)],
 
-            // select: right inset 20
-            [self.selectAllButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-20],
+            [self.selectAllButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-SW(20)],
             [self.selectAllButton.centerYAnchor constraintEqualToAnchor:self.backButton.centerYAnchor],
-            [self.selectAllButton.heightAnchor constraintEqualToConstant:36],
+            [self.selectAllButton.heightAnchor constraintEqualToConstant:SW(36)],
 
-            // inner padding = 6, spacing between icon/text = 6
-            [self.selectIconView.leadingAnchor constraintEqualToAnchor:self.selectAllButton.leadingAnchor constant:6],
+            [self.selectIconView.leadingAnchor constraintEqualToAnchor:self.selectAllButton.leadingAnchor constant:SW(6)],
             [self.selectIconView.centerYAnchor constraintEqualToAnchor:self.selectAllButton.centerYAnchor],
-            [self.selectIconView.widthAnchor constraintEqualToConstant:24],
-            [self.selectIconView.heightAnchor constraintEqualToConstant:24],
+            [self.selectIconView.widthAnchor constraintEqualToConstant:SW(24)],
+            [self.selectIconView.heightAnchor constraintEqualToConstant:SW(24)],
 
-            [self.selectTextLabel.leadingAnchor constraintEqualToAnchor:self.selectIconView.trailingAnchor constant:6],
-            [self.selectTextLabel.trailingAnchor constraintEqualToAnchor:self.selectAllButton.trailingAnchor constant:-15],
+            [self.selectTextLabel.leadingAnchor constraintEqualToAnchor:self.selectIconView.trailingAnchor constant:SW(6)],
+            [self.selectTextLabel.trailingAnchor constraintEqualToAnchor:self.selectAllButton.trailingAnchor constant:-SW(15)],
             [self.selectTextLabel.centerYAnchor constraintEqualToAnchor:self.selectAllButton.centerYAnchor],
 
-            [self.selectAllButton.widthAnchor constraintGreaterThanOrEqualToConstant:36],
+            [self.selectAllButton.widthAnchor constraintGreaterThanOrEqualToConstant:SW(36)],
         ]];
 
-        // title: 20pt from back button
         [NSLayoutConstraint activateConstraints:@[
-            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.backButton.imageView.trailingAnchor constant:20],
+            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.backButton.imageView.trailingAnchor constant:SW(20)],
             [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.backButton.centerYAnchor],
-            [self.titleLabel.heightAnchor constraintEqualToConstant:44],
-            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-20],
+            [self.titleLabel.heightAnchor constraintEqualToConstant:SW(44)],
+            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-SW(20)],
         ]];
 
         self.titleTrailingToSelectConstraint =
-            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectAllButton.leadingAnchor constant:-12];
+            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectAllButton.leadingAnchor constant:-SW(12)];
         self.titleTrailingToSelectConstraint.active = YES;
 
         self.showTitle = YES;
@@ -142,7 +147,6 @@ static inline UIColor *ASHexBlack(void) {
     _showSelectButton = showSelectButton;
     self.selectAllButton.hidden = !showSelectButton;
 
-    // 右按钮隐藏时，让 title 不再受 “靠左到 selectButton” 的限制
     self.titleTrailingToSelectConstraint.active = showSelectButton;
 }
 
@@ -153,7 +157,6 @@ static inline UIColor *ASHexBlack(void) {
 }
 
 - (void)selectAllTap {
-    // 这里默认内部切换状态；如果你想“只通知不切换”，删掉下一行即可
     self.allSelected = !self.allSelected;
 
     if (self.onToggleSelectAll) {

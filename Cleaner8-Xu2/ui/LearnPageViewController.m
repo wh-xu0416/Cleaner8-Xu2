@@ -1,6 +1,18 @@
 #import "LearnPageViewController.h"
 #import "Common.h"
 
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 #pragma mark - Cell (one page = one big image centered)
 
 @interface LearnBigImageCell : UICollectionViewCell
@@ -19,9 +31,9 @@
         _imgView.clipsToBounds = YES;
         [self.contentView addSubview:_imgView];
 
-        NSLayoutConstraint *w = [_imgView.widthAnchor constraintEqualToConstant:402];
+        NSLayoutConstraint *w = [_imgView.widthAnchor constraintEqualToConstant:SW(402)];
         w.priority = 999;
-        NSLayoutConstraint *h = [_imgView.heightAnchor constraintEqualToConstant:402];
+        NSLayoutConstraint *h = [_imgView.heightAnchor constraintEqualToConstant:SW(402)];
         h.priority = 999;
 
         [NSLayoutConstraint activateConstraints:@[
@@ -30,8 +42,8 @@
 
             w, h,
             // 防止小屏溢出
-            [_imgView.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.leadingAnchor constant:15],
-            [_imgView.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-15],
+            [_imgView.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.leadingAnchor constant:SW(15)],
+            [_imgView.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-SW(15)],
             [_imgView.topAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.topAnchor],
             [_imgView.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor],
         ]];
@@ -76,11 +88,11 @@ static NSString * const kCellId = @"LearnBigImageCell";
 - (instancetype)init {
     if ((self = [super init])) {
         _instructions = @[
-            L(@"1、Open The “Photos\" APP"),
-            L(@"2、Open The “Photos\" APP"),
-            L(@"3、Tap the \"Select\" button in the upper right corner"),
-            L(@"4、Click the \"Delete All\" Button on the Top Right Corner"),
-            L(@"5、Next, tap the\n\"Delete From All Devices\" Button")
+            NSLocalizedString(@"1、Open The “Photos\" APP",nil),
+            NSLocalizedString(@"2、Open The “Photos\" APP",nil),
+            NSLocalizedString(@"3、Tap the \"Select\" button in the upper right corner",nil),
+            NSLocalizedString(@"4、Click the \"Delete All\" Button on the Top Right Corner",nil),
+            NSLocalizedString(@"5、Next, tap the\n\"Delete From All Devices\" Button",nil)
         ];
         _imageNames = @[@"ic_learn_1", @"ic_learn_2", @"ic_learn_3", @"ic_learn_4", @"ic_learn_5"];
         _currentIndex = 0;
@@ -155,8 +167,8 @@ static NSString * const kCellId = @"LearnBigImageCell";
 
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.text = L(@"How to empty\n\"Recently Deleted\" album?");
-    self.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightSemibold];
+    self.titleLabel.text = NSLocalizedString(@"How to empty\n\"Recently Deleted\" album?",nil);
+    self.titleLabel.font = SWFontS(20, UIFontWeightSemibold);
     self.titleLabel.textColor = UIColor.blackColor;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     self.titleLabel.numberOfLines = 2;
@@ -169,7 +181,7 @@ static NSString * const kCellId = @"LearnBigImageCell";
 
     self.descriptionLabel = [[UILabel alloc] init];
     self.descriptionLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.descriptionLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightSemibold];
+    self.descriptionLabel.font = SWFontS(20, UIFontWeightSemibold);
     self.descriptionLabel.textColor = [self brandBlue];
     self.descriptionLabel.textAlignment = NSTextAlignmentCenter;
     self.descriptionLabel.numberOfLines = 2;
@@ -198,7 +210,7 @@ static NSString * const kCellId = @"LearnBigImageCell";
     [self.nextButton setTitle:NSLocalizedString(@"Next", nil) forState:UIControlStateNormal];
     self.nextButton.backgroundColor = [self brandBlue];
     self.nextButton.layer.cornerRadius = 35;
-    self.nextButton.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+    self.nextButton.titleLabel.font = SWFontS(20, UIFontWeightRegular);
     [self.nextButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.nextButton addTarget:self action:@selector(onNext) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.nextButton];
@@ -214,45 +226,45 @@ static NSString * const kCellId = @"LearnBigImageCell";
         [self.topBar.topAnchor constraintEqualToAnchor:safe.topAnchor],
         [self.topBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.topBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.topBar.heightAnchor constraintEqualToConstant:44],
+        [self.topBar.heightAnchor constraintEqualToConstant:SW(44)],
 
-        [self.backButton.leadingAnchor constraintEqualToAnchor:self.topBar.leadingAnchor constant:20],
+        [self.backButton.leadingAnchor constraintEqualToAnchor:self.topBar.leadingAnchor constant:SW(20)],
         [self.backButton.centerYAnchor constraintEqualToAnchor:self.topBar.centerYAnchor],
-        [self.backButton.widthAnchor constraintEqualToConstant:24],
-        [self.backButton.heightAnchor constraintEqualToConstant:24],
+        [self.backButton.widthAnchor constraintEqualToConstant:SW(24)],
+        [self.backButton.heightAnchor constraintEqualToConstant:SW(24)],
 
         [self.qpImageView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.qpImageView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:60],
-        [self.qpImageView.widthAnchor constraintEqualToConstant:342],
-        [self.qpImageView.heightAnchor constraintEqualToConstant:115],
+        [self.qpImageView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:SW(60)],
+        [self.qpImageView.widthAnchor constraintEqualToConstant:SW(342)],
+        [self.qpImageView.heightAnchor constraintEqualToConstant:SW(115)],
 
-        [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.qpImageView.centerXAnchor constant:-20],
-        [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.qpImageView.centerYAnchor constant:-10],
-        [self.titleLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.qpImageView.leadingAnchor constant:12],
-        [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.qpImageView.trailingAnchor constant:-12],
+        [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.qpImageView.centerXAnchor constant:-SW(20)],
+        [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.qpImageView.centerYAnchor constant:-SW(10)],
+        [self.titleLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.qpImageView.leadingAnchor constant:SW(12)],
+        [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.qpImageView.trailingAnchor constant:-SW(12)],
 
-        [self.bookImageView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-39],
-        [self.bookImageView.topAnchor constraintEqualToAnchor:self.qpImageView.topAnchor constant:-30],
-        [self.bookImageView.widthAnchor constraintEqualToConstant:88],
-        [self.bookImageView.heightAnchor constraintEqualToConstant:73],
+        [self.bookImageView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(39)],
+        [self.bookImageView.topAnchor constraintEqualToAnchor:self.qpImageView.topAnchor constant:-SW(30)],
+        [self.bookImageView.widthAnchor constraintEqualToConstant:SW(88)],
+        [self.bookImageView.heightAnchor constraintEqualToConstant:SW(73)],
 
-        [self.nextButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:15],
-        [self.nextButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-15],
+        [self.nextButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(15)],
+        [self.nextButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(15)],
         [self.nextButton.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
-        [self.nextButton.heightAnchor constraintEqualToConstant:70],
+        [self.nextButton.heightAnchor constraintEqualToConstant:SW(70)],
 
-        [self.descContainer.topAnchor constraintEqualToAnchor:self.qpImageView.bottomAnchor constant:25],
-        [self.descContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.descContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.descContainer.topAnchor constraintEqualToAnchor:self.qpImageView.bottomAnchor constant:SW(25)],
+        [self.descContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(20)],
+        [self.descContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(20)],
         [self.descContainer.heightAnchor constraintEqualToConstant:twoLinesHeight],
         [self.descriptionLabel.leadingAnchor constraintEqualToAnchor:self.descContainer.leadingAnchor],
         [self.descriptionLabel.trailingAnchor constraintEqualToAnchor:self.descContainer.trailingAnchor],
         [self.descriptionLabel.centerYAnchor constraintEqualToAnchor:self.descContainer.centerYAnchor],
 
-        [self.collectionView.topAnchor constraintEqualToAnchor:self.descContainer.bottomAnchor constant:15],
+        [self.collectionView.topAnchor constraintEqualToAnchor:self.descContainer.bottomAnchor constant:SW(15)],
         [self.collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.collectionView.bottomAnchor constraintEqualToAnchor:self.nextButton.topAnchor constant:-10],
+        [self.collectionView.bottomAnchor constraintEqualToAnchor:self.nextButton.topAnchor constant:-SW(10)],
     ]];
 }
 

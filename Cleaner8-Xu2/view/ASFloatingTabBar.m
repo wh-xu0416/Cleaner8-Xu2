@@ -1,6 +1,19 @@
 #import "ASFloatingTabBar.h"
 #import <objc/runtime.h>
 
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
+
 static const void *kASIconViewKey = &kASIconViewKey;
 static const void *kASTitleLabelKey = &kASTitleLabelKey;
 
@@ -38,7 +51,7 @@ static inline UIColor *ASColorHex(uint32_t rgb, CGFloat alpha) {
         self.layer.shadowColor = ASColorHex(0x000000, 0x1A / 255.0).CGColor;
         self.layer.shadowOpacity = 1.0;
         self.layer.shadowOffset = CGSizeMake(0, 0);
-        self.layer.shadowRadius = 10.0;
+        self.layer.shadowRadius = SW(10.0);
 
         NSMutableArray *arr = [NSMutableArray array];
 
@@ -56,20 +69,20 @@ static inline UIColor *ASColorHex(uint32_t rgb, CGFloat alpha) {
             iv.contentMode = UIViewContentModeScaleAspectFit;
             iv.translatesAutoresizingMaskIntoConstraints = NO;
             [NSLayoutConstraint activateConstraints:@[
-                [iv.widthAnchor constraintEqualToConstant:31],
-                [iv.heightAnchor constraintEqualToConstant:31],
+                [iv.widthAnchor constraintEqualToConstant:SW(31)],
+                [iv.heightAnchor constraintEqualToConstant:SW(31)],
             ]];
 
             UILabel *lb = [UILabel new];
             lb.text = it.title;
-            lb.font = [UIFont systemFontOfSize:10 weight:UIFontWeightSemibold];
+            lb.font = SWFontS(10,UIFontWeightSemibold);
             lb.textAlignment = NSTextAlignmentCenter;
             lb.textColor = ASColorHex(0x454545, 1.0);
 
             UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[iv, lb]];
             stack.axis = UILayoutConstraintAxisVertical;
             stack.alignment = UIStackViewAlignmentCenter;
-            stack.spacing = 4;
+            stack.spacing = SW(4);
             stack.userInteractionEnabled = NO;
             stack.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -101,7 +114,7 @@ static inline UIColor *ASColorHex(uint32_t rgb, CGFloat alpha) {
     NSInteger c = self.buttons.count;
     if (c <= 0) return;
 
-    self.layer.cornerRadius = 35.0;
+    self.layer.cornerRadius = SW(35.0);
 
     self.layer.shadowPath =
         [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:self.layer.cornerRadius].CGPath;

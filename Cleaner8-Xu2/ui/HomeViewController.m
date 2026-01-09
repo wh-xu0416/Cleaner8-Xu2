@@ -18,10 +18,6 @@ typedef NS_ENUM(NSInteger, ASPhotoAuthLevel) {
     ASPhotoAuthLevelFull    = 2
 };
 
-static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
-}
-
 static inline UIColor *ASBlue(void) {
     return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; // #024DFFFF
 }
@@ -36,11 +32,34 @@ static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
 }
 
-static const CGFloat kHomeSideInset = 16.0;
-static const CGFloat kHomeGridGap   = 12.0;
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 
-static const CGFloat kHeaderHeight  = 200.0;
-static const CGFloat kLargeCellH    = 260.0;
+static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
+    return SWFontS(size,weight);
+}
+
+
+//static const CGFloat kHomeSideInset = SW(16.0);
+//static const CGFloat kHomeGridGap   = SW(12.0);
+
+//static const CGFloat kHeaderHeight  = SW(200.0);
+//static const CGFloat kLargeCellH    = SW(260.0);
+
+#define kHomeSideInset   SW(16.0)
+#define kHomeGridGap     SW(12.0)
+#define kHeaderHeight    SW(200.0)
+#define kLargeCellH      SW(260.0)
 
 static UIColor *kHomeBgColor(void) { return ASRGB(246, 248, 251); }
 static UIColor *kCardShadowColor(void) { return [UIColor colorWithWhite:0 alpha:0.10]; }
@@ -154,7 +173,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     CGFloat w = self.bounds.size.width;
     CGFloat h = self.bounds.size.height;
 
-    CGFloat radius = 6.0;
+    CGFloat radius = SW(6.0);
     CGFloat overlap = radius;
 
     CGFloat sum = self.redRatio + self.yellowRatio + self.grayRatio;
@@ -279,12 +298,12 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
 
         _btn = [UIButton buttonWithType:UIButtonTypeCustom];
         _btn.backgroundColor = ASBlue();
-        _btn.layer.cornerRadius = 35;
+        _btn.layer.cornerRadius = SW(35);
         _btn.clipsToBounds = YES;
         [_btn setTitle:NSLocalizedString(@"Go to Settings", nil) forState:UIControlStateNormal];
         [_btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         _btn.titleLabel.font = ASFont(20, UIFontWeightRegular);
-        _btn.contentEdgeInsets = UIEdgeInsetsMake(18, 0, 18, 0);
+        _btn.contentEdgeInsets = SWInsets(18, 0, 18, 0);
         [_btn addTarget:self action:@selector(onBtn) forControlEvents:UIControlEventTouchUpInside];
         [self.contentView addSubview:_btn];
     }
@@ -299,23 +318,23 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     [super layoutSubviews];
 
     CGFloat w = self.contentView.bounds.size.width;
-    CGFloat top = 60;
+    CGFloat top = SW(60);
 
-    self.iconView.frame = CGRectMake((w - 96)/2.0, top, 96, 96);
-    self.t1.frame = CGRectMake(30, CGRectGetMaxY(self.iconView.frame) + 20, w - 60, 24);
-    CGFloat t2W = w - 90;
+    self.iconView.frame = CGRectMake((w - SW(96))/2.0, top, SW(96), SW(96));
+    self.t1.frame = CGRectMake(SW(30), CGRectGetMaxY(self.iconView.frame) + SW(20), w - SW(60), SW(24));
+    CGFloat t2W = w - SW(90);
 
     CGSize t2Size = [self.t2 sizeThatFits:CGSizeMake(t2W, CGFLOAT_MAX)];
     CGFloat lineH = self.t2.font.lineHeight;
 
     CGFloat t2H = MIN(t2Size.height, ceil(lineH * 3.0));
 
-    self.t2.frame = CGRectMake(45, CGRectGetMaxY(self.t1.frame) + 10, t2W, t2H);
-    CGFloat btnW = w - 90;
+    self.t2.frame = CGRectMake(SW(45), CGRectGetMaxY(self.t1.frame) + SW(10), t2W, t2H);
+    CGFloat btnW = w - SW(90);
     self.btn.frame = CGRectMake((w - btnW)/2.0,
-                                CGRectGetMaxY(self.t2.frame) + 50,
+                                CGRectGetMaxY(self.t2.frame) + SW(50),
                                 btnW,
-                                70);
+                                SW(70));
 }
 
 @end
@@ -339,37 +358,37 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
 
         _spaceTitleLabel = [UILabel new];
         _spaceTitleLabel.text = NSLocalizedString(@"Space To Clean", nil);
-        _spaceTitleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+        _spaceTitleLabel.font = ASFont(17, UIFontWeightMedium);
         _spaceTitleLabel.textColor = UIColor.blackColor;
         [self addSubview:_spaceTitleLabel];
 
         _spaceLabel = [UILabel new];
-        _spaceLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightMedium];
+        _spaceLabel.font = ASFont(34, UIFontWeightMedium);
         _spaceLabel.textColor = UIColor.blackColor;
         [self addSubview:_spaceLabel];
 
         _proBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-        _proBtn.layer.cornerRadius = 18;
+        _proBtn.layer.cornerRadius = SW(18);
         _proBtn.clipsToBounds = YES;
-        _proBtn.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightMedium];
+        _proBtn.titleLabel.font = SWFontS(18, UIFontWeightMedium);
         [_proBtn setTitle:NSLocalizedString(@"Pro", nil) forState:UIControlStateNormal];
         [_proBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
 
         UIImage *vip = [[UIImage imageNamed:@"ic_vip"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         if (vip) {
-            UIGraphicsBeginImageContextWithOptions(CGSizeMake(24, 24), NO, 0);
-            [vip drawInRect:CGRectMake(0, 0, 24, 24)];
+            UIGraphicsBeginImageContextWithOptions(CGSizeMake(SW(24), SW(24)), NO, 0);
+            [vip drawInRect:CGRectMake(0, 0, SW(24), SW(24))];
             UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext();
             UIGraphicsEndImageContext();
 
             [_proBtn setImage:scaled forState:UIControlStateNormal];
             _proBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
 
-            _proBtn.contentEdgeInsets = UIEdgeInsetsMake(4, 6, 4, 6);
-            _proBtn.imageEdgeInsets = UIEdgeInsetsMake(0, 4, 0, 8);
+            _proBtn.contentEdgeInsets = SWInsets(4, 6, 4, 6);
+            _proBtn.imageEdgeInsets = SWInsets(0, 4, 0, 8);
             _proBtn.titleEdgeInsets = UIEdgeInsetsZero;
         } else {
-            _proBtn.contentEdgeInsets = UIEdgeInsetsMake(4, 6, 4, 6);
+            _proBtn.contentEdgeInsets = SWInsets(4, 6, 4, 6);
         }
 
         _proBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
@@ -383,7 +402,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         ];
         _proGradient.startPoint = CGPointMake(0, 0.5);
         _proGradient.endPoint = CGPointMake(1, 0.5);
-        _proGradient.cornerRadius = 18;
+        _proGradient.cornerRadius = SW(18);
         [_proBtn.layer insertSublayer:_proGradient atIndex:0];
 
         _bar = [[ASSegmentedBarView alloc] initWithFrame:CGRectZero];
@@ -391,49 +410,49 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
 
         _legend1Dot = [UIView new];
         _legend1Dot.backgroundColor = kClutterRed();
-        _legend1Dot.layer.cornerRadius = 3;
+        _legend1Dot.layer.cornerRadius = SW(3);
         [self addSubview:_legend1Dot];
 
         _legend1Name = [UILabel new];
         _legend1Name.text = NSLocalizedString(@"Clutter", nil);
-        _legend1Name.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+        _legend1Name.font = ASFont(12, UIFontWeightMedium);
         _legend1Name.textColor = kTextGray();
         [self addSubview:_legend1Name];
 
         _legend1Value = [UILabel new];
-        _legend1Value.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+        _legend1Value.font = ASFont(12, UIFontWeightMedium);
         _legend1Value.textColor = UIColor.blackColor;
         [self addSubview:_legend1Value];
 
         _legend2Dot = [UIView new];
         _legend2Dot.backgroundColor = kAppDataYellow();
-        _legend2Dot.layer.cornerRadius = 3;
+        _legend2Dot.layer.cornerRadius = SW(3);
         [self addSubview:_legend2Dot];
 
         _legend2Name = [UILabel new];
         _legend2Name.text = NSLocalizedString(@"App&Data", nil);
-        _legend2Name.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+        _legend2Name.font = ASFont(12, UIFontWeightMedium);
         _legend2Name.textColor = kTextGray();
         [self addSubview:_legend2Name];
 
         _legend2Value = [UILabel new];
-        _legend2Value.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+        _legend2Value.font = ASFont(12, UIFontWeightMedium);
         _legend2Value.textColor = UIColor.blackColor;
         [self addSubview:_legend2Value];
 
         _legend3Dot = [UIView new];
         _legend3Dot.backgroundColor = kTotalGray();
-        _legend3Dot.layer.cornerRadius = 3;
+        _legend3Dot.layer.cornerRadius = SW(3);
         [self addSubview:_legend3Dot];
 
         _legend3Name = [UILabel new];
         _legend3Name.text = NSLocalizedString(@"Total", nil);
-        _legend3Name.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+        _legend3Name.font = ASFont(12, UIFontWeightMedium);
         _legend3Name.textColor = kTextGray();
         [self addSubview:_legend3Name];
 
         _legend3Value = [UILabel new];
-        _legend3Value.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+        _legend3Value.font = ASFont(12, UIFontWeightMedium);
         _legend3Value.textColor = UIColor.blackColor;
         [self addSubview:_legend3Value];
     }
@@ -444,45 +463,45 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     [super layoutSubviews];
 
     CGFloat w = self.bounds.size.width;
-    CGFloat left = 30.0;
+    CGFloat left = SW(30.0);
 
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.window.safeAreaInsets.top;
 
     CGFloat top = safeTop;
 
-    CGFloat proH = 36.0;
+    CGFloat proH = SW(36.0);
     [_proBtn sizeToFit];
-    CGFloat proW = MAX(78.0, _proBtn.bounds.size.width + 10.0);
+    CGFloat proW = MAX(SW(78.0), _proBtn.bounds.size.width + SW(10.0));
     _proBtn.frame = CGRectMake(w - left - proW, top, proW, proH);
-    _proBtn.layer.cornerRadius = 18.0;
+    _proBtn.layer.cornerRadius = SW(18.0);
     _proGradient.frame = _proBtn.bounds;
-    _proGradient.cornerRadius = 18.0;
+    _proGradient.cornerRadius = SW(18.0);
 
-    CGFloat titleH = 20.0;
-    CGFloat bigH   = 40.0;
+    CGFloat titleH = SW(20.0);
+    CGFloat bigH   = SW(40.0);
 
-    CGFloat textMaxW = CGRectGetMinX(_proBtn.frame) - left - 10.0;
+    CGFloat textMaxW = CGRectGetMinX(_proBtn.frame) - left - SW(10.0);
     _spaceTitleLabel.frame = CGRectMake(left, top, MAX(0, textMaxW), titleH);
 
     _spaceLabel.frame = CGRectMake(left,
-                                   CGRectGetMaxY(_spaceTitleLabel.frame) + 5.0,
+                                   CGRectGetMaxY(_spaceTitleLabel.frame) + SW(5.0),
                                    MAX(0, textMaxW),
                                    bigH);
 
     _bar.frame = CGRectMake(left,
-                            CGRectGetMaxY(_spaceLabel.frame) + 10.0,
+                            CGRectGetMaxY(_spaceLabel.frame) + SW(10.0),
                             w - left * 2.0,
-                            12.0);
+                            SW(12.0));
 
-    CGFloat legendsTop = CGRectGetMaxY(_bar.frame) + 15.0;
+    CGFloat legendsTop = CGRectGetMaxY(_bar.frame) + SW(15.0);
 
-    CGFloat dotD = 8.0;
-    CGFloat dotToText = 6.0;
+    CGFloat dotD = SW(8.0);
+    CGFloat dotToText = SW(6.0);
 
-    CGFloat nameH = 14.0;
-    CGFloat valueH = 14.0;
-    CGFloat nameToValue = 2.0;
+    CGFloat nameH = SW(14.0);
+    CGFloat valueH = SW(14.0);
+    CGFloat nameToValue = SW(2.0);
 
     CGFloat colW = (w - left * 2.0) / 3.0;
 
@@ -502,9 +521,9 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     layoutLegend(_legend2Dot, _legend2Name, _legend2Value, left + colW);
     layoutLegend(_legend3Dot, _legend3Name, _legend3Value, left + colW * 2.0);
     
-    CGFloat bannerTop = CGRectGetMaxY(_legend1Value.frame) + 18.0;
-    CGFloat bannerH = 150.0;
-    CGFloat side = 16.0;
+    CGFloat bannerTop = CGRectGetMaxY(_legend1Value.frame) + SW(18.0);
+    CGFloat bannerH = SW(150.0);
+    CGFloat side = SW(16.0);
 
     if (self.showsLimitedBanner) {
         self.permissionBanner.frame = CGRectMake(side, bannerTop, w - side * 2.0, bannerH);
@@ -573,9 +592,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 - (instancetype)init {
     if (self = [super init]) {
         _numberOfColumns = 2;
-        _interItemSpacing = 12;
-        _lineSpacing = 12;
-        _sectionInset = UIEdgeInsetsMake(0, 16, 16, 16);
+        _interItemSpacing = SW(12);
+        _lineSpacing = SW(12);
+        _sectionInset = SWInsets(0, 16, 16, 16);
         _headerHeight = 0;
         _cache = [NSMutableArray array];
     }
@@ -729,22 +748,22 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
         _shadowContainer.backgroundColor = UIColor.clearColor;
         _shadowContainer.layer.shadowColor = kCardShadowColor().CGColor;
         _shadowContainer.layer.shadowOpacity = 1;
-        _shadowContainer.layer.shadowOffset = CGSizeMake(0, 2);
-        _shadowContainer.layer.shadowRadius = 8;
+        _shadowContainer.layer.shadowOffset = CGSizeMake(0, SW(2));
+        _shadowContainer.layer.shadowRadius = SW(8);
         [self.contentView addSubview:_shadowContainer];
 
         _cardView = [UIView new];
         _cardView.backgroundColor = UIColor.whiteColor;
-        _cardView.layer.cornerRadius = 24;
+        _cardView.layer.cornerRadius = SW(24);
         _cardView.clipsToBounds = YES;
         [_shadowContainer addSubview:_cardView];
 
         _titleLabel = [UILabel new];
-        _titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+        _titleLabel.font = SWFontS(20, UIFontWeightRegular);
         _titleLabel.textColor = UIColor.blackColor;
 
         _countLabel = [UILabel new];
-        _countLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
+        _countLabel.font = SWFontS(12, UIFontWeightRegular);
         _countLabel.textColor = kTextGray();
 
         _img1 = [UIImageView new];
@@ -755,8 +774,8 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
         _img2.contentMode = UIViewContentModeScaleAspectFill;
         _img1.clipsToBounds = YES;
         _img2.clipsToBounds = YES;
-        _img1.layer.cornerRadius = 24;
-        _img2.layer.cornerRadius = 24;
+        _img1.layer.cornerRadius = SW(24);
+        _img2.layer.cornerRadius = SW(24);
 
         _badgeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         _badgeBtn.titleLabel.numberOfLines = 1;
@@ -764,14 +783,14 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
         _badgeBtn.titleLabel.adjustsFontSizeToFitWidth = NO;
 
         _badgeBtn.backgroundColor = kBadgeBlue();
-        _badgeBtn.layer.cornerRadius = 23;
+        _badgeBtn.layer.cornerRadius = SW(23);
         _badgeBtn.clipsToBounds = YES;
 
-        _badgeBtn.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+        _badgeBtn.titleLabel.font = SWFontS(20, UIFontWeightRegular);
         [_badgeBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         [_badgeBtn setTitle:@"--" forState:UIControlStateNormal];
 
-        _badgeBtn.contentEdgeInsets = UIEdgeInsetsMake(11, 15, 11, 18);
+        _badgeBtn.contentEdgeInsets = SWInsets(11, 15, 11, 18);
         _badgeBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
         _badgeBtn.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
 
@@ -780,15 +799,15 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
         UIImage *todo = [[UIImage imageNamed:@"ic_todo"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         if (todo) {
-            UIGraphicsBeginImageContextWithOptions(CGSizeMake(9, 16), NO, 0);
-            [todo drawInRect:CGRectMake(0, 0, 9, 16)];
+            UIGraphicsBeginImageContextWithOptions(CGSizeMake(SW(9), SW(16)), NO, 0);
+            [todo drawInRect:CGRectMake(0, 0, SW(9), SW(16))];
             UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext();
             UIGraphicsEndImageContext();
 
             [_badgeBtn setImage:scaled forState:UIControlStateNormal];
             _badgeBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
 
-            CGFloat spacing = 9.0;
+            CGFloat spacing = SW(9.0);
             _badgeBtn.imageEdgeInsets = UIEdgeInsetsMake(0, spacing, 0, 0);
             _badgeBtn.titleEdgeInsets = UIEdgeInsetsMake(0, 0, 0, spacing);
         }
@@ -823,28 +842,28 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     CGFloat w = self.cardView.bounds.size.width;
     CGFloat h = self.cardView.bounds.size.height;
 
-    CGFloat pad = 15.0;
+    CGFloat pad = SW(15.0);
 
-    self.titleLabel.frame = CGRectMake(pad, pad, w - pad * 2.0, 20);
+    self.titleLabel.frame = CGRectMake(pad, pad, w - pad * 2.0, SW(20));
 
     self.countLabel.frame = CGRectMake(pad,
-                                       CGRectGetMaxY(self.titleLabel.frame) + 4,
+                                       CGRectGetMaxY(self.titleLabel.frame) + SW(4),
                                        w - pad * 2.0,
-                                       16);
+                                       SW(16));
 
-    CGFloat imgTop = CGRectGetMaxY(self.countLabel.frame) + 12;
+    CGFloat imgTop = CGRectGetMaxY(self.countLabel.frame) + SW(12);
     CGFloat imgBottomPad = pad;
     CGFloat imgH = MAX(0, h - imgTop - imgBottomPad);
 
     if (self.showsTwoThumbs) {
-        CGFloat gap = 10.0;
+        CGFloat gap = SW(10.0);
         CGFloat imgW = (w - pad * 2.0 - gap) / 2.0;
 
         self.img1.hidden = NO;
         self.img2.hidden = NO;
 
-        self.img1.layer.cornerRadius = 24;
-        self.img2.layer.cornerRadius = 24;
+        self.img1.layer.cornerRadius = SW(24);
+        self.img2.layer.cornerRadius = SW(24);
 
         self.img1.frame = CGRectMake(pad, imgTop, imgW, imgH);
         self.img2.frame = CGRectMake(CGRectGetMaxX(self.img1.frame) + gap, imgTop, imgW, imgH);
@@ -856,7 +875,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
             self.img1.layer.cornerRadius = 0;
             self.img1.frame = CGRectMake(0, imgTop, w, h - imgTop);
         } else {
-            self.img1.layer.cornerRadius = 24;
+            self.img1.layer.cornerRadius = SW(24);
             self.img1.frame = CGRectMake(pad, imgTop, w - pad * 2.0, imgH);
         }
 
@@ -864,13 +883,13 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     }
 
     NSString *t = self.badgeBtn.currentTitle ?: @"";
-    UIFont *f = self.badgeBtn.titleLabel.font ?: [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+    UIFont *f = self.badgeBtn.titleLabel.font ?: SWFontS(20, UIFontWeightRegular);
     CGSize textSize = [t sizeWithAttributes:@{NSFontAttributeName: f}];
 
     UIImage *img = [self.badgeBtn imageForState:UIControlStateNormal];
     CGSize imgSize = img ? img.size : CGSizeZero;
 
-    CGFloat spacing = img ? 9.0 : 0.0;
+    CGFloat spacing = img ? SW(9.0) : 0.0;
     UIEdgeInsets in = self.badgeBtn.contentEdgeInsets;
 
     CGFloat badgeW = ceil(in.left + textSize.width + spacing + imgSize.width + in.right);
@@ -878,9 +897,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
     if (self.isLargeCard) {
         CGFloat x = w - pad - badgeW;
-        self.badgeBtn.frame = CGRectMake(x, pad - 3.0, badgeW, badgeH);
+        self.badgeBtn.frame = CGRectMake(x, pad - SW(3.0), badgeW, badgeH);
     } else {
-        CGFloat rightInset = 10.0;
+        CGFloat rightInset = SW(10.0);
         CGFloat by = CGRectGetMaxY(self.img1.frame) - badgeH - rightInset;
         CGFloat bx = CGRectGetMaxX(self.img1.frame) - rightInset - badgeW;
         self.badgeBtn.frame = CGRectMake(bx, by, badgeW, badgeH);
@@ -890,9 +909,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     [self.cardView bringSubviewToFront:self.playIconView];
 
     self.playIconView.hidden = !self.isVideoCover;
-    self.playIconView.frame = CGRectMake(CGRectGetMinX(self.img1.frame) + 10,
-                                         CGRectGetMinY(self.img1.frame) + 10,
-                                         18, 18);
+    self.playIconView.frame = CGRectMake(CGRectGetMinX(self.img1.frame) + SW(10),
+                                         CGRectGetMinY(self.img1.frame) + SW(10),
+                                         SW(18), SW(18));
 
     if (self.playerLayer) {
         self.playerLayer.frame = self.img1.bounds;
@@ -1314,9 +1333,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     if (![wf isKindOfClass:ASWaterfallLayout.class]) return;
 
     if (![self hasPhotoAccess]) {
-        wf.sectionInset = UIEdgeInsetsMake(0, 0, 16, 0);
+        wf.sectionInset = UIEdgeInsetsMake(0, 0, SW(16), 0);
         wf.interItemSpacing = 0;
-        wf.lineSpacing = 12;
+        wf.lineSpacing = SW(12);
     } else {
         wf.sectionInset = UIEdgeInsetsMake(0, kHomeSideInset, kHomeSideInset, kHomeSideInset);
         wf.interItemSpacing = kHomeGridGap;
@@ -1403,7 +1422,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     if ([wf isKindOfClass:ASWaterfallLayout.class]) {
 
         if (![self hasPhotoAccess]) {
-            wf.sectionInset = UIEdgeInsetsMake(0, 0, 16, 0);
+            wf.sectionInset = UIEdgeInsetsMake(0, 0, SW(16), 0);
             wf.interItemSpacing = 0;
         } else {
             wf.sectionInset = UIEdgeInsetsMake(0, kHomeSideInset, kHomeSideInset, kHomeSideInset);
@@ -1422,11 +1441,11 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
 
-    CGFloat gradientH = safeTop + 402.0;
+    CGFloat gradientH = safeTop + SW(402.0);
     self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     UIEdgeInsets safe = self.view.safeAreaInsets;
-    self.cv.contentInset = UIEdgeInsetsMake(20, 0, safe.bottom + 70, 0);
+    self.cv.contentInset = SWInsets(20, 0, safe.bottom + 70, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 }
 
@@ -2401,7 +2420,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath {
  heightForItemAtIndexPath:(NSIndexPath *)indexPath {
 
     if (![self hasPhotoAccess]) {
-        return 420.0;
+        return SW(420.0);
     }
 
     ASHomeModuleVM *vm = self.modules[indexPath.item];
@@ -2409,7 +2428,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath {
 
     NSInteger smallIdx = (NSInteger)indexPath.item - 1;
     if (smallIdx < 0) smallIdx = 0;
-    return (smallIdx % 3 == 0) ? 306.0 : 246.0;
+    return (smallIdx % 3 == 0) ? SW(306.0) : SW(246.0);
 }
 
 - (CGSize)collectionView:(UICollectionView *)collectionView
@@ -2421,21 +2440,21 @@ referenceSizeForHeaderInSection:(NSInteger)section {
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = collectionView.safeAreaInsets.top;
 
-    CGFloat top = safeTop + 12;
-    CGFloat proH = 28;
+    CGFloat top = safeTop + SW(12);
+    CGFloat proH = SW(28);
 
-    CGFloat spaceTitleH = 16;
-    CGFloat spaceValueH = 40;
-    CGFloat spaceTitleGap = 2;
+    CGFloat spaceTitleH = SW(16);
+    CGFloat spaceValueH = SW(40);
+    CGFloat spaceTitleGap = SW(2);
 
-    CGFloat barTopGap = 10;
-    CGFloat barH = 12;
-    CGFloat legendH = 24;
-    CGFloat legendTopGap = 12;
-    CGFloat bottomPad = 30;
+    CGFloat barTopGap = SW(10);
+    CGFloat barH = SW(12);
+    CGFloat legendH = SW(24);
+    CGFloat legendTopGap = SW(12);
+    CGFloat bottomPad = SW(30);
 
     CGFloat contentH =
-    top + 8
+    top + SW(8)
     + MAX(proH, (spaceTitleH + spaceTitleGap + spaceValueH))
     + barTopGap + barH
     + legendTopGap + legendH
@@ -2443,7 +2462,7 @@ referenceSizeForHeaderInSection:(NSInteger)section {
 
     CGFloat bannerExtra = 0;
     if (self.isLimitedAuth) {
-        bannerExtra = 18.0 + 150.0;
+        bannerExtra = SW(18.0) + SW(150.0);
     }
 
     return CGSizeMake(w, contentH + bannerExtra);
@@ -2600,12 +2619,12 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
 
     CGSize s1 = cell.img1.bounds.size;
     if (s1.width <= 1 || s1.height <= 1) s1 = cell.img1.frame.size;
-    if (s1.width <= 1 || s1.height <= 1) s1 = CGSizeMake(120, 120);
+    if (s1.width <= 1 || s1.height <= 1) s1 = CGSizeMake(SW(120), SW(120));
     CGSize t1 = CGSizeMake(s1.width * scale, s1.height * scale);
 
     CGSize s2 = cell.img2.bounds.size;
     if (s2.width <= 1 || s2.height <= 1) s2 = cell.img2.frame.size;
-    if (s2.width <= 1 || s2.height <= 1) s2 = CGSizeMake(120, 120);
+    if (s2.width <= 1 || s2.height <= 1) s2 = CGSizeMake(SW(120), SW(120));
     CGSize t2 = CGSizeMake(s2.width * scale, s2.height * scale);
 
     __weak typeof(self) weakSelf = self;

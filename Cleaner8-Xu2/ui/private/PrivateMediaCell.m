@@ -1,5 +1,14 @@
 #import "PrivateMediaCell.h"
 
+#pragma mark - Adapt Helpers
+
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+
 @implementation PrivateMediaCell
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -15,7 +24,7 @@
         _check.translatesAutoresizingMaskIntoConstraints = NO;
         _check.contentMode = UIViewContentModeScaleAspectFit;
         [self.contentView addSubview:_check];
-        
+
         self.checkButton = [UIButton buttonWithType:UIButtonTypeCustom];
         self.checkButton.translatesAutoresizingMaskIntoConstraints = NO;
         self.checkButton.backgroundColor = UIColor.clearColor;
@@ -28,15 +37,15 @@
             [_thumb.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [_thumb.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            [_check.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:8],
-            [_check.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-8],
-            [_check.widthAnchor constraintEqualToConstant:20],
-            [_check.heightAnchor constraintEqualToConstant:20],
-            
+            [_check.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:AS(8)],
+            [_check.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-AS(8)],
+            [_check.widthAnchor constraintEqualToConstant:AS(20)],
+            [_check.heightAnchor constraintEqualToConstant:AS(20)],
+
             [self.checkButton.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [self.checkButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
-            [self.checkButton.widthAnchor constraintEqualToConstant:44],
-            [self.checkButton.heightAnchor constraintEqualToConstant:44],
+            [self.checkButton.widthAnchor constraintEqualToConstant:AS(44)],
+            [self.checkButton.heightAnchor constraintEqualToConstant:AS(44)],
         ]];
     }
     return self;

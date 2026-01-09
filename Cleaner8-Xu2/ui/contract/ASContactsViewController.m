@@ -9,18 +9,27 @@
 
 #pragma mark - UI Helpers
 
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
 }
 static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
+    return ASFontS(size, weight);
 }
 
 static inline UIColor *ASBlue(void) {
-    return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; // #024DFFFF
+    return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0];
 }
 static inline UIColor *ASAccent(void) {
-    return ASRGB(9, 255, 243); // #09FFF3FF
+    return ASRGB(9, 255, 243);
 }
 
 @interface ASContactsViewController ()
@@ -241,10 +250,10 @@ static inline UIColor *ASAccent(void) {
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
 
-    CGFloat gradientH = safeTop + 402.0;
+    CGFloat gradientH = safeTop + AS(402.0);
     self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
-    CGFloat navH = 44 + self.view.safeAreaInsets.top;
+    CGFloat navH = AS(44) + self.view.safeAreaInsets.top;
     self.navBar.frame = CGRectMake(0, 0, self.view.bounds.size.width, navH);
     [self.view bringSubviewToFront:self.navBar];
 }
@@ -282,16 +291,16 @@ static inline UIColor *ASAccent(void) {
     self.cardsStack.axis = UILayoutConstraintAxisVertical;
     self.cardsStack.alignment = UIStackViewAlignmentFill;
     self.cardsStack.distribution = UIStackViewDistributionFill;
-    self.cardsStack.spacing = 20;
+    self.cardsStack.spacing = AS(20);
 
     [self.view addSubview:self.cardsStack];
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [self.cardsStack.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:20],
-        [self.cardsStack.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-20],
-        [self.cardsStack.topAnchor constraintEqualToAnchor:safe.topAnchor constant:88],
-        [self.cardsStack.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:-24],
+        [self.cardsStack.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:AS(20)],
+        [self.cardsStack.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-AS(20)],
+        [self.cardsStack.topAnchor constraintEqualToAnchor:safe.topAnchor constant:AS(88)],
+        [self.cardsStack.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:-AS(24)],
     ]];
 }
 
@@ -302,7 +311,7 @@ static inline UIColor *ASAccent(void) {
     UIControl *card = [UIControl new];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor = UIColor.whiteColor;
-    card.layer.cornerRadius = 16;
+    card.layer.cornerRadius = AS(16);
     card.layer.masksToBounds = NO;
 
     if (sel) {
@@ -330,19 +339,19 @@ static inline UIColor *ASAccent(void) {
     [card addSubview:rightImg];
 
     [NSLayoutConstraint activateConstraints:@[
-        [rightImg.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+        [rightImg.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-AS(20)],
         [rightImg.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
-        [rightImg.widthAnchor constraintEqualToConstant:40],
-        [rightImg.heightAnchor constraintEqualToConstant:24],
+        [rightImg.widthAnchor constraintEqualToConstant:AS(40)],
+        [rightImg.heightAnchor constraintEqualToConstant:AS(24)],
 
-        [titleLab.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
-        [titleLab.topAnchor constraintEqualToAnchor:card.topAnchor constant:18],
-        [titleLab.trailingAnchor constraintLessThanOrEqualToAnchor:rightImg.leadingAnchor constant:-12],
+        [titleLab.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:AS(20)],
+        [titleLab.topAnchor constraintEqualToAnchor:card.topAnchor constant:AS(18)],
+        [titleLab.trailingAnchor constraintLessThanOrEqualToAnchor:rightImg.leadingAnchor constant:-AS(12)],
 
         [subLab.leadingAnchor constraintEqualToAnchor:titleLab.leadingAnchor],
-        [subLab.topAnchor constraintEqualToAnchor:titleLab.bottomAnchor constant:7],
-        [subLab.trailingAnchor constraintLessThanOrEqualToAnchor:rightImg.leadingAnchor constant:-12],
-        [subLab.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-18],
+        [subLab.topAnchor constraintEqualToAnchor:titleLab.bottomAnchor constant:AS(7)],
+        [subLab.trailingAnchor constraintLessThanOrEqualToAnchor:rightImg.leadingAnchor constant:-AS(12)],
+        [subLab.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-AS(18)],
     ]];
 
     if (subtitleOut) *subtitleOut = subLab;
@@ -352,8 +361,8 @@ static inline UIColor *ASAccent(void) {
 - (UIControl *)buildContactsPermissionBanner {
     UIControl *bar = [UIControl new];
     bar.translatesAutoresizingMaskIntoConstraints = NO;
-    bar.backgroundColor = ASBlue(); // #024DFFFF
-    bar.layer.cornerRadius = 20;
+    bar.backgroundColor = ASBlue();
+    bar.layer.cornerRadius = AS(20);
     bar.layer.masksToBounds = YES;
     [bar addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
 
@@ -380,30 +389,25 @@ static inline UIColor *ASAccent(void) {
     rightStack.translatesAutoresizingMaskIntoConstraints = NO;
     rightStack.axis = UILayoutConstraintAxisHorizontal;
     rightStack.alignment = UIStackViewAlignmentCenter;
-    rightStack.spacing = 10;
+    rightStack.spacing = AS(10);
     [bar addSubview:rightStack];
 
-    [tip setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
-                                        forAxis:UILayoutConstraintAxisHorizontal];
-    [tip setContentHuggingPriority:UILayoutPriorityDefaultLow
-                           forAxis:UILayoutConstraintAxisHorizontal];
-
-    [rightStack setContentCompressionResistancePriority:UILayoutPriorityRequired
-                                                forAxis:UILayoutConstraintAxisHorizontal];
-    [rightStack setContentHuggingPriority:UILayoutPriorityRequired
-                                  forAxis:UILayoutConstraintAxisHorizontal];
+    [tip setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    [tip setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    [rightStack setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [rightStack setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
     [NSLayoutConstraint activateConstraints:@[
-        [tip.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor constant:20],
-        [tip.topAnchor constraintEqualToAnchor:bar.topAnchor constant:16],
-        [tip.bottomAnchor constraintEqualToAnchor:bar.bottomAnchor constant:-16],
-        [tip.trailingAnchor constraintLessThanOrEqualToAnchor:rightStack.leadingAnchor constant:-12],
+        [tip.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor constant:AS(20)],
+        [tip.topAnchor constraintEqualToAnchor:bar.topAnchor constant:AS(16)],
+        [tip.bottomAnchor constraintEqualToAnchor:bar.bottomAnchor constant:-AS(16)],
+        [tip.trailingAnchor constraintLessThanOrEqualToAnchor:rightStack.leadingAnchor constant:-AS(12)],
 
-        [rightStack.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor constant:-20],
+        [rightStack.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor constant:-AS(20)],
         [rightStack.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
 
-        [moreIcon.widthAnchor constraintEqualToConstant:16],
-        [moreIcon.heightAnchor constraintEqualToConstant:16],
+        [moreIcon.widthAnchor constraintEqualToConstant:AS(16)],
+        [moreIcon.heightAnchor constraintEqualToConstant:AS(16)],
     ]];
 
     return bar;
@@ -442,12 +446,12 @@ static inline UIColor *ASAccent(void) {
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
     btn.translatesAutoresizingMaskIntoConstraints = NO;
     btn.backgroundColor = ASBlue();
-    btn.layer.cornerRadius = 35;
+    btn.layer.cornerRadius = AS(35);
     btn.layer.masksToBounds = YES;
     [btn setTitle:NSLocalizedString(@"Go to Settings", nil) forState:UIControlStateNormal];
     [btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     btn.titleLabel.font = ASFont(20, UIFontWeightRegular);
-    btn.contentEdgeInsets = UIEdgeInsetsMake(23, 0, 23, 0);
+    btn.contentEdgeInsets = ASEdgeInsets(23, 0, 23, 0);
     [btn addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
     [self.noAuthView addSubview:btn];
 
@@ -459,24 +463,23 @@ static inline UIColor *ASAccent(void) {
 
         [img.topAnchor constraintEqualToAnchor:self.noAuthView.topAnchor],
         [img.centerXAnchor constraintEqualToAnchor:self.noAuthView.centerXAnchor],
-        [img.widthAnchor constraintEqualToConstant:96],
-        [img.heightAnchor constraintEqualToConstant:96],
+        [img.widthAnchor constraintEqualToConstant:AS(96)],
+        [img.heightAnchor constraintEqualToConstant:AS(96)],
 
-        [t1.topAnchor constraintEqualToAnchor:img.bottomAnchor constant:20],
-        [t1.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:30],
-        [t1.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-30],
+        [t1.topAnchor constraintEqualToAnchor:img.bottomAnchor constant:AS(20)],
+        [t1.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:AS(30)],
+        [t1.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-AS(30)],
 
-        [t2.topAnchor constraintEqualToAnchor:t1.bottomAnchor constant:10],
-        [t2.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:45],
-        [t2.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-45],
+        [t2.topAnchor constraintEqualToAnchor:t1.bottomAnchor constant:AS(10)],
+        [t2.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:AS(45)],
+        [t2.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-AS(45)],
 
-        [btn.topAnchor constraintEqualToAnchor:t2.bottomAnchor constant:60],
-        [btn.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:45],
-        [btn.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-45],
+        [btn.topAnchor constraintEqualToAnchor:t2.bottomAnchor constant:AS(60)],
+        [btn.leadingAnchor constraintEqualToAnchor:self.noAuthView.leadingAnchor constant:AS(45)],
+        [btn.trailingAnchor constraintEqualToAnchor:self.noAuthView.trailingAnchor constant:-AS(45)],
         [btn.bottomAnchor constraintEqualToAnchor:self.noAuthView.bottomAnchor],
     ]];
 }
-
 
 #pragma mark - Count Refresh
 

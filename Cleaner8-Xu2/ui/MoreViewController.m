@@ -4,6 +4,19 @@
 #import "Common.h"
 
 #pragma mark - UI Helpers
+
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
 }
@@ -11,7 +24,7 @@ static inline UIColor *ASBlue(void) {
     return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; // #024DFFFF
 }
 static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
+    return SWFontS(size,weight);
 }
 
 @interface MoreViewController ()
@@ -49,7 +62,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
 
-    CGFloat gradientH = safeTop + 402.0;
+    CGFloat gradientH = safeTop + SW(402.0);
     self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 }
 
@@ -98,18 +111,18 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [self.view addSubview:self.settingCard];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.titleLab.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:13],
+        [self.titleLab.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:SW(13)],
         [self.titleLab.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
 
-        [self.contactCard.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:64],
-        [self.contactCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.contactCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.contactCard.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:SW(64)],
+        [self.contactCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(20)],
+        [self.contactCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(20)],
 
-        [self.feedbackCard.topAnchor constraintEqualToAnchor:self.contactCard.bottomAnchor constant:20],
+        [self.feedbackCard.topAnchor constraintEqualToAnchor:self.contactCard.bottomAnchor constant:SW(20)],
         [self.feedbackCard.leadingAnchor constraintEqualToAnchor:self.contactCard.leadingAnchor],
         [self.feedbackCard.trailingAnchor constraintEqualToAnchor:self.contactCard.trailingAnchor],
 
-        [self.settingCard.topAnchor constraintEqualToAnchor:self.feedbackCard.bottomAnchor constant:20],
+        [self.settingCard.topAnchor constraintEqualToAnchor:self.feedbackCard.bottomAnchor constant:SW(20)],
         [self.settingCard.leadingAnchor constraintEqualToAnchor:self.contactCard.leadingAnchor],
         [self.settingCard.trailingAnchor constraintEqualToAnchor:self.contactCard.trailingAnchor],
     ]];
@@ -126,13 +139,13 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     UIControl *card = [UIControl new];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor = UIColor.whiteColor;
-    card.layer.cornerRadius = 16;
+    card.layer.cornerRadius = SW(16);
     card.layer.masksToBounds = NO;
 
     card.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.08].CGColor;
     card.layer.shadowOpacity = 1.0;
-    card.layer.shadowOffset = CGSizeMake(0, 10);
-    card.layer.shadowRadius = 20;
+    card.layer.shadowOffset = CGSizeMake(0, SW(10));
+    card.layer.shadowRadius = SW(20);
 
     if (sel) [card addTarget:self action:sel forControlEvents:UIControlEventTouchUpInside];
 
@@ -160,10 +173,10 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         rightView = img;
 
         [NSLayoutConstraint activateConstraints:@[
-            [img.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+            [img.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-SW(20)],
             [img.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
-            [img.widthAnchor constraintEqualToConstant:40],
-            [img.heightAnchor constraintEqualToConstant:24],
+            [img.widthAnchor constraintEqualToConstant:SW(40)],
+            [img.heightAnchor constraintEqualToConstant:SW(24)],
         ]];
     } else {
         UILabel *verLab = [UILabel new];
@@ -176,25 +189,25 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         rightView = verLab;
 
         [NSLayoutConstraint activateConstraints:@[
-            [verLab.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+            [verLab.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-SW(20)],
             [verLab.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
         ]];
     }
 
 
     [NSLayoutConstraint activateConstraints:@[
-        [leftIconView.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
-        [leftIconView.topAnchor constraintEqualToAnchor:card.topAnchor constant:22],
-        [leftIconView.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-11],
-        [leftIconView.widthAnchor constraintEqualToConstant:62],
-        [leftIconView.heightAnchor constraintEqualToConstant:42],
+        [leftIconView.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:SW(16)],
+        [leftIconView.topAnchor constraintEqualToAnchor:card.topAnchor constant:SW(22)],
+        [leftIconView.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-SW(11)],
+        [leftIconView.widthAnchor constraintEqualToConstant:SW(62)],
+        [leftIconView.heightAnchor constraintEqualToConstant:SW(42)],
 
-        [leftLab.leadingAnchor constraintEqualToAnchor:leftIconView.trailingAnchor constant:6],
+        [leftLab.leadingAnchor constraintEqualToAnchor:leftIconView.trailingAnchor constant:SW(6)],
 
-        [leftLab.topAnchor constraintEqualToAnchor:card.topAnchor constant:23],
-        [leftLab.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-23],
+        [leftLab.topAnchor constraintEqualToAnchor:card.topAnchor constant:SW(23)],
+        [leftLab.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-SW(23)],
 
-        [leftLab.trailingAnchor constraintLessThanOrEqualToAnchor:rightView.leadingAnchor constant:-12],
+        [leftLab.trailingAnchor constraintLessThanOrEqualToAnchor:rightView.leadingAnchor constant:-SW(12)],
     ]];
 
     return card;

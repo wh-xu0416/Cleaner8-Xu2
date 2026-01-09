@@ -8,24 +8,35 @@
 
 #pragma mark - UI Helpers
 
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
 static inline UIColor *ASDCRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
 }
 static inline UIColor *ASDCBlue(void) {
-    return [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];   // #024DFFFF
+    return [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
 }
 static inline UIColor *ASDCBlue10(void) {
-    return [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:0.10]; // 10%
+    return [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:0.10];
 }
 static inline UIColor *ASDCGray666(void) {
-    return [UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0];  // #666666FF
+    return [UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0];
 }
 static inline UIColor *ASDCAvatarBG(void) {
-    return [UIColor colorWithRed:0xD6/255.0 green:0xE7/255.0 blue:0xFF/255.0 alpha:1.0];  // #D6E7FFFF
+    return [UIColor colorWithRed:0xD6/255.0 green:0xE7/255.0 blue:0xFF/255.0 alpha:1.0];
 }
+
 static inline UIFont *ASDCFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
+    return ASFontS(size, weight);
 }
+
 static inline NSString *ASDCFirstChar(NSString *s) {
     if (s.length == 0) return @"?";
     NSCharacterSet *ws = [NSCharacterSet whitespaceAndNewlineCharacterSet];
@@ -89,15 +100,11 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
 
 - (instancetype)init {
     if (self = [super init]) {
-        self.minimumLineSpacing = 8;
-
-        self.sectionInset = UIEdgeInsetsMake(20, 15, 30, 15);
-
-        self.headerReferenceSize = CGSizeMake(0, 54);
-
-        self.blueExtendDown = 35;
-
-        self.whiteOverlap   = 0;
+        self.minimumLineSpacing = AS(8);
+        self.sectionInset = ASEdgeInsets(20, 15, 30, 15);
+        self.headerReferenceSize = CGSizeMake(0, AS(54));
+        self.blueExtendDown = AS(35);
+        self.whiteOverlap   = AS(0);
 
         [self registerClass:[ASDCDupBgView class] forDecorationViewOfKind:kASDCDupBlueBgKind];
         [self registerClass:[ASDCDupBgView class] forDecorationViewOfKind:kASDCDupWhiteBgKind];
@@ -109,7 +116,7 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
     if (!self.collectionView) return;
 
     CGFloat W = self.collectionView.bounds.size.width;
-    self.headerReferenceSize = CGSizeMake(W, 54);
+    self.headerReferenceSize = CGSizeMake(W, AS(54));
 
     NSInteger sections = [self.collectionView numberOfSections];
     NSMutableArray *blue = [NSMutableArray array];
@@ -134,8 +141,8 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
         ba.frame = blueRect;
         ba.zIndex = -3;
         ba.fillColor = ASDCBlue10();
-        ba.cornerRadius = 22.0;
-        ba.maskedCorners = (kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner); // 上圆角
+        ba.cornerRadius = AS(22.0);
+        ba.maskedCorners = (kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner);
         [blue addObject:ba];
 
         NSInteger items = [self.collectionView numberOfItemsInSection:s];
@@ -149,7 +156,7 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
 
         CGRect unionRect = CGRectUnion(first.frame, last.frame);
 
-        CGFloat bottomPad = 20.0;
+        CGFloat bottomPad = AS(20.0);
         CGFloat y0 = CGRectGetMaxY(h.frame) - self.whiteOverlap;
         CGFloat y1 = CGRectGetMaxY(unionRect) + bottomPad;
 
@@ -161,7 +168,7 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
         wa.frame = whiteRect;
         wa.zIndex = -2;
         wa.fillColor = UIColor.whiteColor;
-        wa.cornerRadius = 16.0;
+        wa.cornerRadius = AS(16.0);
         wa.maskedCorners = (kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner |
                             kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner);
         [white addObject:wa];
@@ -229,11 +236,11 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
         self.selectBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         self.selectBtn.translatesAutoresizingMaskIntoConstraints = NO;
         self.selectBtn.backgroundColor = UIColor.clearColor;
-        self.selectBtn.layer.cornerRadius = 16;
+        self.selectBtn.layer.cornerRadius = AS(16);
         self.selectBtn.layer.masksToBounds = YES;
         self.selectBtn.layer.borderWidth = 1.0;
         self.selectBtn.titleLabel.font = ASDCFont(13, UIFontWeightMedium);
-        self.selectBtn.contentEdgeInsets = UIEdgeInsetsMake(9, 20, 9, 20);
+        self.selectBtn.contentEdgeInsets = ASEdgeInsets(9, 20, 9, 20);
         [self.selectBtn addTarget:self action:@selector(tapSelect) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:self.selectBtn];
 
@@ -247,28 +254,28 @@ static NSString * const kASDCDupWhiteBgKind = @"kASDCDupWhiteBgKind";
         [self addSubview:self.removeBtn];
 
         NSLayoutConstraint *titleToSelect =
-            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectBtn.leadingAnchor constant:-10];
+            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectBtn.leadingAnchor constant:-AS(10)];
         NSLayoutConstraint *titleToRemove =
-            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.removeBtn.leadingAnchor constant:-10];
+            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.removeBtn.leadingAnchor constant:-AS(10)];
 
         self.selectBtnZeroWidth = [self.selectBtn.widthAnchor constraintEqualToConstant:0];
         self.removeBtnZeroWidth = [self.removeBtn.widthAnchor constraintEqualToConstant:0];
 
         [NSLayoutConstraint activateConstraints:@[
-            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:18],
-            [self.titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:15],
-            [self.titleLabel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-15],
+            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:AS(18)],
+            [self.titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:AS(15)],
+            [self.titleLabel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-AS(15)],
 
             titleToSelect,
             titleToRemove,
 
-            [self.selectBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10],
+            [self.selectBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-AS(10)],
             [self.selectBtn.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
 
-            [self.removeBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10],
+            [self.removeBtn.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-AS(10)],
             [self.removeBtn.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
-            [self.removeBtn.widthAnchor constraintEqualToConstant:44],
-            [self.removeBtn.heightAnchor constraintEqualToConstant:44],
+            [self.removeBtn.widthAnchor constraintEqualToConstant:AS(44)],
+            [self.removeBtn.heightAnchor constraintEqualToConstant:AS(44)],
         ]];
     }
     return self;
@@ -539,7 +546,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.floatingButton.backgroundColor = ASDCBlue();
     [self.floatingButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.floatingButton.titleLabel.font = ASDCFont(20, UIFontWeightRegular);
-    self.floatingButton.contentEdgeInsets = UIEdgeInsetsMake(22, 22, 22, 22);
+    self.floatingButton.contentEdgeInsets = ASEdgeInsets(22, 22, 22, 22);
     [self.floatingButton addTarget:self action:@selector(floatingTap) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.floatingButton];
 
@@ -870,15 +877,15 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     UIView *toast = [UIView new];
     toast.tag = tag;
     toast.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.78];
-    toast.layer.cornerRadius = 12;
+    toast.layer.cornerRadius = AS(12);
     toast.layer.masksToBounds = YES;
 
     [toast addSubview:lab];
     [host addSubview:toast];
 
-    CGFloat maxW = host.bounds.size.width - 80;
+    CGFloat maxW = host.bounds.size.width - AS(80);
     CGSize textSize = [lab sizeThatFits:CGSizeMake(maxW, 999)];
-    CGFloat padX = 22, padY = 12;
+    CGFloat padX = AS(22), padY = AS(12);
 
     CGFloat w = MIN(maxW, textSize.width) + padX * 2;
     CGFloat h = textSize.height + padY * 2;
@@ -887,7 +894,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     if (@available(iOS 11.0, *)) safeBottom = host.safeAreaInsets.bottom;
 
     CGFloat x = (host.bounds.size.width - w) * 0.5;
-    CGFloat y = host.bounds.size.height - safeBottom - h - 110;
+    CGFloat y = host.bounds.size.height - safeBottom - h - AS(110);
     toast.frame = CGRectMake(x, y, w, h);
     lab.frame = CGRectMake(padX, padY, w - padX * 2, h - padY * 2);
 
@@ -1218,14 +1225,14 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 - (CGSize)collectionView:(UICollectionView *)collectionView
                   layout:(UICollectionViewLayout *)collectionViewLayout
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    return CGSizeMake(collectionView.bounds.size.width - 30, 72);
+    return CGSizeMake(collectionView.bounds.size.width - AS(30), AS(72));
 }
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGFloat w = self.view.bounds.size.width;
 
-    CGFloat gradientH = 0 + 402.0;
+    CGFloat gradientH = AS(402.0);
     self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     CGFloat W = self.view.bounds.size.width;
@@ -1233,21 +1240,21 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     CGFloat safeTop = self.view.safeAreaInsets.top;
     CGFloat safeBottom = self.view.safeAreaInsets.bottom;
 
-    CGFloat navH = 44 + safeTop;
+    CGFloat navH = AS(44) + safeTop;
     self.titleBar.frame = CGRectMake(0, 0, W, navH);
 
-    CGFloat pagePad = 20.0;
+    CGFloat pagePad = AS(20.0);
 
-    CGFloat y = navH + 16;
-    self.pageTitleLabel.frame = CGRectMake(pagePad, y, W - pagePad * 2, 34);
+    CGFloat y = navH + AS(16);
+    self.pageTitleLabel.frame = CGRectMake(pagePad, y, W - pagePad * 2, AS(34));
 
-    y += 34 + 6;
-    self.countLabel.frame = CGRectMake(pagePad, y, W - pagePad * 2, 20);
+    y += AS(34) + AS(6);
+    self.countLabel.frame = CGRectMake(pagePad, y, W - pagePad * 2, AS(20));
 
-    y += 40;
+    y += AS(40);
 
     // floating button
-    CGFloat btnH = 64;
+    CGFloat btnH = AS(64);
     CGFloat btnW = W - pagePad * 2;
     CGFloat btnY = H - safeBottom - btnH;
     self.floatingButton.frame = CGRectMake(pagePad, btnY, btnW, btnH);
@@ -1255,26 +1262,26 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     self.cv.frame = CGRectMake(pagePad, y, W - pagePad * 2, H - y);
 
-    CGFloat extraBottom = self.floatingButton.hidden ? 20.0 : (btnH + 20.0);
-    self.cv.contentInset = UIEdgeInsetsMake(0, 0, safeBottom + extraBottom, 0);
+    CGFloat extraBottom = self.floatingButton.hidden ? AS(20.0) : (btnH + AS(20.0));
+    self.cv.contentInset = ASEdgeInsets(0, 0, safeBottom + extraBottom, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 
     self.emptyView.frame = CGRectMake(0, navH, W, H - navH);
     if (!self.emptyView.hidden) {
-        CGSize imgSize = self.didMergeOnce ? CGSizeMake(181, 172) : CGSizeMake(182, 168);
+        CGSize imgSize = self.didMergeOnce ? CGSizeMake(AS(181), AS(172)) : CGSizeMake(AS(182), AS(168));
         CGFloat centerY = self.emptyView.bounds.size.height * 0.45;
 
-        self.emptyImage.frame = CGRectMake((W - imgSize.width)/2.0,
+        self.emptyImage.frame = CGRectMake((W - imgSize.width) * 0.5,
                                            centerY - imgSize.height,
                                            imgSize.width,
                                            imgSize.height);
 
         if (self.didMergeOnce) {
-            self.emptyTitle.frame = CGRectMake(pagePad, CGRectGetMaxY(self.emptyImage.frame) + 20, W - pagePad*2, 40);
-            self.emptySubTitle.frame = CGRectMake(pagePad, CGRectGetMaxY(self.emptyTitle.frame) + 10, W - pagePad*2, 28);
-            self.emptyHint.frame = CGRectMake(pagePad, CGRectGetMaxY(self.emptySubTitle.frame) + 10, W - pagePad*2, 44);
+            self.emptyTitle.frame = CGRectMake(pagePad, CGRectGetMaxY(self.emptyImage.frame) + AS(20), W - pagePad * 2, AS(40));
+            self.emptySubTitle.frame = CGRectMake(pagePad, CGRectGetMaxY(self.emptyTitle.frame) + AS(10), W - pagePad * 2, AS(28));
+            self.emptyHint.frame = CGRectMake(pagePad, CGRectGetMaxY(self.emptySubTitle.frame) + AS(10), W - pagePad * 2, AS(44));
         } else {
-            self.emptyTitle.frame = CGRectMake(pagePad, CGRectGetMaxY(self.emptyImage.frame) + 2, W - pagePad*2, 32);
+            self.emptyTitle.frame = CGRectMake(pagePad, CGRectGetMaxY(self.emptyImage.frame) + AS(2), W - pagePad * 2, AS(32));
         }
     }
 

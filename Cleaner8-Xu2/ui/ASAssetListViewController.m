@@ -6,6 +6,18 @@
 #import "ResultViewController.h"
 #import "Common.h"
 
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 #pragma mark - UI helpers
 typedef NS_ENUM(NSInteger, ASAssetSortMode) {
     ASAssetSortModeNewest = 0,   // 新 -> 旧（默认）
@@ -70,11 +82,11 @@ static inline NSString *ASDurationText(NSTimeInterval seconds) {
         _coverView = [UIImageView new];
         _coverView.contentMode = UIViewContentModeScaleAspectFill;
         _coverView.clipsToBounds = YES;
-        _coverView.layer.cornerRadius = 8;
+        _coverView.layer.cornerRadius = SW(8);
 
         _infoLabel = [UILabel new];
         _infoLabel.numberOfLines = 2;
-        _infoLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+        _infoLabel.font = SWFontS(12, UIFontWeightMedium);
         _infoLabel.textColor = UIColor.whiteColor;
 
         _selectIcon = [UIImageView new];
@@ -105,16 +117,16 @@ static inline NSString *ASDurationText(NSTimeInterval seconds) {
     self.coverView.frame = self.contentView.bounds;
     self.previewBtn.frame = self.contentView.bounds;
     CGRect b = self.contentView.bounds;
-    CGFloat pad = 10;
+    CGFloat pad = SW(10);
 
-    CGFloat infoW = self.contentView.bounds.size.width - pad*2 - 24 - 6;
-    self.infoLabel.frame = CGRectMake(pad, pad, MAX(40, infoW), 34);
+    CGFloat infoW = self.contentView.bounds.size.width - pad*2 - SW(24) - SW(6);
+    self.infoLabel.frame = CGRectMake(pad, pad, MAX(SW(40), infoW), SW(34));
 
-    CGFloat s = 24;
+    CGFloat s = SW(24);
     self.selectIcon.frame = CGRectMake(self.contentView.bounds.size.width - pad - s, pad, s, s);
-    self.selectBtn.frame = CGRectInset(self.selectIcon.frame, -8, -8);
+    self.selectBtn.frame = CGRectInset(self.selectIcon.frame, -SW(8), -SW(8));
 
-    CGFloat bw = 60, bh = 24;
+    CGFloat bw = SW(60), bh = SW(24);
     self.bestBadge.frame = CGRectMake(pad,CGRectGetHeight(b) - pad - bh,bw, bh);
 }
 
@@ -179,25 +191,25 @@ static inline NSString *ASDurationText(NSTimeInterval seconds) {
 
         _card = [UIView new];
         _card.backgroundColor = UIColor.whiteColor;
-        _card.layer.cornerRadius = 20;
+        _card.layer.cornerRadius = SW(20);
         _card.clipsToBounds = YES;
 
         _countLabel = [UILabel new];
-        _countLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
+        _countLabel.font = SWFontS(20, UIFontWeightMedium);
         _countLabel.textColor = UIColor.blackColor;
 
         _sizeLabel = [UILabel new];
-        _sizeLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        _sizeLabel.font = SWFontS(12, UIFontWeightSemibold);
         _sizeLabel.textColor = [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
 
         _selectAllBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         _selectAllBtn.adjustsImageWhenHighlighted = NO;
         _selectAllBtn.showsTouchWhenHighlighted = NO;
-        _selectAllBtn.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+        _selectAllBtn.titleLabel.font = SWFontS(13, UIFontWeightMedium);
         _selectAllBtn.backgroundColor = UIColor.clearColor;
-        _selectAllBtn.layer.cornerRadius = 18;
-        _selectAllBtn.layer.borderWidth = 1;
-        _selectAllBtn.contentEdgeInsets = UIEdgeInsetsMake(8, 8, 8, 8);
+        _selectAllBtn.layer.cornerRadius = SW(18);
+        _selectAllBtn.layer.borderWidth = SW(1);
+        _selectAllBtn.contentEdgeInsets = SWInsets(8, 8, 8, 8);
 
         [_selectAllBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
         [_selectAllBtn setTitleColor:UIColor.blackColor forState:UIControlStateHighlighted];
@@ -205,8 +217,8 @@ static inline NSString *ASDurationText(NSTimeInterval seconds) {
 
         UICollectionViewFlowLayout *l = [UICollectionViewFlowLayout new];
         l.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-        l.minimumLineSpacing = 10;
-        l.minimumInteritemSpacing = 10;
+        l.minimumLineSpacing = SW(10);
+        l.minimumInteritemSpacing = SW(10);
 
         _thumbCV = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:l];
         _thumbCV.backgroundColor = UIColor.clearColor;
@@ -232,15 +244,15 @@ static inline NSString *ASDurationText(NSTimeInterval seconds) {
     [super layoutSubviews];
     self.card.frame = self.contentView.bounds;
 
-    CGFloat pad = 20;
-    CGFloat twoLineGap = 4;
+    CGFloat pad = SW(20);
+    CGFloat twoLineGap = SW(4);
 
     CGFloat countH = ceil(self.countLabel.font.lineHeight);
     CGFloat sizeH  = ceil(self.sizeLabel.font.lineHeight);
     CGFloat leftBlockH = countH + twoLineGap + sizeH;
 
-    CGFloat btnH = 36;
-    UIFont *bf = self.selectAllBtn.titleLabel.font ?: [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    CGFloat btnH = SW(36);
+    UIFont *bf = self.selectAllBtn.titleLabel.font ?: SWFontS(13, UIFontWeightMedium);
     UIEdgeInsets in = self.selectAllBtn.contentEdgeInsets;
 
     CGFloat t1 = [self as_textW:NSLocalizedString(@"Select All", nil) font:bf h:btnH];
@@ -253,16 +265,16 @@ static inline NSString *ASDurationText(NSTimeInterval seconds) {
     CGFloat btnY = pad + floor((leftBlockH - btnH)/2.0);
     self.selectAllBtn.frame = CGRectMake(self.card.bounds.size.width - pad - btnW, btnY, btnW, btnH);
 
-    CGFloat leftW = CGRectGetMinX(self.selectAllBtn.frame) - pad - 12;
-    self.countLabel.frame = CGRectMake(pad, pad, MAX(60, leftW), countH);
-    self.sizeLabel.frame  = CGRectMake(pad, CGRectGetMaxY(self.countLabel.frame) + twoLineGap, MAX(60, leftW), sizeH);
+    CGFloat leftW = CGRectGetMinX(self.selectAllBtn.frame) - pad - SW(12);
+    self.countLabel.frame = CGRectMake(pad, pad, MAX(SW(60), leftW), countH);
+    self.sizeLabel.frame  = CGRectMake(pad, CGRectGetMaxY(self.countLabel.frame) + twoLineGap, MAX(SW(60), leftW), sizeH);
 
-    CGFloat listY = CGRectGetMaxY(self.sizeLabel.frame) + 10;
+    CGFloat listY = CGRectGetMaxY(self.sizeLabel.frame) + SW(10);
 
     self.thumbCV.frame = CGRectMake(pad,
                                     listY,
                                     self.card.bounds.size.width - pad,
-                                    160);
+                                    SW(160));
 }
 
 - (uint64_t)cleanableBytes {
@@ -375,7 +387,7 @@ static inline NSString *ASDurationText(NSTimeInterval seconds) {
     opt.synchronous = NO;
 
     CGFloat scale = UIScreen.mainScreen.scale;
-    CGSize target = CGSizeMake(120*scale, 160*scale);
+    CGSize target = CGSizeMake(SW(120)*scale, SW(160)*scale);
 
     __weak typeof(cell) weakCell = cell;
     NSString *expect = lid;
@@ -398,7 +410,7 @@ static inline NSString *ASDurationText(NSTimeInterval seconds) {
 }
 
 - (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    return CGSizeMake(120, 160);
+    return CGSizeMake(SW(120), SW(160));
 }
 
 - (UIEdgeInsets)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout insetForSectionAtIndex:(NSInteger)section {
@@ -491,10 +503,10 @@ static inline void ASNoAnim(dispatch_block_t block) {
     [super layoutSubviews];
     self.img.frame = self.contentView.bounds;
 
-    CGFloat pad = 10;
-    CGFloat s = 24;
+    CGFloat pad = SW(10);
+    CGFloat s = SW(24);
     self.selectIcon.frame = CGRectMake(self.contentView.bounds.size.width - pad - s, pad, s, s);
-    self.selectBtn.frame = CGRectInset(self.selectIcon.frame, -8, -8);
+    self.selectBtn.frame = CGRectInset(self.selectIcon.frame, -SW(8), -SW(8));
 }
 
 - (void)prepareForReuse {
@@ -527,7 +539,7 @@ static inline void ASNoAnim(dispatch_block_t block) {
     if (self=[super initWithFrame:frame]) {
 
         _titleLabel = [UILabel new];
-        _titleLabel.font = [UIFont boldSystemFontOfSize:15];
+        _titleLabel.font = [UIFont boldSystemFontOfSize:SW(15)];
 
         _selectAllBtn = [UIButton buttonWithType:UIButtonTypeSystem];
         _selectAllBtn.adjustsImageWhenHighlighted = NO;
@@ -543,9 +555,9 @@ static inline void ASNoAnim(dispatch_block_t block) {
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGFloat pad = 10;
-    self.titleLabel.frame = CGRectMake(pad, 0, self.bounds.size.width - pad*2 - 80, self.bounds.size.height);
-    self.selectAllBtn.frame = CGRectMake(self.bounds.size.width - pad - 80, 0, 80, self.bounds.size.height);
+    CGFloat pad = SW(10);
+    self.titleLabel.frame = CGRectMake(pad, 0, self.bounds.size.width - pad*2 - SW(80), self.bounds.size.height);
+    self.selectAllBtn.frame = CGRectMake(self.bounds.size.width - pad - SW(80), 0, SW(80), self.bounds.size.height);
 }
 - (void)onTap { if (self.tapSelectAll) self.tapSelectAll(); }
 @end
@@ -570,8 +582,8 @@ static inline void ASNoAnim(dispatch_block_t block) {
         _imgView = [UIImageView new];
         _imgView.contentMode = UIViewContentModeScaleAspectFill;
         _imgView.clipsToBounds = YES;
-        _imgView.layer.cornerRadius = 20;
-        _imgView.layer.borderWidth = 1;
+        _imgView.layer.cornerRadius = SW(20);
+        _imgView.layer.borderWidth = SW(1);
         _imgView.layer.borderColor = UIColor.whiteColor.CGColor;
 
         _previewBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -603,15 +615,15 @@ static inline void ASNoAnim(dispatch_block_t block) {
     self.imgView.frame = self.contentView.bounds;
     self.previewBtn.frame = self.contentView.bounds;
 
-    CGFloat s = 12;
+    CGFloat s = SW(12);
     self.checkView.frame = CGRectMake(self.contentView.bounds.size.width - s,
                                       0,
                                       s, s);
-    self.checkBtn.frame = CGRectInset(self.checkView.frame, -8, -8);
+    self.checkBtn.frame = CGRectInset(self.checkView.frame, -SW(8), -SW(8));
 
-    CGFloat bw = 34, bh = 14;
+    CGFloat bw = SW(34), bh = SW(14);
     self.bestBadge.frame = CGRectMake((self.contentView.bounds.size.width - bw)/2.0,
-                                      self.contentView.bounds.size.height - bh + 2,
+                                      self.contentView.bounds.size.height - bh + SW(2),
                                       bw, bh);
 }
 
@@ -684,14 +696,14 @@ static inline void ASNoAnim(dispatch_block_t block) {
 
 - (CGFloat)as_textWidth:(NSString *)t font:(UIFont *)f {
     if (t.length == 0) return 0;
-    return ceil([t boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, 100)
+    return ceil([t boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, SW(100))
                                 options:NSStringDrawingUsesLineFragmentOrigin|NSStringDrawingUsesFontLeading
                              attributes:@{NSFontAttributeName:f}
                                 context:nil].size.width);
 }
 
 - (void)updateCachedLeftWidth {
-    CGFloat pad = 14;
+    CGFloat pad = SW(14);
 
     CGFloat wCount = [self as_textWidth:self.countLabel.text font:self.countLabel.font];
     CGFloat wSize  = [self as_textWidth:self.sizeLabel.text  font:self.sizeLabel.font];
@@ -706,7 +718,7 @@ static inline void ASNoAnim(dispatch_block_t block) {
     CGFloat contentW = MAX(MAX(wCount, wSize), wBtn);
     CGFloat leftW = contentW + pad * 2;
 
-    self.cachedLeftW = MIN(180, MAX(110, leftW));
+    self.cachedLeftW = MIN(SW(180), MAX(SW(110), leftW));
 }
 
 - (void)refreshVisibleThumbSelectionOnly {
@@ -732,14 +744,14 @@ static inline void ASNoAnim(dispatch_block_t block) {
 
         _card = [UIView new];
         _card.backgroundColor = UIColor.whiteColor;
-        _card.layer.cornerRadius = 22;
+        _card.layer.cornerRadius = SW(22);
         _card.clipsToBounds = YES;
 
         _leftPanel = [UIView new];
         _leftPanel.backgroundColor = UIColor.whiteColor;
 
         _countLabel = [UILabel new];
-        _countLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
+        _countLabel.font = SWFontS(20, UIFontWeightMedium);
         _countLabel.textColor = UIColor.blackColor;
 
         _sizeLabel = [UILabel new];
@@ -748,11 +760,11 @@ static inline void ASNoAnim(dispatch_block_t block) {
 
         _selectAllBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         _selectAllBtn.adjustsImageWhenHighlighted = NO;
-        _selectAllBtn.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+        _selectAllBtn.titleLabel.font = SWFontS(13, UIFontWeightMedium);
         _selectAllBtn.backgroundColor = UIColor.clearColor;
-        _selectAllBtn.layer.cornerRadius = 18;
-        _selectAllBtn.layer.borderWidth = 1;
-        _selectAllBtn.contentEdgeInsets = UIEdgeInsetsMake(8, 8, 8, 8);
+        _selectAllBtn.layer.cornerRadius = SW(18);
+        _selectAllBtn.layer.borderWidth = SW(1);
+        _selectAllBtn.contentEdgeInsets = SWInsets(8, 8, 8, 8);
         _selectAllBtn.titleLabel.lineBreakMode = NSLineBreakByClipping;
         _selectAllBtn.titleLabel.adjustsFontSizeToFitWidth = NO;
         _selectAllBtn.titleLabel.minimumScaleFactor = 1.0;
@@ -771,8 +783,8 @@ static inline void ASNoAnim(dispatch_block_t block) {
 
         UICollectionViewFlowLayout *l = [UICollectionViewFlowLayout new];
         l.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-        l.minimumLineSpacing = 10;
-        l.minimumInteritemSpacing = 10;
+        l.minimumLineSpacing = SW(10);
+        l.minimumInteritemSpacing = SW(10);
 
         _thumbCV = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:l];
         _thumbCV.backgroundColor = UIColor.clearColor;
@@ -803,19 +815,19 @@ static inline void ASNoAnim(dispatch_block_t block) {
     self.card.frame = self.contentView.bounds;
 
     CGFloat leftW = (self.fixedLeftW > 0 ? self.fixedLeftW
-                    : (self.cachedLeftW > 0 ? self.cachedLeftW : 120));
+                    : (self.cachedLeftW > 0 ? self.cachedLeftW : SW(120)));
 
     self.leftPanel.frame  = CGRectMake(0, 0, leftW, self.card.bounds.size.height);
     self.rightPanel.frame = CGRectMake(leftW, 0, self.card.bounds.size.width - leftW, self.card.bounds.size.height);
 
-    CGFloat pad = 14;
-    CGFloat topY = 18;
-    CGFloat lineGap = 2;
+    CGFloat pad = SW(14);
+    CGFloat topY = SW(18);
+    CGFloat lineGap = SW(2);
 
     CGFloat y = topY;
-    self.countLabel.frame = CGRectMake(pad, y, leftW - pad*2, 26);
-    y += 26 + lineGap;
-    self.sizeLabel.frame  = CGRectMake(pad, y, leftW - pad*2, 16);
+    self.countLabel.frame = CGRectMake(pad, y, leftW - pad*2, SW(26));
+    y += SW(26) + lineGap;
+    self.sizeLabel.frame  = CGRectMake(pad, y, leftW - pad*2, SW(16));
 
     NSString *t1 = NSLocalizedString(@"Select All", nil);
     NSString *t2 = NSLocalizedString(@"Deselect All", nil);
@@ -825,16 +837,16 @@ static inline void ASNoAnim(dispatch_block_t block) {
     CGFloat pillW = ceil(wT + in.left + in.right);
     pillW = MIN(pillW, leftW - pad*2);
 
-    CGFloat btnH = 36;
-    CGFloat btnY = self.card.bounds.size.height - 18 - btnH;
+    CGFloat btnH = SW(36);
+    CGFloat btnY = self.card.bounds.size.height - SW(18) - btnH;
     CGFloat btnX = floor((leftW - pillW)/2.0);
     self.selectAllBtn.frame = CGRectMake(btnX, btnY, pillW, btnH);
 
     self.bestBg.frame = self.rightPanel.bounds;
 
-    CGFloat listH = 56;
+    CGFloat listH = SW(56);
     self.thumbCV.frame = CGRectMake(0,
-                                    self.rightPanel.bounds.size.height - listH - 10,
+                                    self.rightPanel.bounds.size.height - listH - SW(10),
                                     self.rightPanel.bounds.size.width,
                                     listH);
 
@@ -1008,7 +1020,7 @@ static inline void ASNoAnim(dispatch_block_t block) {
     opt.synchronous = NO;
 
     CGFloat scale = UIScreen.mainScreen.scale;
-    CGSize target = CGSizeMake(40 * scale, 40 * scale);
+    CGSize target = CGSizeMake(SW(40) * scale, SW(40) * scale);
 
     __weak typeof(cell) weakCell = cell;
     NSString *expect = lid;
@@ -1031,11 +1043,11 @@ static inline void ASNoAnim(dispatch_block_t block) {
 }
 
 - (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    return CGSizeMake(40, 40);
+    return CGSizeMake(SW(40), SW(40));
 }
 
 - (UIEdgeInsets)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout insetForSectionAtIndex:(NSInteger)section {
-    return UIEdgeInsetsMake(8, 14, 8, 14);
+    return UIEdgeInsetsMake(SW(8), SW(14), SW(8), SW(14));
 }
 
 - (void)onTapCheckBtn:(UIButton *)btn {
@@ -1055,7 +1067,7 @@ static inline void ASNoAnim(dispatch_block_t block) {
 
 static inline CGFloat ASTextW(NSString *t, UIFont *f) {
     if (t.length == 0) return 0;
-    return ceil([t boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, 100)
+    return ceil([t boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, SW(100))
                                 options:NSStringDrawingUsesLineFragmentOrigin|NSStringDrawingUsesFontLeading
                              attributes:@{NSFontAttributeName:f}
                                 context:nil].size.width);
@@ -1157,15 +1169,15 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 - (void)recomputeGroupCardLeftWidth {
     if (![self isGroupMode]) { self.groupCardLeftW = 0; return; }
 
-    UIFont *countFont = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
-    UIFont *sizeFont  = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-    UIFont *btnFont   = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    UIFont *countFont = SWFontS(20, UIFontWeightMedium);
+    UIFont *sizeFont  = SWFontS(12, UIFontWeightSemibold);
+    UIFont *btnFont   = SWFontS(13, UIFontWeightMedium);
 
     NSString *unit = [self isVideoMode] ? NSLocalizedString(@"Videos", nil) : NSLocalizedString(@"Photos", nil);
 
-    CGFloat sidePad = 14;
+    CGFloat sidePad = SW(14);
 
-    UIEdgeInsets btnInsets = UIEdgeInsetsMake(8, 8, 8, 8);
+    UIEdgeInsets btnInsets = SWInsets(8, 8, 8, 8);
     CGFloat btnImgW = 0;
     CGFloat btnSpacing = 0;
 
@@ -1187,7 +1199,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
     CGFloat leftW = maxContentW + sidePad * 2;
 
-    self.groupCardLeftW = MIN(180, MAX(110, leftW));
+    self.groupCardLeftW = MIN(SW(180), MAX(SW(110), leftW));
 }
 
 - (void)viewDidLoad {
@@ -1241,40 +1253,40 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGFloat w = self.view.bounds.size.width;
-    CGFloat gradientH = 0 + 402.0;
+    CGFloat gradientH = 0 + SW(402.0);
     self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     CGFloat topSafe = self.view.safeAreaInsets.top;
     CGFloat bottomSafe = self.view.safeAreaInsets.bottom;
 
-    CGFloat navH = 44 + topSafe;
-    CGFloat toolbarH = 88;
-    CGFloat floatBtnH = 70;
-    CGFloat floatBtnX = 15;
-    CGFloat floatBtnW = self.view.bounds.size.width - 30;
+    CGFloat navH = SW(44) + topSafe;
+    CGFloat toolbarH = SW(88);
+    CGFloat floatBtnH = SW(70);
+    CGFloat floatBtnX = SW(15);
+    CGFloat floatBtnW = self.view.bounds.size.width - SW(30);
 
     self.navBar.frame = CGRectMake(0, 0, self.view.bounds.size.width, navH);
 
     self.topToolbar.frame = CGRectMake(0, navH, self.view.bounds.size.width, toolbarH);
 
-    CGFloat pad = 16;
-    self.topSummaryLabel.frame = CGRectMake(pad, 0, self.topToolbar.bounds.size.width - pad*2, 44);
+    CGFloat pad = SW(16);
+    self.topSummaryLabel.frame = CGRectMake(pad, 0, self.topToolbar.bounds.size.width - pad*2, SW(44));
 
-    CGFloat rowY = 44 + (44 - 36)/2.0;
-    CGFloat btnH = 36;
-    CGFloat gap = 10;
+    CGFloat rowY = SW(44) + (SW(44) - SW(36))/2.0;
+    CGFloat btnH = SW(40);
+    CGFloat gap = SW(10);
 
     CGFloat w1 = [self pillWidthForButton:self.topSelectAllBtn height:btnH];
     CGFloat w2 = [self pillWidthForButton:self.topSortBtn height:btnH];
 
-    w1 = MAX(96, w1);
-    w2 = MAX(96, w2);
+    w1 = MAX(SW(96), w1);
+    w2 = MAX(SW(96), w2);
 
     CGFloat maxTotal = self.topToolbar.bounds.size.width - pad*2;
     CGFloat totalNeed = w1 + gap + w2;
 
     if (totalNeed > maxTotal) {
-        CGFloat minGap = 6;
+        CGFloat minGap = SW(6);
         gap = MAX(minGap, gap - (totalNeed - maxTotal));
         totalNeed = w1 + gap + w2;
 
@@ -1320,7 +1332,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     self.emptyView.frame = hostRect;
 
     CGFloat labelH = ceil(self.emptyLabel.font.lineHeight);
-    CGFloat labelW = MIN(hostRect.size.width - 40, 320);
+    CGFloat labelW = MIN(hostRect.size.width - SW(40), SW(320));
     self.emptyLabel.frame = CGRectMake((hostRect.size.width - labelW) / 2.0,
                                       (hostRect.size.height - labelH) / 2.0,
                                       labelW,
@@ -1375,7 +1387,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     summary.numberOfLines = 1;
     summary.adjustsFontSizeToFitWidth = YES;
     summary.minimumScaleFactor = 0.8;
-    summary.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    summary.font = SWFontS(16, UIFontWeightMedium);
     self.topSummaryLabel = summary;
 
     ASNoHighlightButton *selectAllBtn = [ASNoHighlightButton buttonWithType:UIButtonTypeCustom];
@@ -1447,7 +1459,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     UIControl *row = [UIControl new];
     row.translatesAutoresizingMaskIntoConstraints = NO;
     row.backgroundColor = ASHexRGBA(0xF6F6F6FF);
-    row.layer.cornerRadius = 8;
+    row.layer.cornerRadius = SW(8);
     row.layer.masksToBounds = YES;
     row.tag = mode;
 
@@ -1457,7 +1469,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     lab.translatesAutoresizingMaskIntoConstraints = NO;
     lab.text = title;
     lab.textColor = UIColor.blackColor;
-    lab.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+    lab.font = SWFontS(17, UIFontWeightMedium);
     [row addSubview:lab];
 
     UIImageView *check = [UIImageView new];
@@ -1470,15 +1482,15 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     self.as_sortCheckByMode[@(mode)] = check;
 
     [NSLayoutConstraint activateConstraints:@[
-        [lab.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:20],
-        [lab.topAnchor constraintEqualToAnchor:row.topAnchor constant:14],
-        [lab.bottomAnchor constraintEqualToAnchor:row.bottomAnchor constant:-14],
-        [lab.trailingAnchor constraintLessThanOrEqualToAnchor:check.leadingAnchor constant:-12],
+        [lab.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:SW(20)],
+        [lab.topAnchor constraintEqualToAnchor:row.topAnchor constant:SW(14)],
+        [lab.bottomAnchor constraintEqualToAnchor:row.bottomAnchor constant:-SW(14)],
+        [lab.trailingAnchor constraintLessThanOrEqualToAnchor:check.leadingAnchor constant:-SW(12)],
 
-        [check.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-20],
+        [check.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-SW(20)],
         [check.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
-        [check.widthAnchor constraintEqualToConstant:24],
-        [check.heightAnchor constraintEqualToConstant:24],
+        [check.widthAnchor constraintEqualToConstant:SW(24)],
+        [check.heightAnchor constraintEqualToConstant:SW(24)],
     ]];
 
     return row;
@@ -1569,7 +1581,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     panel.tag = 9001;
     panel.translatesAutoresizingMaskIntoConstraints = NO;
     panel.backgroundColor = UIColor.whiteColor;
-    panel.layer.cornerRadius = 16;
+    panel.layer.cornerRadius = SW(16);
     panel.layer.masksToBounds = YES;
     if (@available(iOS 11.0, *)) {
         panel.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
@@ -1590,26 +1602,26 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     [panel addSubview:content];
 
     [NSLayoutConstraint activateConstraints:@[
-        [content.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:20],
-        [content.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-20],
+        [content.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:SW(20)],
+        [content.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-SW(20)],
 
-        [content.topAnchor constraintEqualToAnchor:safe.topAnchor constant:20],
+        [content.topAnchor constraintEqualToAnchor:safe.topAnchor constant:SW(20)],
 
-        [content.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-20],
+        [content.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-SW(20)],
     ]];
 
     UILabel *title = [UILabel new];
     title.translatesAutoresizingMaskIntoConstraints = NO;
     title.text = NSLocalizedString(@"Sort", nil);
     title.textColor = UIColor.blackColor;
-    title.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+    title.font = SWFontS(17, UIFontWeightMedium);
     title.textAlignment = NSTextAlignmentCenter;
     [content addSubview:title];
 
     UIStackView *stack = [UIStackView new];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 15;
+    stack.spacing = SW(15);
     [content addSubview:stack];
 
     UIControl *r0 = [self as_sortRowWithTitle:NSLocalizedString(@"Newest", nil) mode:ASAssetSortModeNewest];
@@ -1625,9 +1637,9 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     UIButton *confirm = [UIButton buttonWithType:UIButtonTypeCustom];
     confirm.translatesAutoresizingMaskIntoConstraints = NO;
     confirm.backgroundColor = ASHexRGBA(0x024DFFFF);
-    confirm.layer.cornerRadius = 26;
+    confirm.layer.cornerRadius = SW(26);
     confirm.layer.masksToBounds = YES;
-    confirm.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+    confirm.titleLabel.font = SWFontS(20, UIFontWeightRegular);
     [confirm setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [confirm setTitle:NSLocalizedString(@"Confirm", nil) forState:UIControlStateNormal];
     [confirm addTarget:self action:@selector(as_sortConfirmTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -1636,9 +1648,9 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     UIButton *cancel = [UIButton buttonWithType:UIButtonTypeCustom];
     cancel.translatesAutoresizingMaskIntoConstraints = NO;
     cancel.backgroundColor = ASHexRGBA(0xF6F6F6FF);
-    cancel.layer.cornerRadius = 26;
+    cancel.layer.cornerRadius = SW(26);
     cancel.layer.masksToBounds = YES;
-    cancel.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+    cancel.titleLabel.font = SWFontS(20, UIFontWeightRegular);
     [cancel setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     [cancel setTitle:NSLocalizedString(@"Cancel", nil) forState:UIControlStateNormal];
     [cancel addTarget:self action:@selector(as_sortCancelTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -1649,19 +1661,19 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
         [title.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
         [title.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
 
-        [stack.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:15],
+        [stack.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:SW(15)],
         [stack.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
         [stack.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
 
-        [confirm.topAnchor constraintEqualToAnchor:stack.bottomAnchor constant:15],
+        [confirm.topAnchor constraintEqualToAnchor:stack.bottomAnchor constant:SW(15)],
         [confirm.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
         [confirm.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
-        [confirm.heightAnchor constraintEqualToConstant:52],
+        [confirm.heightAnchor constraintEqualToConstant:SW(52)],
 
-        [cancel.topAnchor constraintEqualToAnchor:confirm.bottomAnchor constant:15],
+        [cancel.topAnchor constraintEqualToAnchor:confirm.bottomAnchor constant:SW(15)],
         [cancel.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
         [cancel.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
-        [cancel.heightAnchor constraintEqualToConstant:52],
+        [cancel.heightAnchor constraintEqualToConstant:SW(52)],
         [cancel.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
     ]];
 
@@ -1738,15 +1750,15 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
     if ([self isGroupMode]) {
         layout.minimumInteritemSpacing = 0;
-        layout.minimumLineSpacing = 10;
-        layout.sectionInset = [self useVideoGroupStyle] ? UIEdgeInsetsMake(10, 20, 0, 20)
-                                                        : UIEdgeInsetsMake(10, 20, 0, 20);
+        layout.minimumLineSpacing = SW(10);
+        layout.sectionInset = [self useVideoGroupStyle] ? SWInsets(10, 20, 0, 20)
+                                                        : SWInsets(10, 20, 0, 20);
         layout.headerReferenceSize = CGSizeZero;
     } else {
-        layout.minimumInteritemSpacing = 2;
-        layout.minimumLineSpacing = 2;
-        layout.sectionInset = UIEdgeInsetsMake(10, 10, 10, 10);
-        layout.headerReferenceSize = CGSizeMake(self.view.bounds.size.width, 44);
+        layout.minimumInteritemSpacing = SW(2);
+        layout.minimumLineSpacing = SW(2);
+        layout.sectionInset = SWInsets(10, 10, 10, 10);
+        layout.headerReferenceSize = CGSizeMake(self.view.bounds.size.width, SW(44));
     }
 
     self.cv = [[UICollectionView alloc] initWithFrame:self.view.bounds collectionViewLayout:layout];
@@ -1771,7 +1783,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     } else {
         UIView *bg = [UIView new];
         bg.backgroundColor = UIColor.whiteColor;
-        bg.layer.cornerRadius = 16;
+        bg.layer.cornerRadius = SW(16);
         bg.layer.masksToBounds = YES;
         if (@available(iOS 11.0, *)) {
             bg.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
@@ -1792,7 +1804,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     self.emptyLabel = [UILabel new];
     self.emptyLabel.text = NSLocalizedString(@"No items to clean", nil);
     self.emptyLabel.textColor = UIColor.blackColor;
-    self.emptyLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
+    self.emptyLabel.font = SWFontS(20, UIFontWeightMedium);
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyLabel.numberOfLines = 1;
     [self.emptyView addSubview:self.emptyLabel];
@@ -1804,7 +1816,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     ASNoHighlightButton *btn = [ASNoHighlightButton buttonWithType:UIButtonTypeCustom];
     btn.userInteractionEnabled = YES;
 
-    btn.layer.cornerRadius = 35;
+    btn.layer.cornerRadius = SW(35);
     btn.layer.masksToBounds = YES;
     btn.backgroundColor = [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
 
@@ -1813,7 +1825,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     btn.layer.shadowPath = nil;
 
     [btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    btn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    btn.titleLabel.font = SWFontS(16, UIFontWeightMedium);
     [btn addTarget:self action:@selector(onDelete) forControlEvents:UIControlEventTouchUpInside];
 
     [bar addSubview:btn];
@@ -1898,7 +1910,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
 - (CGFloat)pillWidthForButton:(UIButton *)btn height:(CGFloat)h {
     NSString *t = [btn titleForState:UIControlStateNormal] ?: @"";
-    UIFont *f = btn.titleLabel.font ?: [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    UIFont *f = btn.titleLabel.font ?: SWFontS(13, UIFontWeightMedium);
 
     CGFloat textW = ceil([t boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, h)
                                         options:NSStringDrawingUsesLineFragmentOrigin|NSStringDrawingUsesFontLeading
@@ -1910,17 +1922,17 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     if (img) imgW = ceil(img.size.width);
 
     UIEdgeInsets in = btn.contentEdgeInsets;
-    CGFloat spacing = (img && t.length) ? 6 : 0;
+    CGFloat spacing = (img && t.length) ? SW(6) : 0;
 
     return ceil(in.left + imgW + spacing + textW + in.right);
 }
 
 - (void)configPillButtonBase:(UIButton *)btn {
     btn.backgroundColor = UIColor.whiteColor;
-    btn.layer.cornerRadius = 18;
+    btn.layer.cornerRadius = SW(20);
     btn.layer.masksToBounds = YES;
 
-    btn.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    btn.titleLabel.font = SWFontS(13, UIFontWeightMedium);
     btn.titleLabel.numberOfLines = 1;
     btn.titleLabel.lineBreakMode = NSLineBreakByClipping;
     btn.titleLabel.adjustsFontSizeToFitWidth = NO;
@@ -1930,10 +1942,10 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     btn.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
     btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
 
-    btn.contentEdgeInsets = UIEdgeInsetsMake(6, 8, 6, 8);
+    btn.contentEdgeInsets = SWInsets(6, 8, 6, 15);
 
     btn.imageEdgeInsets = UIEdgeInsetsZero;
-    btn.titleEdgeInsets = UIEdgeInsetsMake(0, 6, 0, 0);
+    btn.titleEdgeInsets = SWInsets(0, 6, 0, 0);
 }
 
 - (NSString *)sortTitle {
@@ -2407,7 +2419,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
     if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
         UIPopoverPresentationController *pop = ac.popoverPresentationController;
         pop.sourceView = self.deleteBtn ?: self.view;
-        pop.sourceRect = (self.deleteBtn ? self.deleteBtn.bounds : CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds), 1, 1));
+        pop.sourceRect = (self.deleteBtn ? self.deleteBtn.bounds : CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds), SW(1), SW(1)));
         pop.permittedArrowDirections = UIPopoverArrowDirectionAny;
     }
 
@@ -2780,7 +2792,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
                   layout:(UICollectionViewLayout *)layout
 referenceSizeForHeaderInSection:(NSInteger)section {
     if ([self isGroupMode]) return CGSizeZero;
-    return [self isGroupMode] ? CGSizeMake(collectionView.bounds.size.width, 44) : CGSizeZero;
+    return [self isGroupMode] ? CGSizeMake(collectionView.bounds.size.width, SW(44)) : CGSizeZero;
 }
 
 @end

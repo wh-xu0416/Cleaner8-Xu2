@@ -6,6 +6,15 @@
 #import <ContactsUI/ContactsUI.h>
 #import "Common.h"
 
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
 #pragma mark - UI Helpers
 
 static inline UIColor *ASACRGB(CGFloat r, CGFloat g, CGFloat b) {
@@ -24,7 +33,7 @@ static inline UIColor *ASACAvatarBG(void) {  // #D6E7FFFF
     return [UIColor colorWithRed:0xD6/255.0 green:0xE7/255.0 blue:0xFF/255.0 alpha:1.0];
 }
 static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
+    return ASFontS(size, weight);
 }
 
 static inline NSString *ASACSectionKeyFromName(NSString *name) {
@@ -65,15 +74,14 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
 @implementation ASACSectionCardFlowLayout
 - (instancetype)init {
     if (self = [super init]) {
-        self.minimumLineSpacing = 10;
-        self.minimumInteritemSpacing = 10;
-
-        self.sectionInset = UIEdgeInsetsMake(10, 20, 10, 20);
-
+        self.minimumLineSpacing = AS(10);
+        self.minimumInteritemSpacing = AS(10);
+        self.sectionInset = ASEdgeInsets(10, 20, 10, 20);
         self.sectionHeadersPinToVisibleBounds = YES;
     }
     return self;
 }
+
 @end
 
 #pragma mark - Letter Header (sticky)
@@ -98,9 +106,9 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
         [self addSubview:self.label];
 
         [NSLayoutConstraint activateConstraints:@[
-            [self.label.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:30],
+            [self.label.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:AS(30)],
             [self.label.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-            [self.label.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-20],
+            [self.label.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-AS(20)],
         ]];
     }
     return self;
@@ -132,13 +140,13 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
     if (self = [super initWithFrame:frame]) {
 
         self.contentView.backgroundColor = UIColor.whiteColor;
-        self.contentView.layer.cornerRadius = 16;
+        self.contentView.layer.cornerRadius = AS(16);
         self.contentView.layer.masksToBounds = YES;
 
         self.avatarView = [UIView new];
         self.avatarView.translatesAutoresizingMaskIntoConstraints = NO;
         self.avatarView.backgroundColor = ASACAvatarBG();
-        self.avatarView.layer.cornerRadius = 24;
+        self.avatarView.layer.cornerRadius = AS(24);
         self.avatarView.layer.masksToBounds = YES;
         [self.contentView addSubview:self.avatarView];
 
@@ -165,32 +173,32 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
         self.selectButton.translatesAutoresizingMaskIntoConstraints = NO;
         self.selectButton.adjustsImageWhenHighlighted = NO;
         self.selectButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
-        self.selectButton.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+        self.selectButton.contentEdgeInsets = ASEdgeInsets(10, 10, 10, 10);
         [self.selectButton addTarget:self action:@selector(onSelectButtonTap) forControlEvents:UIControlEventTouchUpInside];
         [self.contentView addSubview:self.selectButton];
 
         [NSLayoutConstraint activateConstraints:@[
-            [self.avatarView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:18],
+            [self.avatarView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:AS(18)],
             [self.avatarView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            [self.avatarView.widthAnchor constraintEqualToConstant:48],
-            [self.avatarView.heightAnchor constraintEqualToConstant:48],
+            [self.avatarView.widthAnchor constraintEqualToConstant:AS(48)],
+            [self.avatarView.heightAnchor constraintEqualToConstant:AS(48)],
 
             [self.avatarLabel.centerXAnchor constraintEqualToAnchor:self.avatarView.centerXAnchor],
             [self.avatarLabel.centerYAnchor constraintEqualToAnchor:self.avatarView.centerYAnchor],
 
-            [self.selectButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-8],
+            [self.selectButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-AS(8)],
             [self.selectButton.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            [self.selectButton.widthAnchor constraintEqualToConstant:44],
-            [self.selectButton.heightAnchor constraintEqualToConstant:44],
+            [self.selectButton.widthAnchor constraintEqualToConstant:AS(44)],
+            [self.selectButton.heightAnchor constraintEqualToConstant:AS(44)],
 
-            [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor constant:10],
-            [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectButton.leadingAnchor constant:-10],
-            [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:11],
+            [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor constant:AS(10)],
+            [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectButton.leadingAnchor constant:-AS(10)],
+            [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:AS(11)],
 
             [self.phoneLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
             [self.phoneLabel.trailingAnchor constraintEqualToAnchor:self.nameLabel.trailingAnchor],
-            [self.phoneLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:4],
-            [self.phoneLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor constant:-11],
+            [self.phoneLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:AS(4)],
+            [self.phoneLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor constant:-AS(11)],
         ]];
     }
     return self;
@@ -253,7 +261,6 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
 @property (nonatomic, strong) UIButton *leftButton;
 @property (nonatomic, strong) UIButton *rightButton;
 @property (nonatomic, assign) BOOL hasContactsAccess;
-
 @end
 
 @implementation AllContactsViewController
@@ -333,6 +340,8 @@ static inline NSString *ASACFirstCharForAvatar(NSString *s) {
         self.pageTitleLabel.hidden = showEmpty;
         self.countLabel.hidden = showEmpty;
     }
+    [self.view setNeedsLayout];
+    [self.view layoutIfNeeded];
 }
 
 #pragma mark - Title Bar
@@ -452,8 +461,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     [self.view addSubview:self.cv];
 
-    // 顶部 20（你要的“上面20”）
-    self.cv.contentInset = UIEdgeInsetsMake(20, 0, 0, 0);
+    self.cv.contentInset = ASEdgeInsets(20, 0, 0, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 }
 
@@ -469,7 +477,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     b.titleLabel.font = ASACFont(20, UIFontWeightRegular);
     b.titleLabel.textAlignment = NSTextAlignmentCenter;
 
-    b.contentEdgeInsets = UIEdgeInsetsMake(22, 22, 22, 22);
+    b.contentEdgeInsets = ASEdgeInsets(22, 22, 22, 22);
+
     return b;
 }
 
@@ -752,7 +761,7 @@ referenceSizeForHeaderInSection:(NSInteger)section {
     if (self.mode == AllContactsModeIncomplete) {
         return CGSizeZero;
     }
-    return CGSizeMake(collectionView.bounds.size.width, 24);
+    return CGSizeMake(collectionView.bounds.size.width, AS(24));
 }
 
 
@@ -762,7 +771,7 @@ referenceSizeForHeaderInSection:(NSInteger)section {
     (void)collectionView;
     (void)collectionViewLayout;
     (void)section;
-    return UIEdgeInsetsMake(10, 20, 10, 20);
+    return ASEdgeInsets(10, 20, 10, 20);
 }
 
 - (CGSize)collectionView:(UICollectionView *)collectionView
@@ -770,7 +779,7 @@ referenceSizeForHeaderInSection:(NSInteger)section {
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
     (void)collectionViewLayout;
     (void)indexPath;
-    return CGSizeMake(collectionView.bounds.size.width - 40, 72);
+    return CGSizeMake(collectionView.bounds.size.width - AS(40), AS(72));
 }
 
 - (CGFloat)collectionView:(UICollectionView *)collectionView
@@ -779,7 +788,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     (void)collectionView;
     (void)collectionViewLayout;
     (void)section;
-    return 10;
+    return AS(10);
 }
 
 #pragma mark - Tap Select
@@ -1272,15 +1281,15 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     UIView *toast = [UIView new];
     toast.tag = tag;
     toast.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.78];
-    toast.layer.cornerRadius = 12;
+    toast.layer.cornerRadius = AS(12);
     toast.layer.masksToBounds = YES;
 
     [toast addSubview:lab];
     [host addSubview:toast];
 
-    CGFloat maxW = host.bounds.size.width - 80;
+    CGFloat maxW = host.bounds.size.width - AS(80);
     CGSize textSize = [lab sizeThatFits:CGSizeMake(maxW, 999)];
-    CGFloat padX = 22, padY = 12;
+    CGFloat padX = AS(22), padY = AS(12);
 
     CGFloat w = MIN(maxW, textSize.width) + padX * 2;
     CGFloat h = textSize.height + padY * 2;
@@ -1289,7 +1298,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     if (@available(iOS 11.0, *)) safeBottom = host.safeAreaInsets.bottom;
 
     CGFloat x = (host.bounds.size.width - w) * 0.5;
-    CGFloat y = host.bounds.size.height - safeBottom - h - 110;
+    CGFloat y = host.bounds.size.height - safeBottom - h - AS(110);
     toast.frame = CGRectMake(x, y, w, h);
     lab.frame = CGRectMake(padX, padY, w - padX * 2, h - padY * 2);
 
@@ -1347,7 +1356,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     [super viewDidLayoutSubviews];
     CGFloat w = self.view.bounds.size.width;
 
-    CGFloat gradientH = 0 + 402.0;
+    CGFloat gradientH = AS(402.0);
     self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     CGFloat W = self.view.bounds.size.width;
@@ -1355,22 +1364,22 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
     CGFloat safeTop = self.view.safeAreaInsets.top;
     CGFloat safeBottom = self.view.safeAreaInsets.bottom;
 
-    CGFloat navH = 44 + safeTop;
+    CGFloat navH = AS(44) + safeTop;
     self.titleBar.frame = CGRectMake(0, 0, W, navH);
 
-    CGFloat pagePad = 20.0;
-    CGFloat btnH = 64;
+    CGFloat pagePad = AS(20.0);
+    CGFloat btnH = AS(64);
     CGFloat btnY = H - safeBottom - btnH;
 
     BOOL showBottom = NO;
     if (self.mode == AllContactsModeRestore) {
         showBottom = (self.selectedBackupIndices.count > 0);
         if (showBottom) {
-            CGFloat gap = 20.0;
+            CGFloat gap = AS(20.0);
             CGFloat eachW = (W - pagePad*2 - gap) / 2.0;
             self.leftButton.frame = CGRectMake(pagePad, btnY, eachW, btnH);
             self.rightButton.frame = CGRectMake(pagePad + eachW + gap, btnY, eachW, btnH);
-            self.leftButton.layer.cornerRadius = btnH * 0.5;
+            self.leftButton.layer.cornerRadius  = btnH * 0.5;
             self.rightButton.layer.cornerRadius = btnH * 0.5;
         }
     } else {
@@ -1381,61 +1390,72 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
         }
     }
 
-    CGFloat extraBottom = showBottom ? (btnH + 20.0) : 20.0;
+    CGFloat extraBottom = showBottom ? (btnH + AS(20.0)) : AS(20.0);
 
     if (self.mode == AllContactsModeIncomplete) {
-        CGFloat x = 20.0;
+        CGFloat x = AS(20.0);
 
-        CGFloat y = navH + 16;
-        self.pageTitleLabel.frame = CGRectMake(x, y, W - x*2, 34);
-
-        y += 34 + 10;
-        self.countLabel.frame = CGRectMake(x, y, W - x*2, 20);
-
-        y += 20 + 20;
+        CGFloat y = navH + AS(16);
+        self.pageTitleLabel.frame = CGRectMake(x, y, W - x*2, AS(34));
+        y += AS(34) + AS(10);
+        
+        self.countLabel.frame = CGRectMake(x, y, W - x*2, AS(20));
+        y += AS(20) + AS(20);
+        
         CGFloat listY = y;
 
         self.cv.frame = CGRectMake(0, listY, W, H - listY);
-        self.cv.contentInset = UIEdgeInsetsMake(0, 0, safeBottom + extraBottom, 0);
+        self.cv.contentInset = ASEdgeInsets(0, 0, safeBottom + extraBottom, 0);
         self.cv.scrollIndicatorInsets = self.cv.contentInset;
 
-        self.emptyView.frame = CGRectMake(0, navH, W, H - navH);
+        CGFloat emptyH = H - navH - safeBottom - extraBottom;
+        self.emptyView.frame = CGRectMake(0, navH, W, emptyH);
+        
         if (!self.emptyView.hidden) {
-            CGSize img = CGSizeMake(182, 168);
+            CGSize img = CGSizeMake(AS(182), AS(168));
             CGFloat centerY = self.emptyView.bounds.size.height * 0.5;
 
-            self.emptyImage.frame = CGRectMake((W - img.width)/2.0,
-                                               centerY - img.height/2.0 - 18,
+            CGFloat imgY = centerY - img.height * 0.5 - AS(60);
+            self.emptyImage.frame = CGRectMake((W - img.width) * 0.5,
+                                               imgY,
                                                img.width,
                                                img.height);
-            self.emptyTitle.frame = CGRectMake(20,
-                                               CGRectGetMaxY(self.emptyImage.frame) + 2,
-                                               W - 40,
-                                               40);
+
+            CGFloat titleY = CGRectGetMaxY(self.emptyImage.frame) + AS(2);
+            self.emptyTitle.frame = CGRectMake(AS(20),
+                                               titleY,
+                                               W - AS(40),
+                                               AS(40));
         }
+
         return;
     }
 
     CGFloat listY = navH;
     self.cv.frame = CGRectMake(0, listY, W, H - listY);
 
-    self.emptyView.frame = CGRectMake(0, navH, W, H - navH);
+    CGFloat emptyH = H - navH - safeBottom - extraBottom;
+    self.emptyView.frame = CGRectMake(0, navH, W, emptyH);
+
     if (!self.emptyView.hidden) {
-        CGSize img = CGSizeMake(182, 168);
+        CGSize img = CGSizeMake(AS(182), AS(168));
         CGFloat centerY = self.emptyView.bounds.size.height * 0.5;
 
-        self.emptyImage.frame = CGRectMake((W - img.width)/2.0,
-                                           centerY - img.height/2.0 - 18,
+        CGFloat imgY = centerY - img.height * 0.5 - AS(60);
+        self.emptyImage.frame = CGRectMake((W - img.width) * 0.5,
+                                           imgY,
                                            img.width,
                                            img.height);
-        self.emptyTitle.frame = CGRectMake(20,
-                                           CGRectGetMaxY(self.emptyImage.frame) + 2,
-                                           W - 40,
-                                           40);
+
+        CGFloat titleY = CGRectGetMaxY(self.emptyImage.frame) + AS(2);
+        self.emptyTitle.frame = CGRectMake(AS(20),
+                                           titleY,
+                                           W - AS(40),
+                                           AS(40));
     }
 
     UIEdgeInsets insets = self.cv.contentInset;
-    insets.top = 20.0;
+    insets.top = AS(20.0);
     insets.bottom = safeBottom + extraBottom;
     self.cv.contentInset = insets;
     self.cv.scrollIndicatorInsets = insets;

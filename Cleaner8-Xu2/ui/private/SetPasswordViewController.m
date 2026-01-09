@@ -6,6 +6,17 @@
 #import "Common.h"
 #import "UIViewController+ASRootNav.h"
 
+#pragma mark - Adapt Helpers
+
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
 @interface SetPasswordViewController () <UITextFieldDelegate>
 @property (nonatomic, strong) ASCustomNavBar *nav;
 @property (nonatomic, strong) UILabel *titleLabel;
@@ -52,17 +63,19 @@
     self.nav.showRightButton = NO;
     [self.view addSubview:self.nav];
 
+    // 原来 88，这里做缩放。注意：如果你的 ASCustomNavBar 内部已考虑 safeTop，
+    // 这里保持你原样的“总高”，只是缩放即可。
     [NSLayoutConstraint activateConstraints:@[
         [self.nav.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.nav.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.nav.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.nav.heightAnchor constraintEqualToConstant:88],
+        [self.nav.heightAnchor constraintEqualToConstant:AS(88)],
     ]];
 
     self.titleLabel = [UILabel new];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.textColor = UIColor.blackColor;
-    self.titleLabel.font = [UIFont systemFontOfSize:28 weight:UIFontWeightSemibold];
+    self.titleLabel.font = ASFontS(28, UIFontWeightSemibold);
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.view addSubview:self.titleLabel];
 
@@ -70,8 +83,8 @@
     self.errorLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.errorLabel.textAlignment = NSTextAlignmentCenter;
     self.errorLabel.numberOfLines = 0;
-    self.errorLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
-    self.errorLabel.textColor = [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:1.0]; // system red-ish
+    self.errorLabel.font = ASFontS(14, UIFontWeightRegular);
+    self.errorLabel.textColor = [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:1.0];
     self.errorLabel.text = @"";
     self.errorLabel.hidden = YES;
     [self.view addSubview:self.errorLabel];
@@ -93,19 +106,21 @@
     row.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:row];
 
-    CGFloat boxSize = 80.0, gap = 10.0;
+    CGFloat boxSize = AS(80.0);
+    CGFloat gap = AS(10.0);
+
     UIView *prev = nil;
-    for (int i=0;i<4;i++) {
+    for (int i = 0; i < 4; i++) {
         UIView *b = [UIView new];
         b.translatesAutoresizingMaskIntoConstraints = NO;
         b.backgroundColor = ASColorRGBA(0xD8,0xD8,0xD8,1);
-        b.layer.cornerRadius = 16;
+        b.layer.cornerRadius = AS(16);
         b.layer.masksToBounds = YES;
 
         UILabel *star = [UILabel new];
         star.translatesAutoresizingMaskIntoConstraints = NO;
         star.textAlignment = NSTextAlignmentCenter;
-        star.font = [UIFont systemFontOfSize:36 weight:UIFontWeightSemibold];
+        star.font = ASFontS(36, UIFontWeightSemibold);
         star.textColor = UIColor.blackColor;
         star.text = @"";
         [b addSubview:star];
@@ -134,20 +149,21 @@
     [prev.trailingAnchor constraintEqualToAnchor:row.trailingAnchor].active = YES;
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.titleLabel.topAnchor constraintEqualToAnchor:self.nav.bottomAnchor constant:110],
+        // 原来 110 / 10 / 20 / 16 都缩放
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.nav.bottomAnchor constant:AS(110)],
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
 
-        [self.errorLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:10],
-        [self.errorLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.errorLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.errorLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:AS(10)],
+        [self.errorLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(20)],
+        [self.errorLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(20)],
 
-        [row.topAnchor constraintEqualToAnchor:self.errorLabel.bottomAnchor constant:16],
+        [row.topAnchor constraintEqualToAnchor:self.errorLabel.bottomAnchor constant:AS(16)],
         [row.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
 
         [self.hiddenTF.centerXAnchor constraintEqualToAnchor:row.centerXAnchor],
         [self.hiddenTF.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
-        [self.hiddenTF.widthAnchor constraintEqualToConstant:1],
-        [self.hiddenTF.heightAnchor constraintEqualToConstant:1],
+        [self.hiddenTF.widthAnchor constraintEqualToConstant:AS(1)],
+        [self.hiddenTF.heightAnchor constraintEqualToConstant:AS(1)],
     ]];
 
     self.boxes = boxes;
@@ -170,7 +186,6 @@
                                 ? NSLocalizedString(@"Confirm Password", nil)
                                 : NSLocalizedString(@"Enter Password", nil));
     } else {
-        // Verify
         self.titleLabel.text = NSLocalizedString(@"Enter Password", nil);
     }
 }
@@ -188,12 +203,10 @@
 - (void)tfChanged {
     NSString *t = self.hiddenTF.text ?: @"";
 
-    // 只要用户又开始输入，就把错误提示收起
     if (t.length > 0 && !self.errorLabel.hidden) {
         [self clearError];
     }
 
-    // 只保留数字
     NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
     t = [[t componentsSeparatedByCharactersInSet:nonDigits] componentsJoinedByString:@""];
     if (t.length > 4) t = [t substringToIndex:4];
@@ -208,7 +221,7 @@
 }
 
 - (void)renderStars {
-    for (int i=0;i<4;i++) {
+    for (int i = 0; i < 4; i++) {
         UILabel *s = self.stars[i];
         s.text = (i < self.input.length) ? @"•" : @"";
     }
@@ -216,10 +229,10 @@
 
 - (void)updateFocusBorder {
     NSInteger idx = MIN(self.input.length, 3);
-    for (int i=0;i<4;i++) {
+    for (int i = 0; i < 4; i++) {
         UIView *b = self.boxes[i];
         if (self.input.length < 4 && i == idx) {
-            b.layer.borderWidth = 2;
+            b.layer.borderWidth = AS(2);
             b.layer.borderColor = ASBlue().CGColor;
         } else {
             b.layer.borderWidth = 0;
@@ -241,8 +254,6 @@
 }
 
 - (void)handleFullCode:(NSString *)code {
-
-    // ✅ Reset flow: 原 Disable 现在用来“重置密码”
     if (self.flow == ASPasswordFlowDisable) {
         if (!self.firstCode.length) {
             [self clearError];

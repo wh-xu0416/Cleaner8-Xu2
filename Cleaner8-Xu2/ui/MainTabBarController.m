@@ -8,6 +8,18 @@
 #import "Common.h"
 #import "SwipeManager.h"
 
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 @interface MainTabBarController ()
 <
 UIGestureRecognizerDelegate
@@ -87,8 +99,8 @@ UIGestureRecognizerDelegate
     [super viewDidLayoutSubviews];
 
     CGFloat w = self.view.bounds.size.width;
-    CGFloat h = 70;
-    CGFloat side = 15;
+    CGFloat h = SW(70);
+    CGFloat side = SW(15);
     CGFloat bottom = self.view.safeAreaInsets.bottom;
 
     self.floatingTab.frame = CGRectMake(side,

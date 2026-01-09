@@ -6,7 +6,20 @@
 #import "ASArchivedFilesViewController.h"
 #import "Common.h"
 
-#pragma mark - Helpers
+#pragma mark - Adapt Helpers (402)
+
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 
 static inline BOOL SWParseYMD(NSString *ymd, NSInteger *outY, NSInteger *outM, NSInteger *outD) {
     if (outY) *outY = 0;
@@ -148,7 +161,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 @implementation SwipeThumbCell
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
-        self.contentView.layer.cornerRadius = 8;
+        self.contentView.layer.cornerRadius = SW(8);
         self.contentView.layer.masksToBounds = YES;
         self.contentView.backgroundColor = UIColor.whiteColor;
 
@@ -173,8 +186,8 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
             [_checkIcon.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
             [_checkIcon.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            [_checkIcon.widthAnchor constraintEqualToConstant:16],
-            [_checkIcon.heightAnchor constraintEqualToConstant:16],
+            [_checkIcon.widthAnchor constraintEqualToConstant:SW(16)],
+            [_checkIcon.heightAnchor constraintEqualToConstant:SW(16)],
         ]];
 
         _reqId = PHInvalidImageRequestID;
@@ -194,7 +207,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 @implementation SwipeCardView
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
-        self.layer.cornerRadius = 18;
+        self.layer.cornerRadius = SW(18);
         self.layer.masksToBounds = YES;
 
         self.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
@@ -209,7 +222,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
         _hintLabel = [[UILabel alloc] initWithFrame:CGRectZero];
         _hintLabel.textAlignment = NSTextAlignmentLeft;
-        _hintLabel.font = SWFont(34, UIFontWeightBold);
+        _hintLabel.font = SWFontS(34, UIFontWeightBold);
         _hintLabel.textColor = UIColor.blackColor;
         _hintLabel.alpha = 0;
         [self addSubview:_hintLabel];
@@ -220,14 +233,14 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 - (void)layoutSubviews {
     [super layoutSubviews];
     _imageView.frame = self.bounds;
-    _hintLabel.frame = CGRectMake(16, 16, self.bounds.size.width - 32, 40);
+    _hintLabel.frame = CGRectMake(SW(16), SW(16), self.bounds.size.width - SW(32), SW(40));
 }
 @end
 
 #pragma mark - SwipeAlbumViewController
 
 @interface SwipeAlbumViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate>
-@property (nonatomic, assign) BOOL sw_hasOperated; // 本页是否做过“任何操作”
+@property (nonatomic, assign) BOOL sw_hasOperated; // 本页是否做过任何操作
 @property (nonatomic, strong) UIView *sw_exitMask;
 @property (nonatomic, strong) UIView *sw_exitPopup;
 
@@ -369,7 +382,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         [self.topGradientView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.topGradientView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.topGradientView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.topGradientView.heightAnchor constraintEqualToConstant:307],
+        [self.topGradientView.heightAnchor constraintEqualToConstant:SW(307)],
     ]];
 
     CAGradientLayer *g = [CAGradientLayer layer];
@@ -379,7 +392,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     ];
     g.startPoint = CGPointMake(0.5, 0.0);
     g.endPoint   = CGPointMake(0.5, 1.0);
-    g.frame = CGRectMake(0, 0, UIScreen.mainScreen.bounds.size.width, 307);
+    g.frame = CGRectMake(0, 0, UIScreen.mainScreen.bounds.size.width, SW(307));
     [self.topGradientView.layer insertSublayer:g atIndex:0];
 
     // ===== Title bar =====
@@ -390,10 +403,10 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [self.titleBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.titleBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.titleBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(20)],
+        [self.titleBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(20)],
         [self.titleBar.topAnchor constraintEqualToAnchor:safe.topAnchor constant:0],
-        [self.titleBar.heightAnchor constraintEqualToConstant:44],
+        [self.titleBar.heightAnchor constraintEqualToConstant:SW(44)],
     ]];
 
     self.backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -406,8 +419,8 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     [NSLayoutConstraint activateConstraints:@[
         [self.backBtn.leadingAnchor constraintEqualToAnchor:self.titleBar.leadingAnchor],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:self.titleBar.centerYAnchor],
-        [self.backBtn.widthAnchor constraintEqualToConstant:32],
-        [self.backBtn.heightAnchor constraintEqualToConstant:32],
+        [self.backBtn.widthAnchor constraintEqualToConstant:SW(32)],
+        [self.backBtn.heightAnchor constraintEqualToConstant:SW(32)],
     ]];
 
     self.progressRight = [UIView new];
@@ -417,7 +430,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     [NSLayoutConstraint activateConstraints:@[
         [self.progressRight.trailingAnchor constraintEqualToAnchor:self.titleBar.trailingAnchor],
         [self.progressRight.centerYAnchor constraintEqualToAnchor:self.titleBar.centerYAnchor],
-        [self.progressRight.heightAnchor constraintEqualToConstant:32],
+        [self.progressRight.heightAnchor constraintEqualToConstant:SW(32)],
     ]];
 
     self.hotIcon = [UIImageView new];
@@ -429,17 +442,18 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.percentLabel = [UILabel new];
     self.percentLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.percentLabel.textColor = UIColor.blackColor;
-    self.percentLabel.font = SWFont(20, UIFontWeightSemibold);
+    self.percentLabel.font = SWFontS(20, UIFontWeightSemibold);
     self.percentLabel.text = @"0%";
     [self.progressRight addSubview:self.percentLabel];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.hotIcon.leadingAnchor constraintEqualToAnchor:self.progressRight.leadingAnchor],
         [self.hotIcon.centerYAnchor constraintEqualToAnchor:self.progressRight.centerYAnchor],
-        [self.hotIcon.widthAnchor constraintEqualToConstant:32],
-        [self.hotIcon.heightAnchor constraintEqualToConstant:32],
+   
+        [self.hotIcon.widthAnchor constraintEqualToConstant:SW(32)],
+        [self.hotIcon.heightAnchor constraintEqualToConstant:SW(32)],
 
-        [self.percentLabel.leadingAnchor constraintEqualToAnchor:self.hotIcon.trailingAnchor constant:5],
+        [self.percentLabel.leadingAnchor constraintEqualToAnchor:self.hotIcon.trailingAnchor constant:SW(5)],
         [self.percentLabel.trailingAnchor constraintEqualToAnchor:self.progressRight.trailingAnchor],
         [self.percentLabel.centerYAnchor constraintEqualToAnchor:self.progressRight.centerYAnchor],
     ]];
@@ -452,8 +466,8 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     [self.titleBar addSubview:self.titleLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.titleLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.backBtn.trailingAnchor constant:12],
-        [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.progressRight.leadingAnchor constant:-12],
+        [self.titleLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.backBtn.trailingAnchor constant:SW(12)],
+        [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.progressRight.leadingAnchor constant:-SW(12)],
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.titleBar.centerXAnchor],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.titleBar.centerYAnchor],
     ]];
@@ -465,10 +479,10 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     [self.view addSubview:self.filesLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.filesLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.filesLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.filesLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(20)],
+        [self.filesLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(20)],
         [self.filesLabel.topAnchor constraintEqualToAnchor:self.titleBar.bottomAnchor constant:0],
-        [self.filesLabel.heightAnchor constraintGreaterThanOrEqualToConstant:18],
+        [self.filesLabel.heightAnchor constraintGreaterThanOrEqualToConstant:SW(18)],
     ]];
 
     self.cardArea = [UIView new];
@@ -477,10 +491,10 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     [self.view addSubview:self.cardArea];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.cardArea.topAnchor constraintEqualToAnchor:self.filesLabel.bottomAnchor constant:5],
         [self.cardArea.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.cardArea.widthAnchor constraintEqualToConstant:330],
-        [self.cardArea.heightAnchor constraintEqualToConstant:543],
+        [self.cardArea.topAnchor constraintEqualToAnchor:self.filesLabel.bottomAnchor constant:SW(5)],
+        [self.cardArea.widthAnchor constraintEqualToConstant:SW(330)],
+        [self.cardArea.heightAnchor constraintEqualToConstant:SW(543)],
     ]];
 
     self.cardsHost = [UIView new];
@@ -498,7 +512,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.archiveBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.archiveBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.archiveBtn.backgroundColor = SWHexRGBA(0x024DFFFF);
-    self.archiveBtn.layer.cornerRadius = 24;
+    self.archiveBtn.layer.cornerRadius = SW(24);
     self.archiveBtn.titleLabel.font = SWFont(20, UIFontWeightRegular);
     [self.archiveBtn setTitle:NSLocalizedString(@"Archive", nil) forState:UIControlStateNormal];
     [self.archiveBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
@@ -508,25 +522,25 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.keepBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.keepBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.keepBtn.backgroundColor = SWHexRGBA(0x028BFFFF);
-    self.keepBtn.layer.cornerRadius = 24;
-    self.keepBtn.titleLabel.font = SWFont(20, UIFontWeightRegular);
+    self.keepBtn.layer.cornerRadius = SW(24);
+    self.keepBtn.titleLabel.font = SWFontS(20, UIFontWeightRegular);
     [self.keepBtn setTitle:NSLocalizedString(@"Keep", nil) forState:UIControlStateNormal];
     [self.keepBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.keepBtn addTarget:self action:@selector(onKeepBtn) forControlEvents:UIControlEventTouchUpInside];
     [self.cardArea addSubview:self.keepBtn];
 
-    NSLayoutConstraint *centerY = [self.archiveBtn.centerYAnchor constraintEqualToAnchor:self.cardArea.topAnchor constant:529];
+    NSLayoutConstraint *centerY = [self.archiveBtn.centerYAnchor constraintEqualToAnchor:self.cardArea.topAnchor constant:SW(529)];
     centerY.priority = UILayoutPriorityRequired;
 
     [NSLayoutConstraint activateConstraints:@[
         [self.archiveBtn.leadingAnchor constraintEqualToAnchor:self.cardArea.leadingAnchor],
-        [self.archiveBtn.widthAnchor constraintEqualToConstant:150],
-        [self.archiveBtn.heightAnchor constraintEqualToConstant:48],
+        [self.archiveBtn.widthAnchor constraintEqualToConstant:SW(150)],
+        [self.archiveBtn.heightAnchor constraintEqualToConstant:SW(48)],
         centerY,
 
         [self.keepBtn.trailingAnchor constraintEqualToAnchor:self.cardArea.trailingAnchor],
-        [self.keepBtn.widthAnchor constraintEqualToConstant:150],
-        [self.keepBtn.heightAnchor constraintEqualToConstant:48],
+        [self.keepBtn.widthAnchor constraintEqualToConstant:SW(150)],
+        [self.keepBtn.heightAnchor constraintEqualToConstant:SW(48)],
         [self.keepBtn.centerYAnchor constraintEqualToAnchor:self.archiveBtn.centerYAnchor],
     ]];
 
@@ -534,20 +548,20 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.bottomBar = [UIView new];
     self.bottomBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.bottomBar.backgroundColor = UIColor.whiteColor;
-    self.bottomBar.layer.cornerRadius = 16;
+    self.bottomBar.layer.cornerRadius = SW(16);
     self.bottomBar.layer.masksToBounds = YES;
     if (@available(iOS 11.0, *)) {
         self.bottomBar.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     }
     [self.view addSubview:self.bottomBar];
 
-    self.bottomBarHeightC = [self.bottomBar.heightAnchor constraintEqualToConstant:140];
+    self.bottomBarHeightC = [self.bottomBar.heightAnchor constraintEqualToConstant:SW(140)];
     self.bottomBarHeightC.priority = UILayoutPriorityRequired;
 
     [NSLayoutConstraint activateConstraints:@[
         [self.bottomBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.bottomBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.bottomBar.topAnchor constraintEqualToAnchor:self.cardArea.bottomAnchor constant:26],
+        [self.bottomBar.topAnchor constraintEqualToAnchor:self.cardArea.bottomAnchor constant:SW(26)],
         [self.bottomBar.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor], // extend under home indicator
         self.bottomBarHeightC,
     ]];
@@ -565,22 +579,22 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     [self.bottomBar addSubview:self.sortIconBtn];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.undoIconBtn.leadingAnchor constraintEqualToAnchor:self.bottomBar.leadingAnchor constant:20],
-        [self.undoIconBtn.topAnchor constraintEqualToAnchor:self.bottomBar.topAnchor constant:12],
-        [self.undoIconBtn.widthAnchor constraintEqualToConstant:24],
-        [self.undoIconBtn.heightAnchor constraintEqualToConstant:24],
+        [self.undoIconBtn.leadingAnchor constraintEqualToAnchor:self.bottomBar.leadingAnchor constant:SW(20)],
+        [self.undoIconBtn.topAnchor constraintEqualToAnchor:self.bottomBar.topAnchor constant:SW(12)],
+        [self.undoIconBtn.widthAnchor constraintEqualToConstant:SW(24)],
+        [self.undoIconBtn.heightAnchor constraintEqualToConstant:SW(24)],
 
-        [self.sortIconBtn.trailingAnchor constraintEqualToAnchor:self.bottomBar.trailingAnchor constant:-20],
-        [self.sortIconBtn.topAnchor constraintEqualToAnchor:self.bottomBar.topAnchor constant:12],
-        [self.sortIconBtn.widthAnchor constraintEqualToConstant:24],
-        [self.sortIconBtn.heightAnchor constraintEqualToConstant:24],
+        [self.sortIconBtn.trailingAnchor constraintEqualToAnchor:self.bottomBar.trailingAnchor constant:-SW(20)],
+        [self.sortIconBtn.topAnchor constraintEqualToAnchor:self.bottomBar.topAnchor constant:SW(12)],
+        [self.sortIconBtn.widthAnchor constraintEqualToConstant:SW(24)],
+        [self.sortIconBtn.heightAnchor constraintEqualToConstant:SW(24)],
     ]];
 
     UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
     layout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-    layout.minimumLineSpacing = 5;
-    layout.itemSize = CGSizeMake(60, 60);
-    layout.sectionInset = UIEdgeInsetsMake(0, 20, 0, 20);
+    layout.minimumLineSpacing = SW(5);
+    layout.itemSize = CGSizeMake(SW(60), SW(60));
+    layout.sectionInset = UIEdgeInsetsMake(0, SW(20), 0, SW(20));
 
     self.thumbs = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
     self.thumbs.translatesAutoresizingMaskIntoConstraints = NO;
@@ -594,23 +608,23 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     [NSLayoutConstraint activateConstraints:@[
         [self.thumbs.leadingAnchor constraintEqualToAnchor:self.bottomBar.leadingAnchor],
         [self.thumbs.trailingAnchor constraintEqualToAnchor:self.bottomBar.trailingAnchor],
-        [self.thumbs.topAnchor constraintEqualToAnchor:self.undoIconBtn.bottomAnchor constant:12],
-        [self.thumbs.heightAnchor constraintEqualToConstant:60],
+        [self.thumbs.topAnchor constraintEqualToAnchor:self.undoIconBtn.bottomAnchor constant:SW(12)],
+        [self.thumbs.heightAnchor constraintEqualToConstant:SW(60)],
     ]];
 
     // ===== Done Card (hidden by default) =====
     self.doneCard = [UIView new];
     self.doneCard.translatesAutoresizingMaskIntoConstraints = NO;
     self.doneCard.backgroundColor = UIColor.whiteColor;
-    self.doneCard.layer.cornerRadius = 20;
+    self.doneCard.layer.cornerRadius = SW(20);
     self.doneCard.hidden = YES;
     [self.cardArea addSubview:self.doneCard];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.doneCard.centerXAnchor constraintEqualToAnchor:self.cardArea.centerXAnchor],
-        [self.doneCard.centerYAnchor constraintEqualToAnchor:self.cardArea.centerYAnchor constant:-10],
-        [self.doneCard.widthAnchor constraintEqualToConstant:330],
-        [self.doneCard.heightAnchor constraintEqualToConstant:465],
+        [self.doneCard.centerYAnchor constraintEqualToAnchor:self.cardArea.centerYAnchor constant:-SW(10)],
+        [self.doneCard.widthAnchor constraintEqualToConstant:SW(330)],
+        [self.doneCard.heightAnchor constraintEqualToConstant:SW(465)],
     ]];
 
     self.doneIcon = [UIImageView new];
@@ -622,15 +636,15 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.doneTitleLabel = [UILabel new];
     self.doneTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.doneTitleLabel.textColor = UIColor.blackColor;
-    self.doneTitleLabel.font = SWFont(20, UIFontWeightSemibold);
+    self.doneTitleLabel.font = SWFontS(20, UIFontWeightSemibold);
     self.doneTitleLabel.textAlignment = NSTextAlignmentCenter;
     self.doneTitleLabel.text = NSLocalizedString(@"Organized 100%", nil);
     [self.doneCard addSubview:self.doneTitleLabel];
 
     self.doneTable = [UIView new];
     self.doneTable.translatesAutoresizingMaskIntoConstraints = NO;
-    self.doneTable.layer.cornerRadius = 16;
-    self.doneTable.layer.borderWidth = 2;
+    self.doneTable.layer.cornerRadius = SW(16);
+    self.doneTable.layer.borderWidth = SW(2);
     self.doneTable.layer.borderColor = SWHexRGBA(0x024DFFFF).CGColor;
     self.doneTable.backgroundColor = UIColor.clearColor;
     [self.doneCard addSubview:self.doneTable];
@@ -644,7 +658,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.doneArchiveTitle.translatesAutoresizingMaskIntoConstraints = NO;
     self.doneArchiveTitle.text = NSLocalizedString(@"Archive", nil);
     self.doneArchiveTitle.textColor = UIColor.blackColor;
-    self.doneArchiveTitle.font = SWFont(17, UIFontWeightRegular);
+    self.doneArchiveTitle.font = SWFontS(17, UIFontWeightRegular);
     self.doneArchiveTitle.textAlignment = NSTextAlignmentCenter;
     [self.doneTable addSubview:self.doneArchiveTitle];
 
@@ -652,7 +666,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.doneArchiveValue.translatesAutoresizingMaskIntoConstraints = NO;
     self.doneArchiveValue.text = @"0";
     self.doneArchiveValue.textColor = UIColor.blackColor;
-    self.doneArchiveValue.font = SWFont(40, UIFontWeightSemibold);
+    self.doneArchiveValue.font = SWFontS(40, UIFontWeightSemibold);
     self.doneArchiveValue.textAlignment = NSTextAlignmentCenter;
     [self.doneTable addSubview:self.doneArchiveValue];
 
@@ -660,7 +674,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.doneKeepTitle.translatesAutoresizingMaskIntoConstraints = NO;
     self.doneKeepTitle.text = NSLocalizedString(@"Keep", nil);
     self.doneKeepTitle.textColor = UIColor.blackColor;
-    self.doneKeepTitle.font = SWFont(17, UIFontWeightRegular);
+    self.doneKeepTitle.font = SWFontS(17, UIFontWeightRegular);
     self.doneKeepTitle.textAlignment = NSTextAlignmentCenter;
     [self.doneTable addSubview:self.doneKeepTitle];
 
@@ -668,15 +682,15 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.doneKeepValue.translatesAutoresizingMaskIntoConstraints = NO;
     self.doneKeepValue.text = @"0";
     self.doneKeepValue.textColor = UIColor.blackColor;
-    self.doneKeepValue.font = SWFont(40, UIFontWeightSemibold);
+    self.doneKeepValue.font = SWFontS(40, UIFontWeightSemibold);
     self.doneKeepValue.textAlignment = NSTextAlignmentCenter;
     [self.doneTable addSubview:self.doneKeepValue];
 
     self.nextAlbumBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.nextAlbumBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.nextAlbumBtn.backgroundColor = SWHexRGBA(0x024DFFFF);
-    self.nextAlbumBtn.layer.cornerRadius = 25;
-    self.nextAlbumBtn.titleLabel.font = SWFont(17, UIFontWeightRegular);
+    self.nextAlbumBtn.layer.cornerRadius = SW(25);
+    self.nextAlbumBtn.titleLabel.font = SWFontS(17, UIFontWeightRegular);
     [self.nextAlbumBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.nextAlbumBtn addTarget:self action:@selector(onNextAlbum) forControlEvents:UIControlEventTouchUpInside];
     [self.doneCard addSubview:self.nextAlbumBtn];
@@ -684,52 +698,52 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.viewArchivedBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.viewArchivedBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.viewArchivedBtn.backgroundColor = SWHexRGBA(0xF6F6F6FF);
-    self.viewArchivedBtn.layer.cornerRadius = 25;
-    self.viewArchivedBtn.titleLabel.font = SWFont(17, UIFontWeightMedium);
+    self.viewArchivedBtn.layer.cornerRadius = SW(25);
+    self.viewArchivedBtn.titleLabel.font = SWFontS(17, UIFontWeightMedium);
     [self.viewArchivedBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     [self.viewArchivedBtn addTarget:self action:@selector(onViewArchived) forControlEvents:UIControlEventTouchUpInside];
     [self.doneCard addSubview:self.viewArchivedBtn];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.doneIcon.topAnchor constraintEqualToAnchor:self.doneCard.topAnchor constant:30],
+        [self.doneIcon.topAnchor constraintEqualToAnchor:self.doneCard.topAnchor constant:SW(30)],
         [self.doneIcon.centerXAnchor constraintEqualToAnchor:self.doneCard.centerXAnchor],
-        [self.doneIcon.widthAnchor constraintEqualToConstant:80],
-        [self.doneIcon.heightAnchor constraintEqualToConstant:80],
+        [self.doneIcon.widthAnchor constraintEqualToConstant:SW(80)],
+        [self.doneIcon.heightAnchor constraintEqualToConstant:SW(80)],
 
-        [self.doneTitleLabel.topAnchor constraintEqualToAnchor:self.doneIcon.bottomAnchor constant:20],
-        [self.doneTitleLabel.leadingAnchor constraintEqualToAnchor:self.doneCard.leadingAnchor constant:25],
-        [self.doneTitleLabel.trailingAnchor constraintEqualToAnchor:self.doneCard.trailingAnchor constant:-25],
+        [self.doneTitleLabel.topAnchor constraintEqualToAnchor:self.doneIcon.bottomAnchor constant:SW(20)],
+        [self.doneTitleLabel.leadingAnchor constraintEqualToAnchor:self.doneCard.leadingAnchor constant:SW(25)],
+        [self.doneTitleLabel.trailingAnchor constraintEqualToAnchor:self.doneCard.trailingAnchor constant:-SW(25)],
 
-        [self.doneTable.topAnchor constraintEqualToAnchor:self.doneTitleLabel.bottomAnchor constant:30],
+        [self.doneTable.topAnchor constraintEqualToAnchor:self.doneTitleLabel.bottomAnchor constant:SW(30)],
         [self.doneTable.centerXAnchor constraintEqualToAnchor:self.doneCard.centerXAnchor],
-        [self.doneTable.widthAnchor constraintEqualToConstant:280],
-        [self.doneTable.heightAnchor constraintEqualToConstant:100],
+        [self.doneTable.widthAnchor constraintEqualToConstant:SW(280)],
+        [self.doneTable.heightAnchor constraintEqualToConstant:SW(100)],
 
         [divider.centerXAnchor constraintEqualToAnchor:self.doneTable.centerXAnchor],
-        [divider.topAnchor constraintEqualToAnchor:self.doneTable.topAnchor constant:12],
-        [divider.bottomAnchor constraintEqualToAnchor:self.doneTable.bottomAnchor constant:-12],
-        [divider.widthAnchor constraintEqualToConstant:1],
+        [divider.topAnchor constraintEqualToAnchor:self.doneTable.topAnchor constant:SW(12)],
+        [divider.bottomAnchor constraintEqualToAnchor:self.doneTable.bottomAnchor constant:-SW(12)],
+        [divider.widthAnchor constraintEqualToConstant:SW(1)],
 
-        [self.doneArchiveTitle.centerXAnchor constraintEqualToAnchor:self.doneTable.leadingAnchor constant:70],
-        [self.doneArchiveTitle.topAnchor constraintEqualToAnchor:self.doneTable.topAnchor constant:14],
+        [self.doneArchiveTitle.centerXAnchor constraintEqualToAnchor:self.doneTable.leadingAnchor constant:SW(70)],
+        [self.doneArchiveTitle.topAnchor constraintEqualToAnchor:self.doneTable.topAnchor constant:SW(14)],
         [self.doneArchiveValue.centerXAnchor constraintEqualToAnchor:self.doneArchiveTitle.centerXAnchor],
-        [self.doneArchiveValue.topAnchor constraintEqualToAnchor:self.doneArchiveTitle.bottomAnchor constant:6],
+        [self.doneArchiveValue.topAnchor constraintEqualToAnchor:self.doneArchiveTitle.bottomAnchor constant:SW(6)],
 
         // Right column
-        [self.doneKeepTitle.centerXAnchor constraintEqualToAnchor:self.doneTable.trailingAnchor constant:-70],
-        [self.doneKeepTitle.topAnchor constraintEqualToAnchor:self.doneTable.topAnchor constant:14],
+        [self.doneKeepTitle.centerXAnchor constraintEqualToAnchor:self.doneTable.trailingAnchor constant:-SW(70)],
+        [self.doneKeepTitle.topAnchor constraintEqualToAnchor:self.doneTable.topAnchor constant:SW(14)],
         [self.doneKeepValue.centerXAnchor constraintEqualToAnchor:self.doneKeepTitle.centerXAnchor],
-        [self.doneKeepValue.topAnchor constraintEqualToAnchor:self.doneKeepTitle.bottomAnchor constant:6],
+        [self.doneKeepValue.topAnchor constraintEqualToAnchor:self.doneKeepTitle.bottomAnchor constant:SW(6)],
 
-        [self.nextAlbumBtn.topAnchor constraintEqualToAnchor:self.doneTable.bottomAnchor constant:30],
-        [self.nextAlbumBtn.leadingAnchor constraintEqualToAnchor:self.doneCard.leadingAnchor constant:25],
-        [self.nextAlbumBtn.trailingAnchor constraintEqualToAnchor:self.doneCard.trailingAnchor constant:-25],
-        [self.nextAlbumBtn.heightAnchor constraintEqualToConstant:52],
+        [self.nextAlbumBtn.topAnchor constraintEqualToAnchor:self.doneTable.bottomAnchor constant:SW(30)],
+        [self.nextAlbumBtn.leadingAnchor constraintEqualToAnchor:self.doneCard.leadingAnchor constant:SW(25)],
+        [self.nextAlbumBtn.trailingAnchor constraintEqualToAnchor:self.doneCard.trailingAnchor constant:-SW(25)],
+        [self.nextAlbumBtn.heightAnchor constraintEqualToConstant:SW(52)],
 
-        [self.viewArchivedBtn.topAnchor constraintEqualToAnchor:self.nextAlbumBtn.bottomAnchor constant:15],
-        [self.viewArchivedBtn.leadingAnchor constraintEqualToAnchor:self.doneCard.leadingAnchor constant:25],
-        [self.viewArchivedBtn.trailingAnchor constraintEqualToAnchor:self.doneCard.trailingAnchor constant:-25],
-        [self.viewArchivedBtn.heightAnchor constraintEqualToConstant:52],
+        [self.viewArchivedBtn.topAnchor constraintEqualToAnchor:self.nextAlbumBtn.bottomAnchor constant:SW(15)],
+        [self.viewArchivedBtn.leadingAnchor constraintEqualToAnchor:self.doneCard.leadingAnchor constant:SW(25)],
+        [self.viewArchivedBtn.trailingAnchor constraintEqualToAnchor:self.doneCard.trailingAnchor constant:-SW(25)],
+        [self.viewArchivedBtn.heightAnchor constraintEqualToConstant:SW(52)],
     ]];
 }
 
@@ -746,7 +760,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     // bottom bar height includes safeBottom
     if (@available(iOS 11.0, *)) {
         CGFloat safeBottom = self.view.safeAreaInsets.bottom;
-        self.bottomBarHeightC.constant = 120 + safeBottom;
+        self.bottomBarHeightC.constant = SW(120) + safeBottom;
     }
 }
 
@@ -909,11 +923,11 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
     NSDictionary *kFiles = @{
         NSForegroundColorAttributeName: UIColor.blackColor,
-        NSFontAttributeName: SWFont(15, UIFontWeightRegular)
+        NSFontAttributeName: SWFontS(15, UIFontWeightRegular)
     };
     NSDictionary *kNum = @{
         NSForegroundColorAttributeName: UIColor.blackColor,
-        NSFontAttributeName: SWFont(15, UIFontWeightMedium)
+        NSFontAttributeName: SWFontS(15, UIFontWeightMedium)
     };
 
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:NSLocalizedString(@"Files: ", nil) attributes:kFiles]];
@@ -923,12 +937,12 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
     NSDictionary *kFree = @{
         NSForegroundColorAttributeName: UIColor.blackColor,
-        NSFontAttributeName: SWFont(15, UIFontWeightRegular)
+        NSFontAttributeName: SWFontS(15, UIFontWeightRegular)
     };
 
     NSDictionary *kBytes = @{
         NSForegroundColorAttributeName: done ? SWHexRGBA(0x024DFFFF) : SWHexRGBA(0x024DFFFF),
-        NSFontAttributeName: SWFont(15, UIFontWeightMedium)
+        NSFontAttributeName: SWFontS(15, UIFontWeightMedium)
     };
 
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:NSLocalizedString(@" Can free up ", nil) attributes:kFree]];
@@ -947,39 +961,32 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
     NSMutableAttributedString *att = [NSMutableAttributedString new];
 
     NSDictionary *attrs = @{
-        NSFontAttributeName: font ?: [UIFont systemFontOfSize:17 weight:UIFontWeightRegular],
+        NSFontAttributeName: font ?: SWFontS(17, UIFontWeightRegular),
         NSForegroundColorAttributeName: textColor ?: UIColor.whiteColor
     };
 
-    // 左侧文字
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:leftText attributes:attrs]];
 
-    // 左边距 5pt
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:@" " attributes:attrs]];
     [att addAttribute:NSKernAttributeName value:@(5.0) range:NSMakeRange(att.length-1, 1)];
 
-    // 图片 attachment (16x16)
     UIImage *img = [UIImage imageNamed:@"ic_more"];
     if (img) {
         NSTextAttachment *ta = [NSTextAttachment new];
         ta.image = img;
 
-        // 16x16，并尽量在基线上居中
-        CGFloat imgW = 16, imgH = 16;
+        CGFloat imgW = SW(16), imgH = SW(16);
         ta.bounds = CGRectMake(0, (font.capHeight - imgH) * 0.5, imgW, imgH);
 
         NSAttributedString *imgStr = [NSAttributedString attributedStringWithAttachment:ta];
         [att appendAttributedString:imgStr];
     } else {
-        // 找不到图时兜底：用 ">"（避免空白）
         [att appendAttributedString:[[NSAttributedString alloc] initWithString:@">" attributes:attrs]];
     }
 
-    // 右边距 5pt
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:@" " attributes:attrs]];
     [att addAttribute:NSKernAttributeName value:@(5.0) range:NSMakeRange(att.length-1, 1)];
 
-    // 右侧文字
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:rightText attributes:attrs]];
 
     return att;
@@ -999,7 +1006,6 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
 
     NSUInteger archived = [mgr archivedCountInModule:self.module];
     NSUInteger kept = 0;
-    // 如果 manager 有 keptCountInModule: 用它，否则用 processed-archived 兜底
     SEL sel = NSSelectorFromString(@"keptCountInModule:");
     if ([mgr respondsToSelector:sel]) {
         NSUInteger (*func)(id, SEL, id) = (void *)[mgr methodForSelector:sel];
@@ -1014,7 +1020,6 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
     self.doneArchiveValue.text = [NSString stringWithFormat:@"%lu", (unsigned long)archived];
     self.doneKeepValue.text    = [NSString stringWithFormat:@"%lu", (unsigned long)kept];
 
-    // Next album text
     SwipeModule *next = nil;
 
     if (self.module.type == SwipeModuleTypeMonth) {
@@ -1047,7 +1052,7 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
         NSAttributedString *attTitle =
             SWNextAlbumAttributedTitle(left,
                                       right,
-                                      SWFont(17, UIFontWeightRegular),
+                                      SWFontS(17, UIFontWeightRegular),
                                       UIColor.whiteColor);
 
         [self.nextAlbumBtn setAttributedTitle:attTitle forState:UIControlStateNormal];
@@ -1230,11 +1235,11 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
 
 static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     if (idx == 0) { // top
-        return CGRectMake(0, 23, 330, 520);
+        return CGRectMake(0, SW(23), SW(330), SW(520));
     } else if (idx == 1) { // middle
-        return CGRectMake((330 - 320)/2.0, 12, 320, 520);
+        return CGRectMake((SW(330) - SW(320))/2.0, SW(12), SW(320), SW(520));
     } else { // bottom
-        return CGRectMake((330 - 256)/2.0, 0, 256, 416);
+        return CGRectMake((SW(330) - SW(256))/2.0, 0, SW(256), SW(416));
     }
 }
 
@@ -1350,11 +1355,11 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     if (x > 25) {
         card.hintLabel.text = @"Keep";
         card.hintLabel.textAlignment = NSTextAlignmentLeft;
-        card.hintLabel.alpha = MIN(1.0, x / 120.0);
+        card.hintLabel.alpha = MIN(1.0, x / SW(120.0));
     } else if (x < -25) {
         card.hintLabel.text = @"Archive";
         card.hintLabel.textAlignment = NSTextAlignmentLeft;
-        card.hintLabel.alpha = MIN(1.0, -x / 120.0);
+        card.hintLabel.alpha = MIN(1.0, -x / SW(120.0));
     } else {
         card.hintLabel.alpha = 0;
     }
@@ -1364,8 +1369,8 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         // 先判断“快速甩动”，快速滑动也要适配
         CGFloat vx = v.x;
 
-        BOOL flingRight = (vx > 900);
-        BOOL flingLeft  = (vx < -900);
+        BOOL flingRight = (vx > SW(900));
+        BOOL flingLeft  = (vx < -SW(900));
 
         // 再判断“位移阈值”，灵敏度稍微高一点
         CGFloat threshold = w * 0.35;
@@ -1554,7 +1559,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     UIView *popup = [UIView new];
     popup.translatesAutoresizingMaskIntoConstraints = NO;
     popup.backgroundColor = UIColor.whiteColor;
-    popup.layer.cornerRadius = 20;
+    popup.layer.cornerRadius = SW(20);
     popup.layer.masksToBounds = YES;
     popup.alpha = 0.0;
     popup.transform = CGAffineTransformMakeScale(0.98, 0.98);
@@ -1563,12 +1568,12 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [popup.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:36],
-        [popup.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-36],
+        [popup.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(36)],
+        [popup.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(36)],
         [popup.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
 
-        [popup.topAnchor constraintGreaterThanOrEqualToAnchor:safe.topAnchor constant:20],
-        [popup.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:-20],
+        [popup.topAnchor constraintGreaterThanOrEqualToAnchor:safe.topAnchor constant:SW(20)],
+        [popup.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:-SW(20)],
     ]];
 
     UILabel *title = [UILabel new];
@@ -1576,7 +1581,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     title.text = NSLocalizedString(@"View Archived Files", nil);
     title.textAlignment = NSTextAlignmentCenter;
     title.textColor = UIColor.blackColor;
-    title.font = SWFont(20, UIFontWeightSemibold);
+    title.font = SWFontS(20, UIFontWeightSemibold);
     [popup addSubview:title];
 
     UILabel *msg = [UILabel new];
@@ -1584,14 +1589,14 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     msg.textAlignment = NSTextAlignmentCenter;
     msg.numberOfLines = 0;
     msg.textColor = UIColor.blackColor;
-    msg.font = SWFont(15, UIFontWeightRegular);
+    msg.font = SWFontS(15, UIFontWeightRegular);
     msg.text = NSLocalizedString(@"You can perform this action now to free up space, or do it at any convenient time", nil);
     [popup addSubview:msg];
 
     UIView *table = [UIView new];
     table.translatesAutoresizingMaskIntoConstraints = NO;
-    table.layer.cornerRadius = 16;
-    table.layer.borderWidth = 2;
+    table.layer.cornerRadius = SW(16);
+    table.layer.borderWidth = SW(2);
     table.layer.borderColor = SWHexRGBA(0x024DFFFF).CGColor;
     table.backgroundColor = UIColor.clearColor;
     [popup addSubview:table];
@@ -1613,14 +1618,14 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     aTitle.translatesAutoresizingMaskIntoConstraints = NO;
     aTitle.text = NSLocalizedString(@"Archive", nil);
     aTitle.textColor = UIColor.blackColor;
-    aTitle.font = SWFont(17, UIFontWeightRegular);
+    aTitle.font = SWFontS(17, UIFontWeightRegular);
     aTitle.textAlignment = NSTextAlignmentCenter;
     [leftCol addSubview:aTitle];
 
     UILabel *aValue = [UILabel new];
     aValue.translatesAutoresizingMaskIntoConstraints = NO;
     aValue.textColor = UIColor.blackColor;
-    aValue.font = SWFont(40, UIFontWeightSemibold);
+    aValue.font = SWFontS(40, UIFontWeightSemibold);
     aValue.textAlignment = NSTextAlignmentCenter;
     aValue.text = @"0";
     [leftCol addSubview:aValue];
@@ -1637,7 +1642,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     UILabel *kValue = [UILabel new];
     kValue.translatesAutoresizingMaskIntoConstraints = NO;
     kValue.textColor = UIColor.blackColor;
-    kValue.font = SWFont(40, UIFontWeightSemibold);
+    kValue.font = SWFontS(40, UIFontWeightSemibold);
     kValue.textAlignment = NSTextAlignmentCenter;
     kValue.text = @"0";
     [rightCol addSubview:kValue];
@@ -1646,8 +1651,8 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     UIButton *viewBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     viewBtn.translatesAutoresizingMaskIntoConstraints = NO;
     viewBtn.backgroundColor = SWHexRGBA(0x024DFFFF);
-    viewBtn.layer.cornerRadius = 16;
-    viewBtn.titleLabel.font = SWFont(17, UIFontWeightRegular);
+    viewBtn.layer.cornerRadius = SW(16);
+    viewBtn.titleLabel.font = SWFontS(17, UIFontWeightRegular);
     [viewBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [viewBtn addTarget:self action:@selector(sw_exitViewArchivedTapped) forControlEvents:UIControlEventTouchUpInside];
     [popup addSubview:viewBtn];
@@ -1656,8 +1661,8 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     UIButton *laterBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     laterBtn.translatesAutoresizingMaskIntoConstraints = NO;
     laterBtn.backgroundColor = SWHexRGBA(0xF6F6F6FF);
-    laterBtn.layer.cornerRadius = 16;
-    laterBtn.titleLabel.font = SWFont(17, UIFontWeightMedium);
+    laterBtn.layer.cornerRadius = SW(16);
+    laterBtn.titleLabel.font = SWFontS(17, UIFontWeightMedium);
     [laterBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     [laterBtn setTitle:NSLocalizedString(@"Later", nil) forState:UIControlStateNormal];
     [laterBtn addTarget:self action:@selector(sw_exitLaterTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -1665,23 +1670,23 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     // layout
     [NSLayoutConstraint activateConstraints:@[
-        [title.topAnchor constraintEqualToAnchor:popup.topAnchor constant:40],
-        [title.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:25],
-        [title.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-25],
+        [title.topAnchor constraintEqualToAnchor:popup.topAnchor constant:SW(40)],
+        [title.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:SW(25)],
+        [title.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-SW(25)],
 
-        [msg.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:10],
-        [msg.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:25],
-        [msg.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-25],
+        [msg.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:SW(10)],
+        [msg.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:SW(25)],
+        [msg.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-SW(25)],
 
-        [table.topAnchor constraintEqualToAnchor:msg.bottomAnchor constant:30],
-        [table.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:25],
-        [table.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-25],
-        [table.heightAnchor constraintEqualToConstant:100],
+        [table.topAnchor constraintEqualToAnchor:msg.bottomAnchor constant:SW(30)],
+        [table.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:SW(25)],
+        [table.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-SW(25)],
+        [table.heightAnchor constraintEqualToConstant:SW(100)],
 
         [divider.centerXAnchor constraintEqualToAnchor:table.centerXAnchor],
-        [divider.topAnchor constraintEqualToAnchor:table.topAnchor constant:12],
-        [divider.bottomAnchor constraintEqualToAnchor:table.bottomAnchor constant:-12],
-        [divider.widthAnchor constraintEqualToConstant:1],
+        [divider.topAnchor constraintEqualToAnchor:table.topAnchor constant:SW(12)],
+        [divider.bottomAnchor constraintEqualToAnchor:table.bottomAnchor constant:-SW(12)],
+        [divider.widthAnchor constraintEqualToConstant:SW(1)],
 
         [leftCol.leadingAnchor constraintEqualToAnchor:table.leadingAnchor],
         [leftCol.trailingAnchor constraintEqualToAnchor:divider.leadingAnchor],
@@ -1693,27 +1698,27 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         [rightCol.topAnchor constraintEqualToAnchor:table.topAnchor],
         [rightCol.bottomAnchor constraintEqualToAnchor:table.bottomAnchor],
 
-        [aTitle.topAnchor constraintEqualToAnchor:leftCol.topAnchor constant:14],
+        [aTitle.topAnchor constraintEqualToAnchor:leftCol.topAnchor constant:SW(14)],
         [aTitle.centerXAnchor constraintEqualToAnchor:leftCol.centerXAnchor],
-        [aValue.topAnchor constraintEqualToAnchor:aTitle.bottomAnchor constant:6],
+        [aValue.topAnchor constraintEqualToAnchor:aTitle.bottomAnchor constant:SW(6)],
         [aValue.centerXAnchor constraintEqualToAnchor:leftCol.centerXAnchor],
 
-        [kTitle.topAnchor constraintEqualToAnchor:rightCol.topAnchor constant:14],
+        [kTitle.topAnchor constraintEqualToAnchor:rightCol.topAnchor constant:SW(14)],
         [kTitle.centerXAnchor constraintEqualToAnchor:rightCol.centerXAnchor],
-        [kValue.topAnchor constraintEqualToAnchor:kTitle.bottomAnchor constant:6],
+        [kValue.topAnchor constraintEqualToAnchor:kTitle.bottomAnchor constant:SW(6)],
         [kValue.centerXAnchor constraintEqualToAnchor:rightCol.centerXAnchor],
 
-        [viewBtn.topAnchor constraintEqualToAnchor:table.bottomAnchor constant:30],
-        [viewBtn.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:25],
-        [viewBtn.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-25],
-        [viewBtn.heightAnchor constraintEqualToConstant:52],
+        [viewBtn.topAnchor constraintEqualToAnchor:table.bottomAnchor constant:SW(30)],
+        [viewBtn.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:SW(25)],
+        [viewBtn.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-SW(25)],
+        [viewBtn.heightAnchor constraintEqualToConstant:SW(52)],
 
-        [laterBtn.topAnchor constraintEqualToAnchor:viewBtn.bottomAnchor constant:15],
-        [laterBtn.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:25],
-        [laterBtn.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-25],
-        [laterBtn.heightAnchor constraintEqualToConstant:52],
+        [laterBtn.topAnchor constraintEqualToAnchor:viewBtn.bottomAnchor constant:SW(15)],
+        [laterBtn.leadingAnchor constraintEqualToAnchor:popup.leadingAnchor constant:SW(25)],
+        [laterBtn.trailingAnchor constraintEqualToAnchor:popup.trailingAnchor constant:-SW(25)],
+        [laterBtn.heightAnchor constraintEqualToConstant:SW(52)],
 
-        [laterBtn.bottomAnchor constraintEqualToAnchor:popup.bottomAnchor constant:-30],
+        [laterBtn.bottomAnchor constraintEqualToAnchor:popup.bottomAnchor constant:-SW(30)],
     ]];
 
     // 填充数值（Archive/Keep + bytes）
@@ -1860,7 +1865,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     lab.translatesAutoresizingMaskIntoConstraints = NO;
     lab.text = title;
     lab.textColor = UIColor.whiteColor;
-    lab.font = SWFont(17, UIFontWeightSemibold);
+    lab.font = SWFontS(17, UIFontWeightSemibold);
     [row addSubview:lab];
 
     UIImageView *check = [UIImageView new];
@@ -1876,13 +1881,13 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     [row addSubview:btn];
 
     [NSLayoutConstraint activateConstraints:@[
-        [lab.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:16],
+        [lab.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:SW(16)],
         [lab.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
 
-        [check.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-14],
+        [check.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-SW(14)],
         [check.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
-        [check.widthAnchor constraintEqualToConstant:18],
-        [check.heightAnchor constraintEqualToConstant:18],
+        [check.widthAnchor constraintEqualToConstant:SW(18)],
+        [check.heightAnchor constraintEqualToConstant:SW(18)],
 
         [btn.leadingAnchor constraintEqualToAnchor:row.leadingAnchor],
         [btn.trailingAnchor constraintEqualToAnchor:row.trailingAnchor],
@@ -1934,7 +1939,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     UIView *panel = [UIView new];
     panel.translatesAutoresizingMaskIntoConstraints = YES;
     panel.backgroundColor = SWHexRGBA(0x8e8e8eFF);
-    panel.layer.cornerRadius = 12;
+    panel.layer.cornerRadius = SW(12);
     panel.layer.masksToBounds = YES;
     panel.alpha = 0.0;
     panel.transform = CGAffineTransformMakeTranslation(0, 6);
@@ -1944,7 +1949,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     UILabel *hdr = [UILabel new];
     hdr.translatesAutoresizingMaskIntoConstraints = NO;
     hdr.text = NSLocalizedString(@"Sort by", nil);
-    hdr.font = SWFont(12, UIFontWeightRegular);
+    hdr.font = SWFontS(12, UIFontWeightRegular);
     hdr.textColor = SWHexRGBA(0xEBEBF599);
     [panel addSubview:hdr];
 
@@ -1970,40 +1975,40 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     [panel addSubview:sep];
 
     CGRect anchor = [self.sortIconBtn convertRect:self.sortIconBtn.bounds toView:self.view];
-    CGFloat panelW = 220;
-    CGFloat panelH = 44 + 52 + 52;
+    CGFloat panelW = SW(220);
+    CGFloat panelH = SW(44) + SW(52) + SW(52);
 
     CGFloat x = CGRectGetMaxX(anchor) - panelW;
-    x = MIN(MAX(12, x), self.view.bounds.size.width - panelW - 12);
+    x = MIN(MAX(SW(12), x), self.view.bounds.size.width - panelW - SW(12));
 
-    CGFloat y = CGRectGetMinY(anchor) - panelH - 8;
-    y = MAX(12, y);
+    CGFloat y = CGRectGetMinY(anchor) - panelH - SW(8);
+    y = MAX(SW(12), y);
 
     panel.frame = CGRectMake(x, y, panelW, panelH);
 
     [NSLayoutConstraint activateConstraints:@[
-        [hdr.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:16],
-        [hdr.topAnchor constraintEqualToAnchor:panel.topAnchor constant:12],
+        [hdr.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:SW(16)],
+        [hdr.topAnchor constraintEqualToAnchor:panel.topAnchor constant:SW(12)],
 
         [line.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor],
         [line.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor],
-        [line.topAnchor constraintEqualToAnchor:panel.topAnchor constant:44],
-        [line.heightAnchor constraintEqualToConstant:1],
+        [line.topAnchor constraintEqualToAnchor:panel.topAnchor constant:SW(44)],
+        [line.heightAnchor constraintEqualToConstant:SW(1)],
 
         [rowLatest.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor],
         [rowLatest.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor],
-        [rowLatest.topAnchor constraintEqualToAnchor:panel.topAnchor constant:44],
-        [rowLatest.heightAnchor constraintEqualToConstant:52],
+        [rowLatest.topAnchor constraintEqualToAnchor:panel.topAnchor constant:SW(44)],
+        [rowLatest.heightAnchor constraintEqualToConstant:SW(52)],
 
         [sep.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor],
         [sep.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor],
         [sep.topAnchor constraintEqualToAnchor:rowLatest.bottomAnchor],
-        [sep.heightAnchor constraintEqualToConstant:1],
+        [sep.heightAnchor constraintEqualToConstant:SW(1)],
 
         [rowOldest.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor],
         [rowOldest.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor],
         [rowOldest.topAnchor constraintEqualToAnchor:sep.bottomAnchor],
-        [rowOldest.heightAnchor constraintEqualToConstant:52],
+        [rowOldest.heightAnchor constraintEqualToConstant:SW(52)],
     ]];
 
     [UIView animateWithDuration:0.18 animations:^{
@@ -2183,7 +2188,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     PHAsset *asset = [self assetForID:aid];
     if (!asset) return cell;
 
-    CGSize target = CGSizeMake(140, 140);
+    CGSize target = CGSizeMake(SW(140), SW(140));
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
     opt.resizeMode = PHImageRequestOptionsResizeModeFast;
@@ -2367,7 +2372,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 }
 
 - (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    return CGSizeMake(60, 60);
+    return CGSizeMake(SW(60), SW(60));
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {

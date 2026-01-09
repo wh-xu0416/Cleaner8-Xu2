@@ -7,17 +7,27 @@
 
 #pragma mark - UI Helpers
 
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
 static inline UIColor *ASACRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
 }
-static inline UIColor *ASACBlue(void) {      // #024DFFFF
+static inline UIColor *ASACBlue(void) {
     return [UIColor colorWithRed:0x02/255.0 green:0x4D/255.0 blue:0xFF/255.0 alpha:1.0];
 }
-static inline UIColor *ASACGray666(void) {   // #666666FF
+static inline UIColor *ASACGray666(void) {
     return [UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0];
 }
+
 static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
+    return ASFontS(size, weight);
 }
 
 #pragma mark - Cell
@@ -40,7 +50,7 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
     if (self = [super initWithFrame:frame]) {
 
         self.contentView.backgroundColor = UIColor.whiteColor;
-        self.contentView.layer.cornerRadius = 16;
+        self.contentView.layer.cornerRadius = AS(16);
         self.contentView.layer.masksToBounds = YES;
 
         self.dateLabel = [UILabel new];
@@ -61,25 +71,25 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
         self.selectButton.translatesAutoresizingMaskIntoConstraints = NO;
         self.selectButton.adjustsImageWhenHighlighted = NO;
         self.selectButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
-        self.selectButton.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10); // 放大点击区域，图标仍 24
+        self.selectButton.contentEdgeInsets = ASEdgeInsets(10, 10, 10, 10);
         self.selectButton.exclusiveTouch = YES;
         [self.selectButton addTarget:self action:@selector(onSelectButtonTap) forControlEvents:UIControlEventTouchUpInside];
         [self.contentView addSubview:self.selectButton];
 
         [NSLayoutConstraint activateConstraints:@[
-            [self.dateLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:20],
-            [self.dateLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectButton.leadingAnchor constant:-12],
-            [self.dateLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:18],
+            [self.dateLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:AS(20)],
+            [self.dateLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectButton.leadingAnchor constant:-AS(12)],
+            [self.dateLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:AS(18)],
 
             [self.subLabel.leadingAnchor constraintEqualToAnchor:self.dateLabel.leadingAnchor],
             [self.subLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.dateLabel.trailingAnchor],
-            [self.subLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-18],
-            [self.subLabel.topAnchor constraintGreaterThanOrEqualToAnchor:self.dateLabel.bottomAnchor constant:7],
+            [self.subLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-AS(18)],
+            [self.subLabel.topAnchor constraintGreaterThanOrEqualToAnchor:self.dateLabel.bottomAnchor constant:AS(7)],
 
-            [self.selectButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-20],
+            [self.selectButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-AS(20)],
             [self.selectButton.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            [self.selectButton.widthAnchor constraintEqualToConstant:44],
-            [self.selectButton.heightAnchor constraintEqualToConstant:44],
+            [self.selectButton.widthAnchor constraintEqualToConstant:AS(44)],
+            [self.selectButton.heightAnchor constraintEqualToConstant:AS(44)],
         ]];
     }
     return self;
@@ -189,7 +199,7 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
         [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.bgTop.heightAnchor constraintEqualToConstant:360],
+        [self.bgTop.heightAnchor constraintEqualToConstant:AS(360)],
     ]];
 }
 
@@ -260,10 +270,10 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
 
 - (void)setupCollectionView {
     UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
-    layout.minimumLineSpacing = 10;
-    layout.minimumInteritemSpacing = 10;
-    layout.sectionInset = UIEdgeInsetsMake(10, 20, 10, 20);
-
+    layout.minimumLineSpacing = AS(10);
+    layout.minimumInteritemSpacing = AS(10);
+    layout.sectionInset = ASEdgeInsets(10, 20, 10, 20);
+    
     self.cv = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
     self.cv.backgroundColor = UIColor.clearColor;
     self.cv.dataSource = self;
@@ -276,7 +286,7 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
     [self.cv registerClass:[ASBackupInfoCell class] forCellWithReuseIdentifier:@"ASBackupInfoCell"];
     [self.view addSubview:self.cv];
 
-    self.cv.contentInset = UIEdgeInsetsMake(20, 0, 0, 0);
+    self.cv.contentInset = ASEdgeInsets(20, 0, 0, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 }
 
@@ -287,7 +297,7 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
     [b setTitle:title forState:UIControlStateNormal];
     b.titleLabel.font = ASACFont(20, UIFontWeightRegular);
     b.titleLabel.textAlignment = NSTextAlignmentCenter;
-    b.contentEdgeInsets = UIEdgeInsetsMake(22, 22, 22, 22);
+    b.contentEdgeInsets = ASEdgeInsets(22, 22, 22, 22);
     return b;
 }
 
@@ -481,8 +491,8 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
                   layout:(UICollectionViewLayout *)collectionViewLayout
   sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
     (void)collectionViewLayout; (void)indexPath;
-    CGFloat w = collectionView.bounds.size.width - 40;
-    return CGSizeMake(w, 84);
+    CGFloat w = collectionView.bounds.size.width - AS(40);
+    return CGSizeMake(w, AS(84));
 }
 
 #pragma mark - Layout
@@ -495,40 +505,39 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
     CGFloat safeTop = self.view.safeAreaInsets.top;
     CGFloat safeBottom = self.view.safeAreaInsets.bottom;
 
-    CGFloat navH = 44 + safeTop;
+    CGFloat navH = AS(44) + safeTop;
     self.titleBar.frame = CGRectMake(0, 0, W, navH);
 
-    CGFloat pagePad = 20.0;
-    CGFloat btnH = 64;
+    CGFloat pagePad = AS(20.0);
+    CGFloat btnH = AS(64);
     CGFloat btnY = H - safeBottom - btnH;
-    self.addBackupsButton.frame = CGRectMake(pagePad, btnY, W - pagePad*2, btnH);
+    self.addBackupsButton.frame = CGRectMake(pagePad, btnY, W - pagePad * 2, btnH);
     self.addBackupsButton.layer.cornerRadius = btnH * 0.5;
 
     CGFloat listY = navH;
     self.cv.frame = CGRectMake(0, listY, W, H - listY);
 
     UIEdgeInsets insets = self.cv.contentInset;
-    insets.top = 20.0;
-    insets.bottom = safeBottom + btnH + 20.0;
+    insets.top = AS(20.0);
+    insets.bottom = safeBottom + btnH + AS(20.0);
     self.cv.contentInset = insets;
     self.cv.scrollIndicatorInsets = insets;
 
     self.emptyView.frame = CGRectMake(0, listY, W, H - listY - (btnH + safeBottom));
 
     if (!self.emptyView.hidden) {
-        CGSize img = CGSizeMake(182, 168);
+        CGSize img = CGSizeMake(AS(182), AS(168));
         CGFloat centerY = self.emptyView.bounds.size.height * 0.5;
 
-        CGFloat imgY = centerY - img.height * 0.5 - 18;
+        CGFloat imgY = centerY - img.height * 0.5 - AS(18);
         self.emptyImage.frame = CGRectMake((W - img.width) * 0.5,
                                            imgY,
                                            img.width,
                                            img.height);
 
-        CGFloat titleY = CGRectGetMaxY(self.emptyImage.frame) + 2;
-        self.emptyTitle.frame = CGRectMake(20, titleY, W - 40, 30);
+        CGFloat titleY = CGRectGetMaxY(self.emptyImage.frame) + AS(2);
+        self.emptyTitle.frame = CGRectMake(AS(20), titleY, W - AS(40), AS(30));
     }
-
 }
 
 @end

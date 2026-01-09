@@ -12,6 +12,18 @@
 NS_ASSUME_NONNULL_BEGIN
 
 #pragma mark - Helpers
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
 }
@@ -39,7 +51,7 @@ static inline UIColor *SWHexRGBA(uint32_t hex) {
 }
 
 static inline UIFont *SWFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
+    return SWFontS(size, weight);
 }
 
 static inline NSString *SWHumanBytes(uint64_t bytes) {
@@ -193,12 +205,12 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
         _btn = [UIButton buttonWithType:UIButtonTypeCustom];
         _btn.backgroundColor = ASBlue();
-        _btn.layer.cornerRadius = 35;
+        _btn.layer.cornerRadius = SW(35);
         _btn.clipsToBounds = YES;
         [_btn setTitle:NSLocalizedString(@"Go to Settings", nil) forState:UIControlStateNormal];
         [_btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         _btn.titleLabel.font = ASFont(20, UIFontWeightRegular);
-        _btn.contentEdgeInsets = UIEdgeInsetsMake(18, 0, 18, 0);
+        _btn.contentEdgeInsets = SWInsets(18, 0, 18, 0);
         [_btn addTarget:self action:@selector(onBtn) forControlEvents:UIControlEventTouchUpInside];
         [self.contentView addSubview:_btn];
     }
@@ -213,23 +225,23 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [super layoutSubviews];
 
     CGFloat w = self.contentView.bounds.size.width;
-    CGFloat top = 60;
+    CGFloat top = SW(60);
 
-    self.iconView.frame = CGRectMake((w - 96)/2.0, top, 96, 96);
-    self.t1.frame = CGRectMake(30, CGRectGetMaxY(self.iconView.frame) + 20, w - 60, 24);
-    CGFloat t2W = w - 90;
+    self.iconView.frame = CGRectMake((w - SW(96))/2.0, top, SW(96), SW(96));
+    self.t1.frame = CGRectMake(SW(30), CGRectGetMaxY(self.iconView.frame) + SW(20), w - SW(60), SW(24));
+    CGFloat t2W = w - SW(90);
 
     CGSize t2Size = [self.t2 sizeThatFits:CGSizeMake(t2W, CGFLOAT_MAX)];
     CGFloat lineH = self.t2.font.lineHeight;
 
     CGFloat t2H = MIN(t2Size.height, ceil(lineH * 3.0));
 
-    self.t2.frame = CGRectMake(45, CGRectGetMaxY(self.t1.frame) + 10, t2W, t2H);
-    CGFloat btnW = w - 90;
+    self.t2.frame = CGRectMake(SW(45), CGRectGetMaxY(self.t1.frame) + SW(10), t2W, t2H);
+    CGFloat btnW = w - SW(90);
     self.btn.frame = CGRectMake((w - btnW)/2.0,
-                                CGRectGetMaxY(self.t2.frame) + 50,
+                                CGRectGetMaxY(self.t2.frame) + SW(50),
                                 btnW,
-                                70);
+                                SW(70));
 }
 
 @end
@@ -242,7 +254,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
         _coverView = [UIView new];
         _coverView.translatesAutoresizingMaskIntoConstraints = NO;
-        _coverView.layer.cornerRadius = 12;
+        _coverView.layer.cornerRadius = SW(12);
         _coverView.layer.masksToBounds = YES;
         [self.contentView addSubview:_coverView];
 
@@ -272,7 +284,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         _bottomGradientView.hidden = NO;
         [_coverView addSubview:_bottomGradientView];
 
-        self.bottomGradientHeightC = [_bottomGradientView.heightAnchor constraintEqualToConstant:52];
+        self.bottomGradientHeightC = [_bottomGradientView.heightAnchor constraintEqualToConstant:SW(52)];
         self.bottomGradientHeightC.priority = UILayoutPriorityRequired;
 
         [NSLayoutConstraint activateConstraints:@[
@@ -292,8 +304,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [NSLayoutConstraint activateConstraints:@[
             [_completedIcon.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
             [_completedIcon.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            [_completedIcon.widthAnchor constraintEqualToConstant:31],
-            [_completedIcon.heightAnchor constraintEqualToConstant:31],
+            [_completedIcon.widthAnchor constraintEqualToConstant:SW(31)],
+            [_completedIcon.heightAnchor constraintEqualToConstant:SW(31)],
         ]];
 
         _reqId = PHInvalidImageRequestID;
@@ -353,8 +365,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.coverView addSubview:_tagLabel];
 
         [NSLayoutConstraint activateConstraints:@[
-            [_tagLabel.leadingAnchor constraintEqualToAnchor:self.coverView.leadingAnchor constant:10],
-            [_tagLabel.bottomAnchor constraintEqualToAnchor:self.coverView.bottomAnchor constant:-6],
+            [_tagLabel.leadingAnchor constraintEqualToAnchor:self.coverView.leadingAnchor constant:SW(10)],
+            [_tagLabel.bottomAnchor constraintEqualToAnchor:self.coverView.bottomAnchor constant:-SW(6)],
         ]];
     }
     return self;
@@ -363,7 +375,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 - (void)configTitle:(NSString *)title completed:(BOOL)completed {
     self.tagLabel.text = title ?: @"";
 
-    [self setBottomGradientVisible:YES height:52];
+    [self setBottomGradientVisible:YES height:SW(52)];
 
     [self setCompletedUI:completed];
 }
@@ -397,11 +409,11 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.coverView addSubview:_sizeLabel];
 
         [NSLayoutConstraint activateConstraints:@[
-            [_sizeLabel.leadingAnchor constraintEqualToAnchor:self.coverView.leadingAnchor constant:10],
-            [_sizeLabel.bottomAnchor constraintEqualToAnchor:self.coverView.bottomAnchor constant:-6],
+            [_sizeLabel.leadingAnchor constraintEqualToAnchor:self.coverView.leadingAnchor constant:SW(10)],
+            [_sizeLabel.bottomAnchor constraintEqualToAnchor:self.coverView.bottomAnchor constant:-SW(6)],
 
-            [_monthLabel.leadingAnchor constraintEqualToAnchor:self.coverView.leadingAnchor constant:10],
-            [_monthLabel.bottomAnchor constraintEqualToAnchor:self.sizeLabel.topAnchor constant:-2],
+            [_monthLabel.leadingAnchor constraintEqualToAnchor:self.coverView.leadingAnchor constant:SW(10)],
+            [_monthLabel.bottomAnchor constraintEqualToAnchor:self.sizeLabel.topAnchor constant:-SW(2)],
         ]];
     }
     return self;
@@ -411,7 +423,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.monthLabel.text = month ?: @"";
     self.sizeLabel.text = size ?: @"";
 
-    [self setBottomGradientVisible:YES height:58];
+    [self setBottomGradientVisible:YES height:SW(58)];
 
     [self setCompletedUI:completed];
 }
@@ -433,7 +445,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         _bottomBar = [UIView new];
         _bottomBar.translatesAutoresizingMaskIntoConstraints = NO;
         _bottomBar.backgroundColor = UIColor.whiteColor;
-        _bottomBar.layer.cornerRadius = 12;
+        _bottomBar.layer.cornerRadius = SW(11.5);
         _bottomBar.layer.masksToBounds = YES;
         if (@available(iOS 11.0, *)) {
             _bottomBar.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
@@ -447,7 +459,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         _titleLabel.textAlignment = NSTextAlignmentCenter;
         [_bottomBar addSubview:_titleLabel];
 
-        NSLayoutConstraint *barH = [_bottomBar.heightAnchor constraintGreaterThanOrEqualToConstant:40];
+        NSLayoutConstraint *barH = [_bottomBar.heightAnchor constraintGreaterThanOrEqualToConstant:SW(40)];
         barH.priority = UILayoutPriorityRequired;
 
         [NSLayoutConstraint activateConstraints:@[
@@ -456,10 +468,10 @@ static inline NSString *SWRecentTag(NSString *ymd) {
             [_bottomBar.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
             barH,
 
-            [_titleLabel.leadingAnchor constraintEqualToAnchor:_bottomBar.leadingAnchor constant:10],
-            [_titleLabel.trailingAnchor constraintEqualToAnchor:_bottomBar.trailingAnchor constant:-10],
-            [_titleLabel.topAnchor constraintEqualToAnchor:_bottomBar.topAnchor constant:10],
-            [_titleLabel.bottomAnchor constraintEqualToAnchor:_bottomBar.bottomAnchor constant:-10],
+            [_titleLabel.leadingAnchor constraintEqualToAnchor:_bottomBar.leadingAnchor constant:SW(10)],
+            [_titleLabel.trailingAnchor constraintEqualToAnchor:_bottomBar.trailingAnchor constant:-SW(10)],
+            [_titleLabel.topAnchor constraintEqualToAnchor:_bottomBar.topAnchor constant:SW(10)],
+            [_titleLabel.bottomAnchor constraintEqualToAnchor:_bottomBar.bottomAnchor constant:-SW(10)],
         ]];
     }
     return self;
@@ -771,12 +783,12 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 - (UIView *)buildCardView {
     UIView *v = [UIView new];
     v.backgroundColor = UIColor.whiteColor;
-    v.layer.cornerRadius = 14;
+    v.layer.cornerRadius = SW(14);
     v.layer.masksToBounds = NO;
     v.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.06].CGColor;
     v.layer.shadowOpacity = 1;
     v.layer.shadowOffset = CGSizeMake(0, 6);
-    v.layer.shadowRadius = 14;
+    v.layer.shadowRadius = SW(14);
     return v;
 }
 
@@ -784,7 +796,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     UIView *v = [UIView new];
     v.translatesAutoresizingMaskIntoConstraints = NO;
     v.backgroundColor = UIColor.whiteColor;
-    v.layer.cornerRadius = 24;
+    v.layer.cornerRadius = SW(24);
     v.layer.masksToBounds = YES;
     return v;
 }
@@ -834,13 +846,13 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.cardsContainer.translatesAutoresizingMaskIntoConstraints = NO;
     [self.contentView addSubview:self.cardsContainer];
 
-    self.cardsTopC = [self.cardsContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:40];
+    self.cardsTopC = [self.cardsContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:SW(40)];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.cardsContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:15],
-        [self.cardsContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-15],
+        [self.cardsContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:SW(15)],
+        [self.cardsContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-SW(15)],
         self.cardsTopC,
-        [self.cardsContainer.heightAnchor constraintEqualToConstant:97]
+        [self.cardsContainer.heightAnchor constraintEqualToConstant:SW(97)]
     ]];
 
     self.categorizedCard = [self buildCardView];
@@ -868,7 +880,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.archiveCard.topAnchor constraintEqualToAnchor:self.cardsContainer.topAnchor],
         [self.archiveCard.bottomAnchor constraintEqualToAnchor:self.cardsContainer.bottomAnchor],
 
-        [self.archiveCard.leadingAnchor constraintEqualToAnchor:self.categorizedCard.trailingAnchor constant:10],
+        [self.archiveCard.leadingAnchor constraintEqualToAnchor:self.categorizedCard.trailingAnchor constant:SW(10)],
         ratio
     ]];
 
@@ -877,13 +889,13 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.permissionBanner.hidden = YES;
     [self.contentView addSubview:self.permissionBanner];
 
-    self.permissionBannerHeightC = [self.permissionBanner.heightAnchor constraintEqualToConstant:150];
+    self.permissionBannerHeightC = [self.permissionBanner.heightAnchor constraintEqualToConstant:SW(150)];
     self.permissionBannerHeightC.priority = UILayoutPriorityRequired;
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.permissionBanner.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:15],
-        [self.permissionBanner.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-15],
-        [self.permissionBanner.topAnchor constraintEqualToAnchor:self.cardsContainer.bottomAnchor constant:12],
+        [self.permissionBanner.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:SW(15)],
+        [self.permissionBanner.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-SW(15)],
+        [self.permissionBanner.topAnchor constraintEqualToAnchor:self.cardsContainer.bottomAnchor constant:SW(12)],
         self.permissionBannerHeightC,
     ]];
 
@@ -899,7 +911,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [self.contentView addSubview:noAuth];
     self.noAuthPlaceholder = noAuth;
 
-    NSLayoutConstraint *noAuthH = [noAuth.heightAnchor constraintGreaterThanOrEqualToConstant:520];
+    NSLayoutConstraint *noAuthH = [noAuth.heightAnchor constraintGreaterThanOrEqualToConstant:SW(520)];
     noAuthH.priority = UILayoutPriorityRequired;
 
     [NSLayoutConstraint activateConstraints:@[
@@ -925,7 +937,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.progressTrack = [UIView new];
     self.progressTrack.translatesAutoresizingMaskIntoConstraints = NO;
     self.progressTrack.backgroundColor = SWHexRGBA(0x7676803D);
-    self.progressTrack.layer.cornerRadius = 4;
+    self.progressTrack.layer.cornerRadius = SW(4);
     self.progressTrack.layer.masksToBounds = NO;
     self.progressTrack.clipsToBounds = NO;
     [self.categorizedCard addSubview:self.progressTrack];
@@ -933,7 +945,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.progressFill = [UIView new];
     self.progressFill.translatesAutoresizingMaskIntoConstraints = NO;
     self.progressFill.backgroundColor = SWHexRGBA(0x024DFFFF);
-    self.progressFill.layer.cornerRadius = 4;
+    self.progressFill.layer.cornerRadius = SW(4);
     self.progressFill.layer.masksToBounds = YES;
     [self.progressTrack addSubview:self.progressFill];
 
@@ -944,19 +956,19 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [self.progressTrack addSubview:self.speedIcon];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.categorizedIcon.leadingAnchor constraintEqualToAnchor:self.categorizedCard.leadingAnchor constant:20],
-        [self.categorizedIcon.topAnchor constraintEqualToAnchor:self.categorizedCard.topAnchor constant:-22],
-        [self.categorizedIcon.widthAnchor constraintEqualToConstant:48],
-        [self.categorizedIcon.heightAnchor constraintEqualToConstant:48],
+        [self.categorizedIcon.leadingAnchor constraintEqualToAnchor:self.categorizedCard.leadingAnchor constant:SW(20)],
+        [self.categorizedIcon.topAnchor constraintEqualToAnchor:self.categorizedCard.topAnchor constant:-SW(22)],
+        [self.categorizedIcon.widthAnchor constraintEqualToConstant:SW(48)],
+        [self.categorizedIcon.heightAnchor constraintEqualToConstant:SW(48)],
 
-        [self.categorizedLabel.leadingAnchor constraintEqualToAnchor:self.categorizedCard.leadingAnchor constant:20],
-        [self.categorizedLabel.trailingAnchor constraintEqualToAnchor:self.categorizedCard.trailingAnchor constant:-20],
-        [self.categorizedLabel.topAnchor constraintEqualToAnchor:self.categorizedIcon.bottomAnchor constant:7],
+        [self.categorizedLabel.leadingAnchor constraintEqualToAnchor:self.categorizedCard.leadingAnchor constant:SW(20)],
+        [self.categorizedLabel.trailingAnchor constraintEqualToAnchor:self.categorizedCard.trailingAnchor constant:-SW(20)],
+        [self.categorizedLabel.topAnchor constraintEqualToAnchor:self.categorizedIcon.bottomAnchor constant:SW(7)],
 
-        [self.progressTrack.leadingAnchor constraintEqualToAnchor:self.categorizedCard.leadingAnchor constant:20],
-        [self.progressTrack.trailingAnchor constraintEqualToAnchor:self.categorizedCard.trailingAnchor constant:-20],
-        [self.progressTrack.topAnchor constraintEqualToAnchor:self.categorizedLabel.bottomAnchor constant:11],
-        [self.progressTrack.heightAnchor constraintEqualToConstant:8],
+        [self.progressTrack.leadingAnchor constraintEqualToAnchor:self.categorizedCard.leadingAnchor constant:SW(20)],
+        [self.progressTrack.trailingAnchor constraintEqualToAnchor:self.categorizedCard.trailingAnchor constant:-SW(20)],
+        [self.progressTrack.topAnchor constraintEqualToAnchor:self.categorizedLabel.bottomAnchor constant:SW(11)],
+        [self.progressTrack.heightAnchor constraintEqualToConstant:SW(8)],
     ]];
 
     self.progressFillWidthC = [self.progressFill.widthAnchor constraintEqualToConstant:0];
@@ -970,8 +982,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     ]];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.speedIcon.widthAnchor constraintEqualToConstant:24],
-        [self.speedIcon.heightAnchor constraintEqualToConstant:20],
+        [self.speedIcon.widthAnchor constraintEqualToConstant:SW(24)],
+        [self.speedIcon.heightAnchor constraintEqualToConstant:SW(20)],
         [self.speedIcon.centerYAnchor constraintEqualToAnchor:self.progressTrack.centerYAnchor],
     ]];
     self.speedCenterXC = [self.speedIcon.centerXAnchor constraintEqualToAnchor:self.progressTrack.leadingAnchor constant:0];
@@ -999,28 +1011,25 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [self.archiveCard addSubview:self.archiveDetailLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.archiveIcon.leadingAnchor constraintEqualToAnchor:self.archiveCard.leadingAnchor constant:20],
-        [self.archiveIcon.topAnchor constraintEqualToAnchor:self.archiveCard.topAnchor constant:-22],
-        [self.archiveIcon.widthAnchor constraintEqualToConstant:48],
-        [self.archiveIcon.heightAnchor constraintEqualToConstant:48],
+        [self.archiveIcon.leadingAnchor constraintEqualToAnchor:self.archiveCard.leadingAnchor constant:SW(20)],
+        [self.archiveIcon.topAnchor constraintEqualToAnchor:self.archiveCard.topAnchor constant:-SW(22)],
+        [self.archiveIcon.widthAnchor constraintEqualToConstant:SW(48)],
+        [self.archiveIcon.heightAnchor constraintEqualToConstant:SW(48)],
 
-        [self.archiveTitleLabel.leadingAnchor constraintEqualToAnchor:self.archiveCard.leadingAnchor constant:20],
-        [self.archiveTitleLabel.trailingAnchor constraintEqualToAnchor:self.archiveCard.trailingAnchor constant:-20],
-        [self.archiveTitleLabel.topAnchor constraintEqualToAnchor:self.archiveIcon.bottomAnchor constant:7],
+        [self.archiveTitleLabel.leadingAnchor constraintEqualToAnchor:self.archiveCard.leadingAnchor constant:SW(20)],
+        [self.archiveTitleLabel.trailingAnchor constraintEqualToAnchor:self.archiveCard.trailingAnchor constant:-SW(20)],
+        [self.archiveTitleLabel.topAnchor constraintEqualToAnchor:self.archiveIcon.bottomAnchor constant:SW(7)],
 
-        [self.archiveDetailLabel.leadingAnchor constraintEqualToAnchor:self.archiveCard.leadingAnchor constant:20],
-        [self.archiveDetailLabel.trailingAnchor constraintEqualToAnchor:self.archiveCard.trailingAnchor constant:-20],
-        [self.archiveDetailLabel.topAnchor constraintEqualToAnchor:self.archiveTitleLabel.bottomAnchor constant:5],
+        [self.archiveDetailLabel.leadingAnchor constraintEqualToAnchor:self.archiveCard.leadingAnchor constant:SW(20)],
+        [self.archiveDetailLabel.trailingAnchor constraintEqualToAnchor:self.archiveCard.trailingAnchor constant:-SW(20)],
+        [self.archiveDetailLabel.topAnchor constraintEqualToAnchor:self.archiveTitleLabel.bottomAnchor constant:SW(5)],
     ]];
 
-    // ===== 统一白色背景卡片 sectionsCard =====
     self.sectionsCard = [self buildSectionCardView];
     [self.contentView addSubview:self.sectionsCard];
 
-    // 顶部：无 banner 时距 cardsContainer 30；有 banner 时放到 banner 下方（留 18 的间距）
-    self.sectionsTopToCardsC = [self.sectionsCard.topAnchor constraintEqualToAnchor:self.cardsContainer.bottomAnchor constant:30];
-    self.sectionsTopToBannerC = [self.sectionsCard.topAnchor constraintEqualToAnchor:self.permissionBanner.bottomAnchor constant:18];
-    // 先不激活，sw_updatePermissionUI 里按状态切换
+    self.sectionsTopToCardsC = [self.sectionsCard.topAnchor constraintEqualToAnchor:self.cardsContainer.bottomAnchor constant:SW(30)];
+    self.sectionsTopToBannerC = [self.sectionsCard.topAnchor constraintEqualToAnchor:self.permissionBanner.bottomAnchor constant:SW(18)];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.sectionsCard.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:0],
@@ -1031,36 +1040,28 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.sectionsCardBottomC.priority = UILayoutPriorityRequired;
     self.sectionsCardBottomC.active = YES;
 
-    // sectionsCard 作为有权限时的内容底
     self.sectionsCardBottomToContentC = [self.sectionsCard.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:0];
     self.sectionsCardBottomToContentC.priority = UILayoutPriorityRequired;
-    // 是否 active 由 sw_updatePermissionUI 控制
 
-    // 无权限占位作为无权限时的内容底（你原来 noAuth 没有 bottom，会导致 content 高度不稳）
     self.noAuthBottomToContentC = [self.noAuthPlaceholder.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:0];
     self.noAuthBottomToContentC.priority = UILayoutPriorityRequired;
-    // 是否 active 由 sw_updatePermissionUI 控制
 
-    // 内部用 stack 来自动折叠隐藏模块
     self.sectionsStack = [UIStackView new];
     self.sectionsStack.translatesAutoresizingMaskIntoConstraints = NO;
     self.sectionsStack.axis = UILayoutConstraintAxisVertical;
-    self.sectionsStack.spacing = 30; // 模块间距（原来你是 30 左右的节奏）
+    self.sectionsStack.spacing = SW(30);
     [self.sectionsCard addSubview:self.sectionsStack];
 
-    // 顶部内边距 20（✅ 你的要求）
-    // 底部 padding：先给 20，后面 viewDidLayoutSubviews 会改成 -(safeBottom+80) 让白底延伸到底部
-    self.sectionsStackBottomPadC = [self.sectionsStack.bottomAnchor constraintEqualToAnchor:self.sectionsCard.bottomAnchor constant:-20];
+    self.sectionsStackBottomPadC = [self.sectionsStack.bottomAnchor constraintEqualToAnchor:self.sectionsCard.bottomAnchor constant:-SW(20)];
     self.sectionsStackBottomPadC.priority = UILayoutPriorityRequired;
 
     [NSLayoutConstraint activateConstraints:@[
         [self.sectionsStack.leadingAnchor constraintEqualToAnchor:self.sectionsCard.leadingAnchor],
         [self.sectionsStack.trailingAnchor constraintEqualToAnchor:self.sectionsCard.trailingAnchor],
-        [self.sectionsStack.topAnchor constraintEqualToAnchor:self.sectionsCard.topAnchor constant:20],
+        [self.sectionsStack.topAnchor constraintEqualToAnchor:self.sectionsCard.topAnchor constant:SW(20)],
         self.sectionsStackBottomPadC,
     ]];
 
-    // ===== 三个模块容器（都塞进同一个白卡片）=====
     self.recentSectionView = [UIView new];
     self.recentSectionView.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -1074,8 +1075,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [self.sectionsStack addArrangedSubview:self.monthSectionView];
     [self.sectionsStack addArrangedSubview:self.othersSectionView];
 
-    #pragma mark - Recent 模块（放进 recentSectionView）
-    // 复用你原来的创建代码（title + recentCV），只是 addSubview 改为 recentSectionView
     self.recentTitleLabel = [UILabel new];
     self.recentTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.recentTitleLabel.textColor = SWHexRGBA(0x000000FF);
@@ -1085,9 +1084,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
     UICollectionViewFlowLayout *recentLayout = [UICollectionViewFlowLayout new];
     recentLayout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-    recentLayout.minimumLineSpacing = 10;
-    recentLayout.itemSize = CGSizeMake(108, 144);
-    recentLayout.sectionInset = UIEdgeInsetsMake(0, 15, 0, 15);
+    recentLayout.minimumLineSpacing = SW(10);
+    recentLayout.itemSize = CGSizeMake(SW(108), SW(144));
+    recentLayout.sectionInset = SWInsets(0, 15, 0, 15);
 
     self.recentCV = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:recentLayout];
     self.recentCV.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1099,19 +1098,18 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [self.recentSectionView addSubview:self.recentCV];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.recentTitleLabel.leadingAnchor constraintEqualToAnchor:self.recentSectionView.leadingAnchor constant:15],
-        [self.recentTitleLabel.trailingAnchor constraintEqualToAnchor:self.recentSectionView.trailingAnchor constant:-15],
+        [self.recentTitleLabel.leadingAnchor constraintEqualToAnchor:self.recentSectionView.leadingAnchor constant:SW(15)],
+        [self.recentTitleLabel.trailingAnchor constraintEqualToAnchor:self.recentSectionView.trailingAnchor constant:-SW(15)],
         [self.recentTitleLabel.topAnchor constraintEqualToAnchor:self.recentSectionView.topAnchor],
 
         [self.recentCV.leadingAnchor constraintEqualToAnchor:self.recentSectionView.leadingAnchor],
         [self.recentCV.trailingAnchor constraintEqualToAnchor:self.recentSectionView.trailingAnchor],
-        [self.recentCV.topAnchor constraintEqualToAnchor:self.recentTitleLabel.bottomAnchor constant:10],
-        [self.recentCV.heightAnchor constraintEqualToConstant:144],
+        [self.recentCV.topAnchor constraintEqualToAnchor:self.recentTitleLabel.bottomAnchor constant:SW(10)],
+        [self.recentCV.heightAnchor constraintEqualToConstant:SW(144)],
         [self.recentCV.bottomAnchor constraintEqualToAnchor:self.recentSectionView.bottomAnchor],
     ]];
-    self.contentBottomC = [self.othersCV.bottomAnchor constraintEqualToAnchor:self.sectionsCard.bottomAnchor constant:-100];
+    self.contentBottomC = [self.othersCV.bottomAnchor constraintEqualToAnchor:self.sectionsCard.bottomAnchor constant:-SW(100)];
 
-    #pragma mark - Year(月份) 模块（放进 monthSectionView）
     self.yearTitleLabel = [UILabel new];
     self.yearTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.yearTitleLabel.textColor = SWHexRGBA(0x000000FF);
@@ -1126,9 +1124,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
     UICollectionViewFlowLayout *monthLayout = [UICollectionViewFlowLayout new];
     monthLayout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-    monthLayout.minimumLineSpacing = 10;
-    monthLayout.itemSize = CGSizeMake(108, 144);
-    monthLayout.sectionInset = UIEdgeInsetsMake(0, 15, 0, 15);
+    monthLayout.minimumLineSpacing = SW(10);
+    monthLayout.itemSize = CGSizeMake(SW(108), SW(144));
+    monthLayout.sectionInset = SWInsets(0, 15, 0, 15);
 
     self.monthCV = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:monthLayout];
     self.monthCV.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1140,22 +1138,21 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [self.monthSectionView addSubview:self.monthCV];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.yearTitleLabel.leadingAnchor constraintEqualToAnchor:self.monthSectionView.leadingAnchor constant:15],
+        [self.yearTitleLabel.leadingAnchor constraintEqualToAnchor:self.monthSectionView.leadingAnchor constant:SW(15)],
         [self.yearTitleLabel.topAnchor constraintEqualToAnchor:self.monthSectionView.topAnchor],
 
-        [self.yearMoreBtn.trailingAnchor constraintEqualToAnchor:self.monthSectionView.trailingAnchor constant:-15],
+        [self.yearMoreBtn.trailingAnchor constraintEqualToAnchor:self.monthSectionView.trailingAnchor constant:-SW(15)],
         [self.yearMoreBtn.centerYAnchor constraintEqualToAnchor:self.yearTitleLabel.centerYAnchor],
-        [self.yearMoreBtn.widthAnchor constraintEqualToConstant:40],
-        [self.yearMoreBtn.heightAnchor constraintEqualToConstant:24],
+        [self.yearMoreBtn.widthAnchor constraintEqualToConstant:SW(40)],
+        [self.yearMoreBtn.heightAnchor constraintEqualToConstant:SW(24)],
 
         [self.monthCV.leadingAnchor constraintEqualToAnchor:self.monthSectionView.leadingAnchor],
         [self.monthCV.trailingAnchor constraintEqualToAnchor:self.monthSectionView.trailingAnchor],
-        [self.monthCV.topAnchor constraintEqualToAnchor:self.yearTitleLabel.bottomAnchor constant:10],
-        [self.monthCV.heightAnchor constraintEqualToConstant:144],
+        [self.monthCV.topAnchor constraintEqualToAnchor:self.yearTitleLabel.bottomAnchor constant:SW(10)],
+        [self.monthCV.heightAnchor constraintEqualToConstant:SW(144)],
         [self.monthCV.bottomAnchor constraintEqualToAnchor:self.monthSectionView.bottomAnchor],
     ]];
 
-    #pragma mark - Others 模块（放进 othersSectionView）
     self.othersTitleLabel = [UILabel new];
     self.othersTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.othersTitleLabel.textColor = SWHexRGBA(0x000000FF);
@@ -1170,9 +1167,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
     UICollectionViewFlowLayout *otherLayout = [UICollectionViewFlowLayout new];
     otherLayout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-    otherLayout.minimumLineSpacing = 10;
-    otherLayout.itemSize = CGSizeMake(108, 144);
-    otherLayout.sectionInset = UIEdgeInsetsMake(0, 15, 0, 15);
+    otherLayout.minimumLineSpacing = SW(10);
+    otherLayout.itemSize = CGSizeMake(SW(108), SW(144));
+    otherLayout.sectionInset = SWInsets(0, 15, 0, 15);
 
     self.othersCV = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:otherLayout];
     self.othersCV.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1184,18 +1181,18 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [self.othersSectionView addSubview:self.othersCV];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.othersTitleLabel.leadingAnchor constraintEqualToAnchor:self.othersSectionView.leadingAnchor constant:15],
+        [self.othersTitleLabel.leadingAnchor constraintEqualToAnchor:self.othersSectionView.leadingAnchor constant:SW(15)],
         [self.othersTitleLabel.topAnchor constraintEqualToAnchor:self.othersSectionView.topAnchor],
 
-        [self.othersMoreBtn.trailingAnchor constraintEqualToAnchor:self.othersSectionView.trailingAnchor constant:-15],
+        [self.othersMoreBtn.trailingAnchor constraintEqualToAnchor:self.othersSectionView.trailingAnchor constant:-SW(15)],
         [self.othersMoreBtn.centerYAnchor constraintEqualToAnchor:self.othersTitleLabel.centerYAnchor],
-        [self.othersMoreBtn.widthAnchor constraintEqualToConstant:40],
-        [self.othersMoreBtn.heightAnchor constraintEqualToConstant:24],
+        [self.othersMoreBtn.widthAnchor constraintEqualToConstant:SW(40)],
+        [self.othersMoreBtn.heightAnchor constraintEqualToConstant:SW(24)],
 
         [self.othersCV.leadingAnchor constraintEqualToAnchor:self.othersSectionView.leadingAnchor],
         [self.othersCV.trailingAnchor constraintEqualToAnchor:self.othersSectionView.trailingAnchor],
-        [self.othersCV.topAnchor constraintEqualToAnchor:self.othersTitleLabel.bottomAnchor constant:10],
-        [self.othersCV.heightAnchor constraintEqualToConstant:144],
+        [self.othersCV.topAnchor constraintEqualToAnchor:self.othersTitleLabel.bottomAnchor constant:SW(10)],
+        [self.othersCV.heightAnchor constraintEqualToConstant:SW(144)],
         [self.othersCV.bottomAnchor constraintEqualToAnchor:self.othersSectionView.bottomAnchor],
     ]];
 
@@ -1208,9 +1205,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         CGFloat safeTop = self.view.safeAreaInsets.top;
         CGFloat safeBottom = self.view.safeAreaInsets.bottom;
 
-        self.cardsTopC.constant = safeTop + 40.0;
+        self.cardsTopC.constant = safeTop + SW(40.0);
 
-        CGFloat bottomPad = safeBottom + 80.0;
+        CGFloat bottomPad = safeBottom + SW(80.0);
         self.contentBottomC.constant = -bottomPad;
 
         self.scrollView.scrollIndicatorInsets = UIEdgeInsetsMake(safeTop, 0, safeBottom, 0);
@@ -1248,9 +1245,8 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.othersMoreBtn.hidden = !showSections;
     self.othersCV.hidden = !showSections;
 
-    self.permissionBannerHeightC.constant = self.sw_isLimitedAuth ? 150.0 : 0.0;
+    self.permissionBannerHeightC.constant = self.sw_isLimitedAuth ? SW(150.0) : 0.0;
     
-    // 顶部约束选择：limited 有 banner -> 连 banner；否则连 cardsContainer
     self.sectionsTopToBannerC.active = NO;
     self.sectionsTopToCardsC.active  = NO;
 
@@ -1260,7 +1256,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         self.sectionsTopToCardsC.active = YES;
     }
 
-    // contentView 底部选择：无权限 -> 跟 noAuth；有权限 -> 跟 sectionsCard
     self.sectionsCardBottomToContentC.active = NO;
     self.noAuthBottomToContentC.active = NO;
 
@@ -1270,7 +1265,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         self.sectionsCardBottomToContentC.active = YES;
     }
 
-    // 更新模块显隐（包含“没数据隐藏模块”）
     [self sw_updateSectionVisibility];
 }
 
@@ -1323,7 +1317,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.progressFillWidthC.constant = fillW;
 
     CGFloat centerX = fillW;
-    centerX = MAX(12, MIN(trackW - 12, centerX));
+    centerX = MAX(12, MIN(trackW - SW(12), centerX));
     self.speedCenterXC.constant = centerX;
 
     self.speedIcon.hidden = (self.categorizedProgress <= 0.001);
@@ -1448,7 +1442,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
         [self requestCoverForAssetId:[self latestAssetIDForModule:m]
                            intoCell:cell
-                         targetSize:CGSizeMake(108, 144)];
+                         targetSize:CGSizeMake(SW(108), SW(144))];
         return cell;
     }
 
@@ -1488,7 +1482,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [cell configMonth:mText size:sText completed:completed];
         [self requestCoverForAssetId:[self latestAssetIDForModule:m]
                            intoCell:cell
-                         targetSize:CGSizeMake(108, 144)];
+                         targetSize:CGSizeMake(SW(108), SW(144))];
         return cell;
     }
 
@@ -1510,16 +1504,12 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
         [cell configTitle:title completed:NO];
 
-        // 你这类卡片底部白条会盖图一部分，没数据时也可以不盖图：
-        // 如果你想保留标题条就不要 hidden；想全图占位就 hidden
-        // 这里按“保留标题条”来：
         cell.bottomBar.hidden = NO;
 
         cell.userInteractionEnabled = NO;
         return cell;
     }
 
-    // 有数据：正常逻辑
     cell.userInteractionEnabled = YES;
     cell.coverView.backgroundColor = UIColor.clearColor;
     cell.imgView.backgroundColor = UIColor.clearColor;
@@ -1530,7 +1520,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
     [self requestCoverForAssetId:[self latestAssetIDForModule:m]
                        intoCell:cell
-                     targetSize:CGSizeMake(108, 144)];
+                     targetSize:CGSizeMake(SW(108), SW(144))];
     return cell;
 }
 

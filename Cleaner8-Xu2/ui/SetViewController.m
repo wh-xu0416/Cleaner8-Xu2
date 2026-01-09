@@ -2,6 +2,18 @@
 #import "Common.h"
 
 #pragma mark - UI Helpers
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
 }
@@ -9,7 +21,7 @@ static inline UIColor *ASBlue(void) {
     return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; // #024DFFFF
 }
 static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
+    return SWFontS(size, weight);
 }
 
 @interface SetViewController ()
@@ -58,7 +70,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     self.bgTop.clipsToBounds = YES;
     [self.view addSubview:self.bgTop];
 
-    // ✅ scroll + content（titlebar风格跟 Video 一致）
     self.scroll = [UIScrollView new];
     self.scroll.translatesAutoresizingMaskIntoConstraints = NO;
     self.scroll.backgroundColor = UIColor.clearColor;
@@ -70,7 +81,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     self.content.backgroundColor = UIColor.clearColor;
     [self.scroll addSubview:self.content];
 
-    // 标题（放在 content 上）
     self.titleLab = [UILabel new];
     self.titleLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLab.text = NSLocalizedString(@"Setting", nil);
@@ -87,7 +97,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [self.backBtn addTarget:self action:@selector(tapBack) forControlEvents:UIControlEventTouchUpInside];
     [self.content addSubview:self.backBtn];
 
-    // 三个卡片（加到 content）
     self.termsCard = [self buildCardWithLeftText:NSLocalizedString(@"Terms of User", nil)
                                       rightType:@"image"
                                      rightValue:@"ic_todo_small"
@@ -113,7 +122,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         [self.bgTop.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.bgTop.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.bgTop.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.bgTop.heightAnchor constraintEqualToConstant:360],
+        [self.bgTop.heightAnchor constraintEqualToConstant:SW(360)],
 
         // scroll
         [self.scroll.topAnchor constraintEqualToAnchor:self.view.topAnchor],
@@ -128,27 +137,27 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         [self.content.bottomAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.bottomAnchor],
         [self.content.widthAnchor constraintEqualToAnchor:self.scroll.frameLayoutGuide.widthAnchor],
 
-        [self.titleLab.topAnchor constraintEqualToAnchor:self.content.safeAreaLayoutGuide.topAnchor constant:13],
+        [self.titleLab.topAnchor constraintEqualToAnchor:self.content.safeAreaLayoutGuide.topAnchor constant:SW(13)],
         [self.titleLab.centerXAnchor constraintEqualToAnchor:self.content.centerXAnchor],
 
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:20],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:SW(20)],
         [self.backBtn.centerYAnchor constraintEqualToAnchor:self.titleLab.centerYAnchor],
-        [self.backBtn.widthAnchor constraintEqualToConstant:24],
-        [self.backBtn.heightAnchor constraintEqualToConstant:24],
+        [self.backBtn.widthAnchor constraintEqualToConstant:SW(24)],
+        [self.backBtn.heightAnchor constraintEqualToConstant:SW(24)],
 
-        [self.termsCard.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:64],
-        [self.termsCard.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:20],
-        [self.termsCard.trailingAnchor constraintEqualToAnchor:self.content.trailingAnchor constant:-20],
+        [self.termsCard.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:SW(64)],
+        [self.termsCard.leadingAnchor constraintEqualToAnchor:self.content.leadingAnchor constant:SW(20)],
+        [self.termsCard.trailingAnchor constraintEqualToAnchor:self.content.trailingAnchor constant:-SW(20)],
 
-        [self.privacyCard.topAnchor constraintEqualToAnchor:self.termsCard.bottomAnchor constant:20],
+        [self.privacyCard.topAnchor constraintEqualToAnchor:self.termsCard.bottomAnchor constant:SW(20)],
         [self.privacyCard.leadingAnchor constraintEqualToAnchor:self.termsCard.leadingAnchor],
         [self.privacyCard.trailingAnchor constraintEqualToAnchor:self.termsCard.trailingAnchor],
 
-        [self.versionCard.topAnchor constraintEqualToAnchor:self.privacyCard.bottomAnchor constant:20],
+        [self.versionCard.topAnchor constraintEqualToAnchor:self.privacyCard.bottomAnchor constant:SW(20)],
         [self.versionCard.leadingAnchor constraintEqualToAnchor:self.termsCard.leadingAnchor],
         [self.versionCard.trailingAnchor constraintEqualToAnchor:self.termsCard.trailingAnchor],
 
-        [self.versionCard.bottomAnchor constraintEqualToAnchor:self.content.bottomAnchor constant:-34],
+        [self.versionCard.bottomAnchor constraintEqualToAnchor:self.content.bottomAnchor constant:-SW(34)],
     ]];
 }
 
@@ -162,13 +171,13 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     UIControl *card = [UIControl new];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor = UIColor.whiteColor;
-    card.layer.cornerRadius = 16;
+    card.layer.cornerRadius = SW(16);
     card.layer.masksToBounds = NO;
 
     card.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.08].CGColor;
     card.layer.shadowOpacity = 1.0;
-    card.layer.shadowOffset = CGSizeMake(0, 10);
-    card.layer.shadowRadius = 20;
+    card.layer.shadowOffset = CGSizeMake(0, SW(10));
+    card.layer.shadowRadius = SW(20);
 
     if (sel) [card addTarget:self action:sel forControlEvents:UIControlEventTouchUpInside];
 
@@ -190,10 +199,10 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         rightView = img;
 
         [NSLayoutConstraint activateConstraints:@[
-            [img.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+            [img.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-SW(20)],
             [img.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
-            [img.widthAnchor constraintEqualToConstant:40],
-            [img.heightAnchor constraintEqualToConstant:24],
+            [img.widthAnchor constraintEqualToConstant:SW(40)],
+            [img.heightAnchor constraintEqualToConstant:SW(24)],
         ]];
     } else { // version
         UILabel *verLab = [UILabel new];
@@ -206,17 +215,17 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         rightView = verLab;
 
         [NSLayoutConstraint activateConstraints:@[
-            [verLab.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+            [verLab.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-SW(20)],
             [verLab.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
         ]];
     }
 
     [NSLayoutConstraint activateConstraints:@[
-        [leftLab.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:30],
-        [leftLab.topAnchor constraintEqualToAnchor:card.topAnchor constant:23],
-        [leftLab.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-23],
+        [leftLab.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:SW(30)],
+        [leftLab.topAnchor constraintEqualToAnchor:card.topAnchor constant:SW(23)],
+        [leftLab.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-SW(23)],
 
-        [leftLab.trailingAnchor constraintLessThanOrEqualToAnchor:rightView.leadingAnchor constant:-12],
+        [leftLab.trailingAnchor constraintLessThanOrEqualToAnchor:rightView.leadingAnchor constant:-SW(12)],
     ]];
 
     return card;

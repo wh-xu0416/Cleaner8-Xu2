@@ -2,6 +2,13 @@
 #import <objc/runtime.h>
 #import "ASColors.h"
 
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+
 static const void *kASBGViewKey = &kASBGViewKey;
 static const void *kASGradientKey = &kASGradientKey;
 
@@ -45,7 +52,7 @@ static const void *kASGradientKey = &kASGradientKey;
     if (!bg || !g) return;
 
     CGFloat width = self.view.bounds.size.width;
-    g.frame = CGRectMake(0, 0, width, 402.0);
+    g.frame = CGRectMake(0, 0, width, AS(402.0));
 }
 
 @end

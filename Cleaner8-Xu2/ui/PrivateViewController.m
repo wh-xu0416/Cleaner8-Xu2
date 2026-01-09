@@ -9,6 +9,19 @@
 #import "ASPrivatePermissionBanner.h"
 #import <Photos/Photos.h>
 
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
+
 @interface ASPrivateEntryCard : UIControl
 @property (nonatomic, strong) UIImageView *leftIcon;
 @property (nonatomic, strong) UILabel *title;
@@ -20,7 +33,7 @@
     if (self=[super initWithFrame:CGRectZero]) {
         self.translatesAutoresizingMaskIntoConstraints = NO;
         self.backgroundColor = UIColor.whiteColor;
-        self.layer.cornerRadius = 16;
+        self.layer.cornerRadius = SW(16);
         self.layer.masksToBounds = YES;
 
         self.leftIcon = [UIImageView new];
@@ -33,14 +46,14 @@
         self.title.translatesAutoresizingMaskIntoConstraints = NO;
         self.title.text = title;
         self.title.textColor = UIColor.blackColor;
-        self.title.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+        self.title.font = SWFontS(20, UIFontWeightRegular);
         [self addSubview:self.title];
 
         // pill
         self.pill = [UIControl new];
         self.pill.translatesAutoresizingMaskIntoConstraints = NO;
         self.pill.backgroundColor = ASBlue();
-        self.pill.layer.cornerRadius = 23;
+        self.pill.layer.cornerRadius = SW(23);
         self.pill.layer.masksToBounds = YES;
         [self addSubview:self.pill];
 
@@ -48,7 +61,7 @@
         add.translatesAutoresizingMaskIntoConstraints = NO;
         add.text = NSLocalizedString(@"Add", nil);
         add.textColor = UIColor.whiteColor;
-        add.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+        add.font = SWFontS(20, UIFontWeightRegular);
         [self.pill addSubview:add];
 
         UIImageView *arrow = [UIImageView new];
@@ -58,31 +71,31 @@
         [self.pill addSubview:arrow];
 
         [NSLayoutConstraint activateConstraints:@[
-            [self.leftIcon.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
+            [self.leftIcon.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:SW(20)],
             [self.leftIcon.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-            [self.leftIcon.widthAnchor constraintEqualToConstant:32],
-            [self.leftIcon.heightAnchor constraintEqualToConstant:32],
+            [self.leftIcon.widthAnchor constraintEqualToConstant:SW(32)],
+            [self.leftIcon.heightAnchor constraintEqualToConstant:SW(32)],
 
-            [self.title.leadingAnchor constraintEqualToAnchor:self.leftIcon.trailingAnchor constant:20],
+            [self.title.leadingAnchor constraintEqualToAnchor:self.leftIcon.trailingAnchor constant:SW(20)],
             [self.title.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
 
-            [self.pill.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-20],
+            [self.pill.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-SW(20)],
             [self.pill.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
 
-            [self.title.trailingAnchor constraintLessThanOrEqualToAnchor:self.pill.leadingAnchor constant:-12],
+            [self.title.trailingAnchor constraintLessThanOrEqualToAnchor:self.pill.leadingAnchor constant:-SW(12)],
 
-            [add.leadingAnchor constraintEqualToAnchor:self.pill.leadingAnchor constant:15],
-            [add.topAnchor constraintEqualToAnchor:self.pill.topAnchor constant:11],
-            [add.bottomAnchor constraintEqualToAnchor:self.pill.bottomAnchor constant:-11],
+            [add.leadingAnchor constraintEqualToAnchor:self.pill.leadingAnchor constant:SW(15)],
+            [add.topAnchor constraintEqualToAnchor:self.pill.topAnchor constant:SW(11)],
+            [add.bottomAnchor constraintEqualToAnchor:self.pill.bottomAnchor constant:-SW(11)],
             [add.centerYAnchor constraintEqualToAnchor:self.pill.centerYAnchor],
 
-            [arrow.leadingAnchor constraintEqualToAnchor:add.trailingAnchor constant:10],
+            [arrow.leadingAnchor constraintEqualToAnchor:add.trailingAnchor constant:SW(10)],
             [arrow.centerYAnchor constraintEqualToAnchor:self.pill.centerYAnchor],
-            [arrow.widthAnchor constraintEqualToConstant:9],
-            [arrow.heightAnchor constraintEqualToConstant:15],
-            [arrow.trailingAnchor constraintEqualToAnchor:self.pill.trailingAnchor constant:-19],
+            [arrow.widthAnchor constraintEqualToConstant:SW(9)],
+            [arrow.heightAnchor constraintEqualToConstant:SW(15)],
+            [arrow.trailingAnchor constraintEqualToAnchor:self.pill.trailingAnchor constant:-SW(19)],
 
-            [self.heightAnchor constraintEqualToConstant:(14+48+14)],
+            [self.heightAnchor constraintEqualToConstant:SW(14+48+14)],
         ]];
 
     }
@@ -145,31 +158,31 @@
     self.navTitle.translatesAutoresizingMaskIntoConstraints = NO;
     self.navTitle.text = NSLocalizedString(@"Private", nil);
     self.navTitle.textColor = UIColor.blackColor;
-    self.navTitle.font = [UIFont systemFontOfSize:28 weight:UIFontWeightSemibold];
+    self.navTitle.font = SWFontS(28, UIFontWeightSemibold);
     [bar addSubview:self.navTitle];
 
     self.lockBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.lockBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    self.lockBtn.contentEdgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
+    self.lockBtn.contentEdgeInsets = SWInsets(10, 10, 10, 10);
     [self.lockBtn addTarget:self action:@selector(lockTap) forControlEvents:UIControlEventTouchUpInside];
     [bar addSubview:self.lockBtn];
     
     [NSLayoutConstraint activateConstraints:@[
-        [bar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:13],
+        [bar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:SW(13)],
         [bar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [bar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [bar.heightAnchor constraintEqualToConstant:45],
+        [bar.heightAnchor constraintEqualToConstant:SW(45)],
 
-        [self.lockBtn.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor constant:-20],
+        [self.lockBtn.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor constant:-SW(20)],
         [self.lockBtn.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
-        [self.lockBtn.widthAnchor constraintEqualToConstant:44],
-        [self.lockBtn.heightAnchor constraintEqualToConstant:44],
+        [self.lockBtn.widthAnchor constraintEqualToConstant:SW(44)],
+        [self.lockBtn.heightAnchor constraintEqualToConstant:SW(44)],
 
         [self.navTitle.centerXAnchor constraintEqualToAnchor:bar.centerXAnchor],
         [self.navTitle.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
 
-        [self.navTitle.leadingAnchor constraintGreaterThanOrEqualToAnchor:bar.leadingAnchor constant:20],
-        [self.navTitle.trailingAnchor constraintLessThanOrEqualToAnchor:self.lockBtn.leadingAnchor constant:-12],
+        [self.navTitle.leadingAnchor constraintGreaterThanOrEqualToAnchor:bar.leadingAnchor constant:SW(20)],
+        [self.navTitle.trailingAnchor constraintLessThanOrEqualToAnchor:self.lockBtn.leadingAnchor constant:-SW(12)],
     ]];
 
 
@@ -184,18 +197,18 @@
     desc.translatesAutoresizingMaskIntoConstraints = NO;
     desc.text = NSLocalizedString(@"Add Photos & Videos to Protected", nil);
     desc.textColor = UIColor.blackColor;
-    desc.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+    desc.font = SWFontS(17, UIFontWeightMedium);
     desc.textAlignment = NSTextAlignmentCenter;
     desc.numberOfLines = 2;
     [self.view addSubview:desc];
 
     [NSLayoutConstraint activateConstraints:@[
-        [img.topAnchor constraintEqualToAnchor:bar.bottomAnchor constant:40],
+        [img.topAnchor constraintEqualToAnchor:bar.bottomAnchor constant:SW(40)],
         [img.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [img.widthAnchor constraintEqualToConstant:182],
-        [img.heightAnchor constraintEqualToConstant:168],
+        [img.widthAnchor constraintEqualToConstant:SW(182)],
+        [img.heightAnchor constraintEqualToConstant:SW(168)],
 
-        [desc.topAnchor constraintEqualToAnchor:img.bottomAnchor constant:2],
+        [desc.topAnchor constraintEqualToAnchor:img.bottomAnchor constant:SW(2)],
         [desc.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
     ]];
 
@@ -211,11 +224,11 @@
     [self.videoCard.pill addTarget:self action:@selector(openVideos) forControlEvents:UIControlEventTouchUpInside];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.photoCard.topAnchor constraintEqualToAnchor:desc.bottomAnchor constant:40],
-        [self.photoCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:15],
-        [self.photoCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-15],
+        [self.photoCard.topAnchor constraintEqualToAnchor:desc.bottomAnchor constant:SW(40)],
+        [self.photoCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(15)],
+        [self.photoCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(15)],
 
-        [self.videoCard.topAnchor constraintEqualToAnchor:self.photoCard.bottomAnchor constant:20],
+        [self.videoCard.topAnchor constraintEqualToAnchor:self.photoCard.bottomAnchor constant:SW(20)],
         [self.videoCard.leadingAnchor constraintEqualToAnchor:self.photoCard.leadingAnchor],
         [self.videoCard.trailingAnchor constraintEqualToAnchor:self.photoCard.trailingAnchor],
     ]];
@@ -233,10 +246,10 @@
     [self.view addSubview:self.banner];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.banner.topAnchor constraintEqualToAnchor:self.videoCard.bottomAnchor constant:34],
+        [self.banner.topAnchor constraintEqualToAnchor:self.videoCard.bottomAnchor constant:SW(34)],
         [self.banner.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.banner.widthAnchor constraintEqualToConstant:310],
-        [self.banner.heightAnchor constraintEqualToConstant:145],
+        [self.banner.widthAnchor constraintEqualToConstant:SW(310)],
+        [self.banner.heightAnchor constraintEqualToConstant:SW(145)],
     ]];
 }
 

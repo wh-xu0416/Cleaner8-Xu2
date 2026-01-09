@@ -5,6 +5,17 @@
 #import "ASSelectTitleBar.h"
 #import <Photos/Photos.h>
 
+#pragma mark - Adapt Helpers (402)
+
+static inline CGFloat ASDesignWidth(void) { return 402.0; }
+static inline CGFloat ASScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / ASDesignWidth());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
 static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
     CGFloat r = ((rgba >> 24) & 0xFF) / 255.0;
     CGFloat g = ((rgba >> 16) & 0xFF) / 255.0;
@@ -34,7 +45,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
         _imageView.translatesAutoresizingMaskIntoConstraints = NO;
         _imageView.contentMode = UIViewContentModeScaleAspectFill;
         _imageView.clipsToBounds = YES;
-        _imageView.layer.cornerRadius = 12;
+        _imageView.layer.cornerRadius = AS(12);
         _imageView.layer.masksToBounds = YES;
         [self.contentView addSubview:_imageView];
 
@@ -49,10 +60,10 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
             [_imageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [_imageView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
 
-            [_checkView.widthAnchor constraintEqualToConstant:24],
-            [_checkView.heightAnchor constraintEqualToConstant:24],
-            [_checkView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
-            [_checkView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-6],
+            [_checkView.widthAnchor constraintEqualToConstant:AS(24)],
+            [_checkView.heightAnchor constraintEqualToConstant:AS(24)],
+            [_checkView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:AS(6)],
+            [_checkView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-AS(6)],
         ]];
 
         UIButton *previewBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -73,8 +84,8 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
         [self.contentView addSubview:checkBtn];
 
         [NSLayoutConstraint activateConstraints:@[
-            [checkBtn.widthAnchor constraintEqualToConstant:44],
-            [checkBtn.heightAnchor constraintEqualToConstant:44],
+            [checkBtn.widthAnchor constraintEqualToConstant:AS(44)],
+            [checkBtn.heightAnchor constraintEqualToConstant:AS(44)],
             [checkBtn.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
             [checkBtn.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
         ]];
@@ -169,7 +180,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
         [self.topGradientView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.topGradientView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.topGradientView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.topGradientView.heightAnchor constraintEqualToConstant:402],
+        [self.topGradientView.heightAnchor constraintEqualToConstant:AS(402)],
     ]];
 
     self.gradientLayer = [CAGradientLayer layer];
@@ -202,7 +213,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
         [self.titleBar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [self.titleBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.titleBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.titleBar.heightAnchor constraintEqualToConstant:44],
+        [self.titleBar.heightAnchor constraintEqualToConstant:AS(44)],
     ]];
 
     self.headerLabel = [UILabel new];
@@ -219,18 +230,18 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
     [self.view addSubview:self.metaLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.headerLabel.topAnchor constraintEqualToAnchor:self.titleBar.bottomAnchor constant:8],
-        [self.headerLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.headerLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.headerLabel.topAnchor constraintEqualToAnchor:self.titleBar.bottomAnchor constant:AS(8)],
+        [self.headerLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(20)],
+        [self.headerLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-AS(20)],
 
-        [self.metaLabel.topAnchor constraintEqualToAnchor:self.headerLabel.bottomAnchor constant:5],
+        [self.metaLabel.topAnchor constraintEqualToAnchor:self.headerLabel.bottomAnchor constant:AS(5)],
         [self.metaLabel.leadingAnchor constraintEqualToAnchor:self.headerLabel.leadingAnchor],
-        [self.metaLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.metaLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-AS(20)],
     ]];
 
     UICollectionViewFlowLayout *layout = [UICollectionViewFlowLayout new];
-    layout.minimumLineSpacing = 5;
-    layout.minimumInteritemSpacing = 5;
+    layout.minimumLineSpacing = AS(5);
+    layout.minimumInteritemSpacing = AS(5);
 
     self.collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
     self.collectionView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -242,13 +253,13 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
     [self.view addSubview:self.collectionView];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.collectionView.topAnchor constraintEqualToAnchor:self.metaLabel.bottomAnchor constant:15],
+        [self.collectionView.topAnchor constraintEqualToAnchor:self.metaLabel.bottomAnchor constant:AS(15)],
         [self.collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.collectionView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor], // 延伸到底
     ]];
 
-    self.collectionView.contentInset = UIEdgeInsetsMake(0, 10, 12 + self.view.safeAreaInsets.bottom, 10);
+    self.collectionView.contentInset = UIEdgeInsetsMake(0, AS(10), AS(12) + self.view.safeAreaInsets.bottom, AS(10));
 
     self.emptyView = [UIView new];
     self.emptyView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -266,7 +277,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
     self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyLabel.text = NSLocalizedString(@"No Content", nil);
     self.emptyLabel.textColor = UIColor.blackColor;
-    self.emptyLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightMedium];
+    self.emptyLabel.font = ASFontS(24, UIFontWeightMedium);
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
     [self.emptyView addSubview:self.emptyLabel];
 
@@ -276,10 +287,10 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
 
         [self.emptyImageView.centerXAnchor constraintEqualToAnchor:self.emptyView.centerXAnchor],
         [self.emptyImageView.topAnchor constraintEqualToAnchor:self.emptyView.topAnchor],
-        [self.emptyImageView.widthAnchor constraintEqualToConstant:182],
-        [self.emptyImageView.heightAnchor constraintEqualToConstant:168],
+        [self.emptyImageView.widthAnchor constraintEqualToConstant:AS(182)],
+        [self.emptyImageView.heightAnchor constraintEqualToConstant:AS(168)],
 
-        [self.emptyLabel.topAnchor constraintEqualToAnchor:self.emptyImageView.bottomAnchor constant:2],
+        [self.emptyLabel.topAnchor constraintEqualToAnchor:self.emptyImageView.bottomAnchor constant:AS(2)],
         [self.emptyLabel.leadingAnchor constraintEqualToAnchor:self.emptyView.leadingAnchor],
         [self.emptyLabel.trailingAnchor constraintEqualToAnchor:self.emptyView.trailingAnchor],
         [self.emptyLabel.bottomAnchor constraintEqualToAnchor:self.emptyView.bottomAnchor],
@@ -292,35 +303,35 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
     [self.view addSubview:self.bottomButtonsHost];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.bottomButtonsHost.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.bottomButtonsHost.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.bottomButtonsHost.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(20)],
+        [self.bottomButtonsHost.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(20)],
         [self.bottomButtonsHost.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:0],
     ]];
 
     self.deleteAllButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.deleteAllButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.deleteAllButton.backgroundColor = ASColorFromRGBAHex(0x024DFFFF);
-    self.deleteAllButton.layer.cornerRadius = 25.5; // 51/2
+    self.deleteAllButton.layer.cornerRadius = AS(25.5); // 51/2
     self.deleteAllButton.layer.masksToBounds = YES;
     [self.deleteAllButton setTitle:NSLocalizedString(@"Delete All", nil) forState:UIControlStateNormal];
     [self.deleteAllButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    self.deleteAllButton.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightRegular];
+    self.deleteAllButton.titleLabel.font = ASFontS(20, UIFontWeightRegular);
     [self.deleteAllButton addTarget:self action:@selector(deleteTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.bottomButtonsHost addSubview:self.deleteAllButton];
 
     self.recoverAllButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.recoverAllButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.recoverAllButton.backgroundColor = UIColor.whiteColor;
-    self.recoverAllButton.layer.cornerRadius = 25.5;
+    self.recoverAllButton.layer.cornerRadius = AS(25.5);
     self.recoverAllButton.layer.masksToBounds = YES;
     [self.recoverAllButton setTitle:NSLocalizedString(@"Recover All", nil) forState:UIControlStateNormal];
     [self.recoverAllButton setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
-    self.recoverAllButton.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
+    self.recoverAllButton.titleLabel.font = ASFontS(20, UIFontWeightMedium);
     [self.recoverAllButton addTarget:self action:@selector(recoverTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.bottomButtonsHost addSubview:self.recoverAllButton];
 
-    CGFloat btnH = 51.0;
-    CGFloat gap = 15.0;
+    CGFloat btnH = AS(51.0);
+    CGFloat gap = AS(15.0);
 
     [NSLayoutConstraint activateConstraints:@[
         [self.deleteAllButton.leadingAnchor constraintEqualToAnchor:self.bottomButtonsHost.leadingAnchor],
@@ -472,8 +483,8 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
     BOOL show = (self.selectedIDs.count > 0);
     self.bottomButtonsHost.hidden = !show;
 
-    CGFloat btnH = 51.0;
-    CGFloat gap = 15.0;
+    CGFloat btnH = AS(51.0);
+    CGFloat gap = AS(15.0);
     CGFloat hostH = show ? (btnH + gap + btnH) : 0.0;
 
     CGFloat bottomInset = 12 + self.view.safeAreaInsets.bottom + hostH;
@@ -569,7 +580,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
 
     PHAsset *asset = [[SwipeManager shared] assetForID:aid];
     if (asset) {
-        CGSize target = CGSizeMake(240, 320);
+        CGSize target = CGSizeMake(AS(240), AS(320));
         PHImageRequestOptions *opt = [PHImageRequestOptions new];
         opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
         opt.resizeMode = PHImageRequestOptionsResizeModeFast;
@@ -649,13 +660,13 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
         - collectionView.contentInset.left
         - collectionView.contentInset.right;
 
-    CGFloat spacing = 5.0;
-    CGFloat maxW = 120.0;
+    CGFloat spacing = AS(5.0);
+    CGFloat maxW = AS(120.0);
 
     CGFloat w = floor((availableW - spacing * 2) / 3.0);
     w = MIN(maxW, w);
 
-    CGFloat h = round(w * (160.0 / 120.0));
+    CGFloat h = round(w * (AS(160.0) / AS(120.0)));
     return CGSizeMake(w, h);
 }
 

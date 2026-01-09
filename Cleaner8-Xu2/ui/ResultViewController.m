@@ -17,6 +17,19 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
     b /= 1024; return [NSString stringWithFormat:@"%.2f GB", b];
 }
 
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
+
 @interface ResultViewController ()
 @property (nonatomic) NSUInteger deletedCount;
 @property (nonatomic) uint64_t freedBytes;
@@ -69,19 +82,19 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
     self.titleLabel.text = NSLocalizedString(@"Great!", nil);
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     self.titleLabel.textColor = UIColor.blackColor;
-    self.titleLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightMedium];
+    self.titleLabel.font = SWFontS(34, UIFontWeightMedium);
     [self.view addSubview:self.titleLabel];
 
     self.descLabel = [UILabel new];
     self.descLabel.numberOfLines = 2;
     self.descLabel.textAlignment = NSTextAlignmentCenter;
-    self.descLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    self.descLabel.font = SWFontS(12, UIFontWeightMedium);
     [self.view addSubview:self.descLabel];
     [self updateDescText];
 
     self.learnMoreBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.learnMoreBtn.backgroundColor = UIColor.whiteColor;
-    self.learnMoreBtn.layer.cornerRadius = 22;
+    self.learnMoreBtn.layer.cornerRadius = SW(22);
     self.learnMoreBtn.clipsToBounds = YES;
 
     UIImage *moreImg = [[UIImage imageNamed:@"ic_learn"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
@@ -96,21 +109,21 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
     self.learnMoreBtn.titleLabel.lineBreakMode = NSLineBreakByClipping;
     self.learnMoreBtn.adjustsImageWhenHighlighted = NO;
 
-    self.learnMoreBtn.imageEdgeInsets = UIEdgeInsetsMake(0, -6, 0, 0);
-    self.learnMoreBtn.titleEdgeInsets = UIEdgeInsetsMake(0, 6, 0, 0);
+    self.learnMoreBtn.imageEdgeInsets = SWInsets(0, -6, 0, 0);
+    self.learnMoreBtn.titleEdgeInsets = SWInsets(0, 6, 0, 0);
 
     [self.learnMoreBtn addTarget:self action:@selector(onTapLearnMore) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.learnMoreBtn];
 
     self.continueBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.continueBtn.backgroundColor = ASColorHex(0x024DFF, 1.0);
-    self.continueBtn.layer.cornerRadius = 35;
+    self.continueBtn.layer.cornerRadius = SW(35);
     self.continueBtn.clipsToBounds = YES;
 
     [self.continueBtn setTitle:NSLocalizedString(@"Continue", nil) forState:UIControlStateNormal];
     [self.continueBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    self.continueBtn.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
-    self.continueBtn.contentEdgeInsets = UIEdgeInsetsMake(23, 0, 23, 0);
+    self.continueBtn.titleLabel.font = SWFontS(20, UIFontWeightBold);
+    self.continueBtn.contentEdgeInsets = SWInsets(23, 0, 23, 0);
     [self.continueBtn addTarget:self action:@selector(onTapContinue) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.continueBtn];
 }
@@ -122,32 +135,32 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
     CGFloat topSafe = self.view.safeAreaInsets.top;
     CGFloat bottomSafe = self.view.safeAreaInsets.bottom;
 
-    CGFloat gradH = 402;
+    CGFloat gradH = SW(402);
     self.gradHost.frame = CGRectMake(0, 0, W, gradH);
     self.gradLayer.frame = self.gradHost.bounds;
 
-    CGFloat imgW = 180, imgH = 170;
-    CGFloat imgTop = topSafe + 40;
+    CGFloat imgW = SW(180), imgH = SW(170);
+    CGFloat imgTop = topSafe + SW(40);
     self.greatImageView.frame = CGRectMake((W - imgW)/2.0, imgTop, imgW, imgH);
 
-    CGFloat titleTop = CGRectGetMaxY(self.greatImageView.frame) + 20;
-    self.titleLabel.frame = CGRectMake(20, titleTop, W - 40, 40);
+    CGFloat titleTop = CGRectGetMaxY(self.greatImageView.frame) + SW(20);
+    self.titleLabel.frame = CGRectMake(SW(20), titleTop, W - SW(40), SW(40));
 
-    CGFloat descTop = CGRectGetMaxY(self.titleLabel.frame) + 10;
-    self.descLabel.frame = CGRectMake(30, descTop, W - 60, 34);
+    CGFloat descTop = CGRectGetMaxY(self.titleLabel.frame) + SW(10);
+    self.descLabel.frame = CGRectMake(SW(30), descTop, W - SW(60), SW(34));
 
-    CGFloat learnTop = CGRectGetMaxY(self.descLabel.frame) + 30;
-    self.learnMoreBtn.frame = CGRectMake((W - 150)/2.0, learnTop, 150, 36);
+    CGFloat learnTop = CGRectGetMaxY(self.descLabel.frame) + SW(30);
+    self.learnMoreBtn.frame = CGRectMake((W - SW(150))/2.0, learnTop, SW(150), SW(36));
 
-    CGFloat contTop = CGRectGetMaxY(self.learnMoreBtn.frame) + 110;
-    CGFloat contX = 40;
+    CGFloat contTop = CGRectGetMaxY(self.learnMoreBtn.frame) + SW(110);
+    CGFloat contX = SW(40);
     CGFloat contW = W - contX * 2;
 
     CGSize fit = [self.continueBtn sizeThatFits:CGSizeMake(contW, CGFLOAT_MAX)];
-    CGFloat contH = MAX(60, ceil(fit.height));
+    CGFloat contH = MAX(SW(60), ceil(fit.height));
     self.continueBtn.frame = CGRectMake(contX, contTop, contW, contH);
 
-    CGFloat bottomLimit = self.view.bounds.size.height - bottomSafe - 20;
+    CGFloat bottomLimit = self.view.bounds.size.height - bottomSafe - SW(20);
     CGFloat over = CGRectGetMaxY(self.continueBtn.frame) - bottomLimit;
     if (over > 0) {
         self.continueBtn.frame = CGRectOffset(self.continueBtn.frame, 0, -over);
@@ -167,7 +180,7 @@ static inline NSString *ASHumanSize(uint64_t bytes) {
 
     NSMutableAttributedString *att =
     [[NSMutableAttributedString alloc] initWithString:full attributes:@{
-        NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightMedium],
+        NSFontAttributeName: SWFontS(12, UIFontWeightMedium),
         NSForegroundColorAttributeName: black
     }];
 

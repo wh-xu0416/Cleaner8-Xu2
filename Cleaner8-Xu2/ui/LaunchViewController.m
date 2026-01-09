@@ -5,6 +5,18 @@
 #import <Network/Network.h>
 
 #pragma mark - UI Helpers
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWScale(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / SWDesignWidth());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
 }
@@ -161,7 +173,7 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
         [self.topGradientView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.topGradientView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.topGradientView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.topGradientView.heightAnchor constraintEqualToConstant:402.0],
+        [self.topGradientView.heightAnchor constraintEqualToConstant:SW(402.0)],
     ]];
 
     self.centerContainer = [UIView new];
@@ -179,7 +191,7 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
     self.logoView.image = [UIImage imageNamed:@"launch_icon"];
     self.logoView.contentMode = UIViewContentModeScaleAspectFit;
     
-    self.logoView.layer.cornerRadius = 36.0;
+    self.logoView.layer.cornerRadius = SW(36.0);
     self.logoView.layer.masksToBounds = YES;
     if (@available(iOS 13.0, *)) {
         self.logoView.layer.cornerCurve = kCACornerCurveContinuous;
@@ -195,7 +207,7 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
     [self.centerContainer addSubview:self.nameLab];
 
     self.containerCenterYCons =
-        [self.centerContainer.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-100];
+        [self.centerContainer.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-SW(100)];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.centerContainer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
@@ -203,10 +215,10 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 
         [self.logoView.topAnchor constraintEqualToAnchor:self.centerContainer.topAnchor],
         [self.logoView.centerXAnchor constraintEqualToAnchor:self.centerContainer.centerXAnchor],
-        [self.logoView.widthAnchor constraintEqualToConstant:150],
-        [self.logoView.heightAnchor constraintEqualToConstant:150],
+        [self.logoView.widthAnchor constraintEqualToConstant:SW(150)],
+        [self.logoView.heightAnchor constraintEqualToConstant:SW(150)],
 
-        [self.nameLab.topAnchor constraintEqualToAnchor:self.logoView.bottomAnchor constant:20],
+        [self.nameLab.topAnchor constraintEqualToAnchor:self.logoView.bottomAnchor constant:SW(20)],
         [self.nameLab.centerXAnchor constraintEqualToAnchor:self.centerContainer.centerXAnchor],
         [self.nameLab.bottomAnchor constraintEqualToAnchor:self.centerContainer.bottomAnchor],
     ]];
