@@ -170,6 +170,17 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         CGFloat r = v.layer.cornerRadius;
         v.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:v.bounds cornerRadius:r].CGPath;
     }
+    
+    CGFloat extraBottom = 80.0;
+    CGFloat safeBottom = 0;
+    if (@available(iOS 11.0, *)) {
+        safeBottom = self.view.safeAreaInsets.bottom;
+    }
+
+    UIEdgeInsets inset = self.scroll.contentInset;
+    inset.bottom = safeBottom + extraBottom;
+    self.scroll.contentInset = inset;
+    self.scroll.scrollIndicatorInsets = inset;
 }
 
 #pragma mark - Photo Permission
