@@ -248,7 +248,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 @interface SwipeCardView : UIView
 @property (nonatomic, copy) NSString *assetID;
 @property (nonatomic, strong) UIImageView *imageView;
-@property (nonatomic, strong) UILabel *hintLabel;
+@property (nonatomic, strong) UIImageView *hintImageView;
 
 @property (nonatomic, assign) PHImageRequestID reqId;
 @property (nonatomic, copy) NSString *representedAssetID;
@@ -274,12 +274,11 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
         [self addSubview:_imageView];
 
-        _hintLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-        _hintLabel.textAlignment = NSTextAlignmentCenter;
-        _hintLabel.font = SWFontS(34, UIFontWeightBold);
-        _hintLabel.textColor = UIColor.blackColor;
-        _hintLabel.alpha = 0;
-        [self addSubview:_hintLabel];
+        _hintImageView = [UIImageView new];
+        _hintImageView.contentMode = UIViewContentModeScaleAspectFit;
+        _hintImageView.hidden = YES;
+        _hintImageView.alpha = 1.0;
+        [self addSubview:_hintImageView];
     }
     return self;
 }
@@ -287,8 +286,31 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 - (void)layoutSubviews {
     [super layoutSubviews];
     _imageView.frame = self.bounds;
-    _hintLabel.frame = CGRectMake(SW(16), SW(16), self.bounds.size.width - SW(32), SW(40));
+    UIImage *img = self.hintImageView.image;
+    CGSize sz = img ? img.size : CGSizeZero;
+    CGFloat w = sz.width;
+    CGFloat h = sz.height;
+
+    self.hintImageView.frame = CGRectMake((self.bounds.size.width  - w) * 0.5,
+                                          (self.bounds.size.height - h) * 0.5,
+                                          w, h);
 }
+
+- (void)sw_updateHintForTranslationX:(CGFloat)x {
+    if (fabs(x) < 1.0) {
+        self.hintImageView.hidden = YES;
+        return;
+    }
+
+    NSString *name = (x > 0) ? @"ic_keep" : @"ic_archive";
+    UIImage *img = [UIImage imageNamed:name];
+    if (img != self.hintImageView.image) {
+        self.hintImageView.image = img;
+        [self setNeedsLayout];
+    }
+    self.hintImageView.hidden = NO;
+}
+
 @end
 
 #pragma mark - SwipeAlbumViewController
@@ -1347,7 +1369,7 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
     for (SwipeCardView *c in self.cards) {
         [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:c];
         c.transform = CGAffineTransformIdentity;
-        c.hintLabel.alpha = 0;
+        c.hintImageView.hidden = YES;
         c.alpha = 1.0;
     }
 
@@ -1470,7 +1492,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
             CGRect f = SWCardFrameForIndex(i);
             card.transform = CGAffineTransformIdentity;
             card.frame = f;
-            card.hintLabel.alpha = 0;
+            card.hintImageView.hidden = YES;
         }
     };
 
@@ -1540,18 +1562,8 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     card.transform = [self sw_pendulumTransformForX:x y:t.y width:w clampProgress:YES];
 
-    // hint
-    if (x > 25) {
-        card.hintLabel.text = @"Keep";
-        card.hintLabel.textAlignment = NSTextAlignmentCenter;
-        card.hintLabel.alpha = MIN(1.0, x / SW(120.0));
-    } else if (x < -25) {
-        card.hintLabel.text = @"Archive";
-        card.hintLabel.textAlignment = NSTextAlignmentCenter;
-        card.hintLabel.alpha = MIN(1.0, -x / SW(120.0));
-    } else {
-        card.hintLabel.alpha = 0;
-    }
+    // hint image
+    [card sw_updateHintForTranslationX:x];
 
     if (pan.state == UIGestureRecognizerStateEnded || pan.state == UIGestureRecognizerStateCancelled) {
 
@@ -1566,8 +1578,8 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
         CGFloat vxFling        = SW(520);   // 强甩速度
         CGFloat vxDragMin      = SW(180);   // 软阈值提交：松手至少要有点速度
-        CGFloat dragThreshold  = w * 0.22;  // 软距离阈值
-        CGFloat hardThreshold  = w * 0.30;  // 硬距离阈值：够远就该出去（但要允许“快速回拉取消”）
+        CGFloat dragThreshold  = w / 3.0;
+        CGFloat hardThreshold  = w / 3.0;
 
         CGFloat vxReturnCancel = SW(260);   // 反向回拉速度阈值（可以 220~320 调）
         BOOL sameDirection = ((x >= 0 && vx >= 0) || (x <= 0 && vx <= 0));
@@ -1581,7 +1593,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
                                 options:UIViewAnimationOptionCurveEaseOut
                              animations:^{
                 card.transform = CGAffineTransformIdentity;
-                card.hintLabel.alpha = 0;
+                card.hintImageView.hidden = YES;
             } completion:^(__unused BOOL finished) {
                 [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:card];
                 [self layoutCardsAnimated:YES];
@@ -1621,7 +1633,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
                             options:UIViewAnimationOptionCurveEaseOut
                          animations:^{
             card.transform = CGAffineTransformIdentity;
-            card.hintLabel.alpha = 0;
+            card.hintImageView.hidden = YES;
         } completion:^(__unused BOOL finished) {
             [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:card];
             [self layoutCardsAnimated:YES];
@@ -1645,7 +1657,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         if ((id)c == [NSNull null]) continue;
         [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:(UIView *)c];
         ((SwipeCardView *)c).transform = CGAffineTransformIdentity;
-        ((SwipeCardView *)c).hintLabel.alpha = 0;
+        ((SwipeCardView *)c).hintImageView.hidden = YES;
         ((SwipeCardView *)c).alpha = 1.0;
     }
 
@@ -1684,7 +1696,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
             CGFloat y1 = y0;
             outTop.transform = [self sw_pendulumTransformForX:x1 y:y1 width:w clampProgress:NO];
             outTop.alpha = 0.75;
-            outTop.hintLabel.alpha = 0;
+            outTop.hintImageView.hidden = YES;
         }];
 
         [UIView addKeyframeWithRelativeStartTime:0.60 relativeDuration:0.40 animations:^{
@@ -2633,7 +2645,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:card];
         card.alpha = 1.0;
         card.transform = CGAffineTransformIdentity;
-        card.hintLabel.alpha = 0;
+        card.hintImageView.hidden = YES;
     }
 
     void (^layoutBlock)(void) = ^{
