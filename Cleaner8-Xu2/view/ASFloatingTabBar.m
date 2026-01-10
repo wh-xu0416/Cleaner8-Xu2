@@ -75,7 +75,7 @@ static inline UIColor *ASColorHex(uint32_t rgb, CGFloat alpha) {
 
             UILabel *lb = [UILabel new];
             lb.text = it.title;
-            lb.font = SWFontS(10,UIFontWeightSemibold);
+            lb.font = SWFontS(10, UIFontWeightRegular);
             lb.textAlignment = NSTextAlignmentCenter;
             lb.textColor = ASColorHex(0x454545, 1.0);
 
@@ -143,6 +143,7 @@ static inline UIColor *ASColorHex(uint32_t rgb, CGFloat alpha) {
 
         iv.image = [UIImage imageNamed:(sel ? it.selectedImageName : it.normalImageName)];
         lb.textColor = sel ? ASColorHex(0x000000, 1.0) : ASColorHex(0x454545, 0.5);
+        lb.font = sel ? SWFontS(10, UIFontWeightSemibold) : SWFontS(10, UIFontWeightRegular);
     }
 }
 

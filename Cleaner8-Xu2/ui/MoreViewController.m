@@ -159,7 +159,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     leftLab.translatesAutoresizingMaskIntoConstraints = NO;
     leftLab.text = leftText;
     leftLab.textColor = UIColor.blackColor;
-    leftLab.font = ASFont(24, UIFontWeightMedium);
+    leftLab.font = ASFont(24, UIFontWeightRegular);
     [card addSubview:leftLab];
 
     UIView *rightView = nil;

@@ -1202,7 +1202,7 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
     }
     if (idx == NSNotFound) return nil;
 
-    NSInteger nextIdx = idx + 1; // “下一个”取更旧那天（与 Month 的逻辑一致）
+    NSInteger nextIdx = idx + 1;
     if (nextIdx >= (NSInteger)recent.count) return nil;
 
     return recent[nextIdx];
@@ -1211,8 +1211,8 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
 #pragma mark - Card Stack
 
 - (CGFloat)sw_blurRadiusForCardIndex:(NSInteger)idx {
-    if (idx == 1) return SW(16); // middle
-    if (idx == 2) return SW(22); // bottom
+    if (idx == 1) return SW(22);
+    if (idx == 2) return SW(30);
     return 0;
 }
 
@@ -1509,7 +1509,13 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     if (clampProgress) p = MIN(1.0, p);
 
     CGFloat tx = x * 0.35;
+
+    // 让“顶部”也跟着往两边偏移一点（系数越大越明显）
+    CGFloat topSlide = x * 0.14;   // 0.06~0.14
+    tx += topSlide;
+
     CGFloat ty = (y * 0.08) - p * 18.0;
+
 
     CGFloat maxAngle = (CGFloat)(M_PI / 10.0);
     CGFloat rot = -(x / w) * maxAngle;

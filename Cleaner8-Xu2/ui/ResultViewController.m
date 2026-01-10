@@ -43,6 +43,10 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
 
 @property (nonatomic, strong) UIButton *learnMoreBtn;
 @property (nonatomic, strong) UIButton *continueBtn;
+
+@property (nonatomic, strong) UIView *infoCard;
+@property (nonatomic, strong) UILabel *cardTextLabel;
+
 @end
 
 @implementation ResultViewController
@@ -92,8 +96,37 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
     [self.view addSubview:self.descLabel];
     [self updateDescText];
 
+    self.infoCard = [[UIView alloc] initWithFrame:CGRectZero];
+    self.infoCard.backgroundColor = UIColor.whiteColor;
+    self.infoCard.layer.cornerRadius = SW(16);
+    self.infoCard.clipsToBounds = YES;
+    [self.view addSubview:self.infoCard];
+
+    self.cardTextLabel = [UILabel new];
+    self.cardTextLabel.numberOfLines = 0;
+    self.cardTextLabel.textColor = UIColor.blackColor;
+    self.cardTextLabel.font = SWFontS(13, UIFontWeightRegular);
+
+    self.cardTextLabel.lineBreakMode = NSLineBreakByWordWrapping;
+
+    NSString *full = NSLocalizedString(@"Deleted photos will appear in \"Recently Deleted\" (You can recover or permanently erase them to free up storage space.)",nil);
+
+    NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:full attributes:@{
+        NSFontAttributeName: SWFontS(13, UIFontWeightRegular),
+        NSForegroundColorAttributeName: UIColor.blackColor
+    }];
+
+    NSRange rr = [full rangeOfString:NSLocalizedString(@"Recently Deleted",nil)];
+    if (rr.location != NSNotFound) {
+        [att addAttribute:NSFontAttributeName value:SWFontS(13, UIFontWeightMedium) range:rr];
+        [att addAttribute:NSForegroundColorAttributeName value:UIColor.blackColor range:rr];
+    }
+
+    self.cardTextLabel.attributedText = att;
+    [self.infoCard addSubview:self.cardTextLabel];
+
     self.learnMoreBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    self.learnMoreBtn.backgroundColor = UIColor.whiteColor;
+    self.learnMoreBtn.backgroundColor = ASColorHex(0xF2F6FF, 1.0);
     self.learnMoreBtn.layer.cornerRadius = SW(22);
     self.learnMoreBtn.clipsToBounds = YES;
 
@@ -101,7 +134,7 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
     [self.learnMoreBtn setImage:moreImg forState:UIControlStateNormal];
     [self.learnMoreBtn setTitle:NSLocalizedString(@"Learn More", nil) forState:UIControlStateNormal];
     [self.learnMoreBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
-    self.learnMoreBtn.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    self.learnMoreBtn.titleLabel.font = SWFontS(13, UIFontWeightMedium);
 
     self.learnMoreBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
     self.learnMoreBtn.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
@@ -113,7 +146,7 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
     self.learnMoreBtn.titleEdgeInsets = SWInsets(0, 6, 0, 0);
 
     [self.learnMoreBtn addTarget:self action:@selector(onTapLearnMore) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.learnMoreBtn];
+    [self.infoCard addSubview:self.learnMoreBtn];
 
     self.continueBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.continueBtn.backgroundColor = ASColorHex(0x024DFF, 1.0);
@@ -149,10 +182,33 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
     CGFloat descTop = CGRectGetMaxY(self.titleLabel.frame) + SW(10);
     self.descLabel.frame = CGRectMake(SW(30), descTop, W - SW(60), SW(34));
 
-    CGFloat learnTop = CGRectGetMaxY(self.descLabel.frame) + SW(30);
-    self.learnMoreBtn.frame = CGRectMake((W - SW(150))/2.0, learnTop, SW(150), SW(36));
+    // --- Card layout ---
+    CGFloat cardTop = CGRectGetMaxY(self.descLabel.frame) + SW(50);
+    CGFloat cardX   = SW(20);
+    CGFloat cardW   = W - cardX * 2;
+    CGFloat pad     = SW(20);
 
-    CGFloat contTop = CGRectGetMaxY(self.learnMoreBtn.frame) + SW(110);
+    // 卡片文字
+    CGFloat textX = pad;
+    CGFloat textY = pad;
+    CGFloat textW = cardW - pad * 2;
+
+    CGSize textFit = [self.cardTextLabel sizeThatFits:CGSizeMake(textW, CGFLOAT_MAX)];
+    CGFloat textH = ceil(textFit.height);
+    self.cardTextLabel.frame = CGRectMake(textX, textY, textW, textH);
+
+    // Learn More 按钮：在文字下 20pt（卡片内）
+    CGFloat learnTop = CGRectGetMaxY(self.cardTextLabel.frame) + SW(20);
+    CGFloat learnW = SW(150);
+    CGFloat learnH = SW(36);
+    self.learnMoreBtn.frame = CGRectMake((cardW - learnW)/2.0, learnTop, learnW, learnH);
+
+    // 卡片高度 = 按钮底部 + 内边距
+    CGFloat cardH = CGRectGetMaxY(self.learnMoreBtn.frame) + pad;
+    self.infoCard.frame = CGRectMake(cardX, cardTop, cardW, cardH);
+
+    // Continue 按钮：在卡片下 30pt（卡片外）
+    CGFloat contTop = CGRectGetMaxY(self.infoCard.frame) + SW(30);
     CGFloat contX = SW(40);
     CGFloat contW = W - contX * 2;
 
@@ -160,6 +216,7 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
     CGFloat contH = MAX(SW(60), ceil(fit.height));
     self.continueBtn.frame = CGRectMake(contX, contTop, contW, contH);
 
+    // 保持底部不超出
     CGFloat bottomLimit = self.view.bounds.size.height - bottomSafe - SW(20);
     CGFloat over = CGRectGetMaxY(self.continueBtn.frame) - bottomLimit;
     if (over > 0) {
