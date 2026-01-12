@@ -20,6 +20,11 @@ static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
         _thumb.contentMode = UIViewContentModeScaleAspectFill;
         [self.contentView addSubview:_thumb];
 
+        self.thumb.contentMode = UIViewContentModeScaleAspectFill;
+        self.thumb.clipsToBounds = YES;
+        self.thumb.layer.magnificationFilter = kCAFilterTrilinear;
+        self.thumb.layer.minificationFilter  = kCAFilterTrilinear;
+
         _check = [UIImageView new];
         _check.translatesAutoresizingMaskIntoConstraints = NO;
         _check.contentMode = UIViewContentModeScaleAspectFit;
