@@ -66,7 +66,7 @@ static inline UIColor *ASHexBlack(void) {
     self.selectedPaths = [NSMutableSet set];
 
     self.thumbOpQ = [NSOperationQueue new];
-    self.thumbOpQ.maxConcurrentOperationCount = 2;
+    self.thumbOpQ.maxConcurrentOperationCount = 4;
     self.thumbOpQ.qualityOfService = NSQualityOfServiceUserInitiated;
 
     self.thumbCache = [NSCache new];
@@ -84,15 +84,18 @@ static inline UIColor *ASHexBlack(void) {
     if (!src) return nil;
 
     NSDictionary *opt = @{
-        (id)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
-        (id)kCGImageSourceThumbnailMaxPixelSize: @(maxPixel),
-        (id)kCGImageSourceCreateThumbnailWithTransform: @YES
+      (id)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+      (id)kCGImageSourceThumbnailMaxPixelSize: @(maxPixel),
+      (id)kCGImageSourceCreateThumbnailWithTransform: @YES,
+      (id)kCGImageSourceShouldCacheImmediately: @YES,
+      (id)kCGImageSourceShouldCache: @YES
     };
+
     CGImageRef cg = CGImageSourceCreateThumbnailAtIndex(src, 0, (__bridge CFDictionaryRef)opt);
     CFRelease(src);
     if (!cg) return nil;
 
-    UIImage *img = [UIImage imageWithCGImage:cg];
+    UIImage *img = [UIImage imageWithCGImage:cg scale:UIScreen.mainScreen.scale orientation:UIImageOrientationUp];
     CGImageRelease(cg);
     return img;
 }
@@ -105,7 +108,7 @@ static inline UIColor *ASHexBlack(void) {
 
     CGImageRef cg = [gen copyCGImageAtTime:CMTimeMakeWithSeconds(0, 600) actualTime:NULL error:nil];
     if (!cg) return nil;
-    UIImage *img = [UIImage imageWithCGImage:cg];
+    UIImage *img = [UIImage imageWithCGImage:cg scale:UIScreen.mainScreen.scale orientation:UIImageOrientationUp];
     CGImageRelease(cg);
     return img;
 }
@@ -547,11 +550,12 @@ static inline UIColor *ASHexBlack(void) {
 
     [picker dismissViewControllerAnimated:YES completion:^{
         if (picked.count == 0) return;
+        __block BOOL anyFailed = NO;
 
         [[ASPrivateMediaStore shared] importFromPickerResults:picked
                                                         type:ws.mediaType
                                                    onOneDone:^(NSURL * _Nullable dstURL, BOOL ok) {
-            if (!ok || !dstURL) return;
+            if (!ok || !dstURL) { anyFailed = YES; return; }
 
             dispatch_async(dispatch_get_main_queue(), ^{
                 NSUInteger insertIndex = ws.items.count;
@@ -578,10 +582,16 @@ static inline UIColor *ASHexBlack(void) {
 
         } completion:^(__unused BOOL ok) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                ws.importNeedsReload = YES;
-                if (ws.pendingBatchUpdates == 0) {
-                    ws.importNeedsReload = NO;
-                    [ws reloadItems];
+                if (anyFailed) {
+                    ws.importNeedsReload = YES;
+                    if (ws.pendingBatchUpdates == 0) {
+                        ws.importNeedsReload = NO;
+                        [ws reloadItems];
+                    }
+                } else {
+                    [ws updateEmptyStateUI];
+                    [ws updateBottomTitle];
+                    [ws updateSelectAllUI];
                 }
             });
         }];
@@ -615,7 +625,9 @@ static inline UIColor *ASHexBlack(void) {
     cell.thumb.image = nil;
 
     CGSize s = ((UICollectionViewFlowLayout *)collectionView.collectionViewLayout).itemSize;
-    CGFloat maxPixel = MAX(s.width, s.height) * UIScreen.mainScreen.scale;
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGFloat oversample = 2.0;
+    CGFloat maxPixel = MAX(s.width, s.height) * scale * oversample;
 
     UIImage *cached = [self.thumbCache objectForKey:rid];
     if (cached) {
