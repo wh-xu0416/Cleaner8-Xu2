@@ -10,19 +10,20 @@
 #pragma mark - Design Scale (402x874, Portrait Only)
 
 static const CGFloat kASDesignBaseWidth  = 402.0;
-static const CGFloat kASDesignBaseHeight = 874.0;
 
 static inline CGFloat ASScaleDown(void) {
-    CGSize sz = UIScreen.mainScreen.bounds.size;
-    CGFloat sw = sz.width  / kASDesignBaseWidth;
-    CGFloat sh = sz.height / kASDesignBaseHeight;
-    return MIN(1.0, MIN(sw, sh));
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return MIN(1.0, w / kASDesignBaseWidth);
 }
 
-static inline CGFloat ASV(CGFloat v)  { return ceil(v * ASScaleDown()); }
+static inline CGFloat ASV(CGFloat v)  { return round(v * ASScaleDown()); }
 static inline CGFloat ASVR(CGFloat v) { return v * ASScaleDown(); }
+static inline CGFloat ASFS(CGFloat s) { return round(s * ASScaleDown()); }
 static inline CGFloat ASClamp(CGFloat v, CGFloat lo, CGFloat hi) { return MIN(MAX(v, lo), hi); }
-static inline CGFloat ASFS(CGFloat s) { return round(s * ASScaleDown()); } 
+
+static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:ASFS(size) weight:weight];
+}
 
 #pragma mark - UI Helpers
 
@@ -33,9 +34,6 @@ static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
 }
 static inline UIColor *ASBlue(void) {
     return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0];
-}
-static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:ASFS(size) weight:weight];
 }
 
 @interface ASNoAuthPlaceholderView : UIView
@@ -268,7 +266,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         CGFloat w = self.view.bounds.size.width;
         CGFloat h = [self.noAuthView preferredHeightForWidth:w];
 
-        CGFloat y = ASV(234);
+        CGFloat y = ASV(214);
 
         CGFloat viewH = self.view.bounds.size.height;
         CGFloat safeBottom = 0;

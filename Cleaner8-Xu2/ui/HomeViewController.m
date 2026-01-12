@@ -1371,7 +1371,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     UIEdgeInsets safe = self.view.safeAreaInsets;
-    self.cv.contentInset = SWInsets(20, 0, safe.bottom + 70, 0);
+    self.cv.contentInset = SWInsets(10, 0, safe.bottom + 70, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 }
 
@@ -2391,7 +2391,7 @@ referenceSizeForHeaderInSection:(NSInteger)section {
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = collectionView.safeAreaInsets.top;
 
-    CGFloat top = safeTop + SW(12);
+    CGFloat top = safeTop;
     CGFloat proH = SW(28);
 
     CGFloat spaceTitleH = SW(16);

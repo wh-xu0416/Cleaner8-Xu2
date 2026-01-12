@@ -30,7 +30,7 @@ static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
 }
 
 static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
+    return SWFontS(size, weight);
 }
 
 static inline UIColor *ASBlue(void) {
@@ -918,7 +918,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [NSLayoutConstraint activateConstraints:@[
         [noAuth.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
         [noAuth.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
-        [noAuth.topAnchor constraintEqualToAnchor:self.permissionBanner.bottomAnchor constant:0],
+        [noAuth.topAnchor constraintEqualToAnchor:self.permissionBanner.bottomAnchor constant:SW(18)],
         noAuthH,
     ]];
 
