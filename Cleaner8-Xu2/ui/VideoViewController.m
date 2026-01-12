@@ -125,21 +125,38 @@ static inline UIColor *ASBlue(void) {
 
 - (CGFloat)preferredHeightForWidth:(CGFloat)width {
     CGFloat w = width;
-    CGFloat top = 60;
-    CGFloat iconBottom = top + 96;
-    CGFloat t1Top = iconBottom + 20;
-    CGFloat t1Bottom = t1Top + 24;
 
-    CGFloat t2W = w - 90;
+    CGFloat top   = ASClamp(ASV(60), 40, 60);
+    CGFloat iconS = ASClamp(ASV(96), 80, 96);
+
+    CGFloat t1Side = ASClamp(ASV(30), 24, 30);
+    CGFloat t2Side = ASClamp(ASV(45), 32, 45);
+
+    CGFloat gap20 = ASClamp(ASV(20), 16, 20);
+    CGFloat gap10 = ASClamp(ASV(10),  8, 10);
+    CGFloat gap50 = ASClamp(ASV(50), 40, 50);
+
+    CGFloat btnH  = ASClamp(ASV(70), 58, 70);
+
+    // icon
+    CGFloat iconBottom = top + iconS;
+
+    // t1
+    CGFloat t1Top = iconBottom + gap20;
+    CGFloat t1Bottom = t1Top + ASV(24);
+
+    // t2
+    CGFloat t2W = w - t2Side * 2;
     CGSize t2Size = [self.t2 sizeThatFits:CGSizeMake(t2W, CGFLOAT_MAX)];
     CGFloat lineH = self.t2.font.lineHeight;
     CGFloat t2H = MIN(t2Size.height, ceil(lineH * 3.0));
 
-    CGFloat t2Top = t1Bottom + 10;
+    CGFloat t2Top = t1Bottom + gap10;
     CGFloat t2Bottom = t2Top + t2H;
 
-    CGFloat btnTop = t2Bottom + 50;
-    CGFloat btnBottom = btnTop + 70;
+    // button
+    CGFloat btnTop = t2Bottom + gap50;
+    CGFloat btnBottom = btnTop + btnH;
 
     return ceil(btnBottom);
 }
