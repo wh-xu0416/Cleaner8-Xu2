@@ -1,6 +1,7 @@
 #import "SwipeManager.h"
 #import "Common.h"
 #import <UIKit/UIKit.h>
+#import <Photos/Photos.h>
 
 NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNotification";
 
@@ -45,7 +46,13 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
 #pragma mark - SwipeManager
 
-@interface SwipeManager ()
+@interface SwipeManager () <PHPhotoLibraryChangeObserver>
+@property (nonatomic, strong) PHFetchResult<PHAsset *> *allFetchResult;
+
+@property (atomic, assign) BOOL pendingReload;
+@property (atomic, assign) BOOL pendingPhotoChange;
+@property (nonatomic, assign) BOOL reloadScheduled;   // 防抖：短时间多次 change 合并一次 reload
+
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *moduleCursorAssetIDByID;
 
 @property (nonatomic, strong) NSMutableArray<SwipeModule *> *mutableModules;
@@ -316,52 +323,68 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 }
 
 - (void)reloadModules {
-    if (self.isReloading) return;
-    self.isReloading = YES;
-
+    @synchronized (self.stateLock) {
+        if (self.isReloading) {
+            self.pendingReload = YES;
+            return;
+        }
+        self.isReloading = YES;
+    }
+   
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        
-        @synchronized (self.stateLock) {
-            
-            PHFetchResult<PHAsset *> *all = [self fetchAllImageAssets];
-            NSArray<NSString *> *allIDs = [self assetIDsFromFetchResult:all];
-            NSSet *allIDSet = [NSSet setWithArray:allIDs];
-            
-            // 1) 清理状态：相册已删除的asset
-            NSMutableArray<NSString *> *toRemove = [NSMutableArray array];
-            [self.statusByAssetID enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSNumber *obj, BOOL *stop) {
-                if (![allIDSet containsObject:key]) [toRemove addObject:key];
-            }];
-            for (NSString *aid in toRemove) {
-                [self.statusByAssetID removeObjectForKey:aid];
-                [self.bytesByAssetID removeObjectForKey:aid];
-                [self.random20AssetIDs removeObject:aid];
-            }
-            
-            // 清理 moduleCursor：相册删除导致指向无效 asset
-            NSMutableArray *cursorKeysToRemove = [NSMutableArray array];
-            [self.moduleCursorAssetIDByID enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *obj, BOOL *stop) {
-                if (![allIDSet containsObject:obj]) [cursorKeysToRemove addObject:key];
-            }];
-            for (NSString *k in cursorKeysToRemove) {
-                [self.moduleCursorAssetIDByID removeObjectForKey:k];
-            }
-            
-            // 清理 undoStacks：去掉已不存在 asset 的记录
-            NSMutableArray *moduleKeysToRemove = [NSMutableArray array];
-            [self.undoStacks enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSMutableArray<SwipeUndoRecord *> *stack, BOOL *stop) {
-                NSIndexSet *bad = [stack indexesOfObjectsPassingTest:^BOOL(SwipeUndoRecord * _Nonnull r, NSUInteger idx, BOOL * _Nonnull stop2) {
-                    return !r.assetID || ![allIDSet containsObject:r.assetID];
-                }];
-                if (bad.count > 0) [stack removeObjectsAtIndexes:bad];
-                if (stack.count == 0) [moduleKeysToRemove addObject:key];
-            }];
-            for (NSString *k in moduleKeysToRemove) {
-                [self.undoStacks removeObjectForKey:k];
-            }
+            NSMutableArray<SwipeModule *> *modules = [NSMutableArray array];
 
-        // 2) 生成模块
-        NSMutableArray<SwipeModule *> *modules = [NSMutableArray array];
+            @synchronized (self.stateLock) {
+                PHFetchResult<PHAsset *> *all = [self fetchAllImageAssets];
+                NSArray<NSString *> *allIDs = [self assetIDsFromFetchResult:all];
+                NSSet *allIDSet = [NSSet setWithArray:allIDs];
+
+                // 如果你确实需要缓存 fetchResult，放在 lock 内写
+                self.allFetchResult = all;
+
+                // 1) 清理状态：相册已删除的asset
+                NSMutableArray<NSString *> *toRemove = [NSMutableArray array];
+                [self.statusByAssetID enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSNumber *obj, BOOL *stop) {
+                    if (![allIDSet containsObject:key]) [toRemove addObject:key];
+                }];
+                for (NSString *aid in toRemove) {
+                    SwipeAssetStatus st = (SwipeAssetStatus)self.statusByAssetID[aid].integerValue;
+
+                    if (st == SwipeAssetStatusArchived) {
+                        NSNumber *b = self.bytesByAssetID[aid];
+                        if (b) {
+                            unsigned long long v = b.unsignedLongLongValue;
+                            if (self.archivedBytesCached >= v) self.archivedBytesCached -= v;
+                        }
+                        // bytesByAssetID 后面也会 remove
+                    }
+
+                    [self.statusByAssetID removeObjectForKey:aid];
+                    [self.bytesByAssetID removeObjectForKey:aid];
+                    [self.random20AssetIDs removeObject:aid];
+                }
+
+                // 清理 moduleCursor
+                NSMutableArray *cursorKeysToRemove = [NSMutableArray array];
+                [self.moduleCursorAssetIDByID enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *obj, BOOL *stop) {
+                    if (![allIDSet containsObject:obj]) [cursorKeysToRemove addObject:key];
+                }];
+                for (NSString *k in cursorKeysToRemove) {
+                    [self.moduleCursorAssetIDByID removeObjectForKey:k];
+                }
+
+                // 清理 undoStacks
+                NSMutableArray *moduleKeysToRemove = [NSMutableArray array];
+                [self.undoStacks enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSMutableArray<SwipeUndoRecord *> *stack, BOOL *stop) {
+                    NSIndexSet *bad = [stack indexesOfObjectsPassingTest:^BOOL(SwipeUndoRecord *r, NSUInteger idx, BOOL *stop2) {
+                        return !r.assetID || ![allIDSet containsObject:r.assetID];
+                    }];
+                    if (bad.count > 0) [stack removeObjectsAtIndexes:bad];
+                    if (stack.count == 0) [moduleKeysToRemove addObject:key];
+                }];
+                for (NSString *k in moduleKeysToRemove) {
+                    [self.undoStacks removeObjectForKey:k];
+                }
 
         // 最近7天：每天一个模块
             {
@@ -526,14 +549,27 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
             }
         }
 
-        // 3) 写回 & 通知
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.mutableModules = modules;
-            self.isReloading = NO;
+                [self normalizeArchivedBytesCacheLocked];
 
-            [self saveStateToDisk];
-            [[NSNotificationCenter defaultCenter] postNotificationName:SwipeManagerDidUpdateNotification object:self];
-        });
+        // 3) 写回 & 通知
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    self.mutableModules = modules;
+
+                    BOOL needAgain = NO;
+                    @synchronized (self.stateLock) {
+                        self.isReloading = NO;
+                        needAgain = self.pendingReload;
+                        self.pendingReload = NO;
+                    }
+
+                    [self saveStateToDisk];
+                    [[NSNotificationCenter defaultCenter] postNotificationName:SwipeManagerDidUpdateNotification
+                                                                        object:self];
+
+                    if (needAgain) {
+                        [self scheduleReloadModules];
+                    }
+                });
         }
 
     });
@@ -586,10 +622,17 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
                 // 如果之前是 Archived，必须扣掉缓存并清掉 bytes 记录
                 if (prev == SwipeAssetStatusArchived) {
+                    unsigned long long v = 0;
                     NSNumber *b = self.bytesByAssetID[aid];
                     if (b) {
-                        unsigned long long v = b.unsignedLongLongValue;
-                        if (self.archivedBytesCached >= v) self.archivedBytesCached -= v;
+                        v = b.unsignedLongLongValue;
+                    } else {
+                        // bytes 缺失：补算一次，保证缓存能扣回去
+                        v = [self quickAssetBytes:aid];
+                    }
+
+                    if (v > 0 && self.archivedBytesCached >= v) {
+                        self.archivedBytesCached -= v;
                     }
                     [self.bytesByAssetID removeObjectForKey:aid];
                 }
@@ -599,6 +642,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
             }
 
              [self.undoStacks removeAllObjects];
+            [self normalizeArchivedBytesCacheLocked];
         }
 
         [self saveStateToDisk];
@@ -798,6 +842,43 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
 #pragma mark - Bytes helper
 
+- (void)normalizeArchivedBytesCacheLocked {
+    // 必须在 @synchronized(self.stateLock) 内调用
+    __block BOOL hasArchived = NO;
+
+    [self.statusByAssetID enumerateKeysAndObjectsUsingBlock:^(NSString *aid, NSNumber *st, BOOL *stop) {
+        if (st.integerValue == SwipeAssetStatusArchived) {
+            hasArchived = YES;
+            *stop = YES;
+        }
+    }];
+
+    if (!hasArchived) {
+        self.archivedBytesCached = 0;
+        [self.bytesByAssetID removeAllObjects];
+        return;
+    }
+
+    // 清理 bytesByAssetID 中“非 Archived”的残留 key
+    NSMutableArray<NSString *> *badKeys = [NSMutableArray array];
+    [self.bytesByAssetID enumerateKeysAndObjectsUsingBlock:^(NSString *aid, NSNumber *b, BOOL *stop) {
+        NSNumber *st = self.statusByAssetID[aid];
+        if (st.integerValue != SwipeAssetStatusArchived) {
+            [badKeys addObject:aid];
+        }
+    }];
+    if (badKeys.count) {
+        [self.bytesByAssetID removeObjectsForKeys:badKeys];
+    }
+
+    // 重新汇总（只用现有 bytesByAssetID，缺的后面 refreshArchivedBytesIfNeeded 再补）
+    unsigned long long sum = 0;
+    for (NSNumber *b in self.bytesByAssetID.allValues) {
+        sum += b.unsignedLongLongValue;
+    }
+    self.archivedBytesCached = sum;
+}
+
 - (unsigned long long)quickAssetBytes:(NSString *)assetID {
     PHAsset *asset = [self assetForID:assetID];
     if (!asset) return 0;
@@ -894,6 +975,18 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
         if (completion) completion(YES, nil);
         return;
     }
+    
+    NSMutableDictionary<NSString*, NSNumber*> *toSubtract = [NSMutableDictionary dictionary];
+
+    @synchronized (self.stateLock) {
+        for (NSString *aid in assetIDs) {
+            if ([self statusForAssetID:aid] != SwipeAssetStatusArchived) continue;
+
+            NSNumber *b = self.bytesByAssetID[aid];
+            unsigned long long v = b ? b.unsignedLongLongValue : [self quickAssetBytes:aid];
+            if (v > 0) toSubtract[aid] = @(v);
+        }
+    }
 
     NSArray<PHAsset *> *assets = [self assetsForIDs:assetIDs];
     if (assets.count == 0) {
@@ -911,21 +1004,21 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
         [PHAssetChangeRequest deleteAssets:assets];
     } completionHandler:^(BOOL success, NSError * _Nullable error) {
         if (success) {
-            // 状态清理：删除后 change observer 也会触发 reload
             dispatch_async(dispatch_get_main_queue(), ^{
-                for (NSString *aid in assetIDs) {
-                    // 如果删除的是归档的，扣除缓存
-                    SwipeAssetStatus prev = [self statusForAssetID:aid];
-                    if (prev == SwipeAssetStatusArchived) {
-                        NSNumber *b = self.bytesByAssetID[aid];
-                        if (b && self.archivedBytesCached >= b.unsignedLongLongValue) {
-                            self.archivedBytesCached -= b.unsignedLongLongValue;
-                        }
+                unsigned long long sub = 0;
+                for (NSNumber *n in toSubtract.allValues) sub += n.unsignedLongLongValue;
+
+                @synchronized (self.stateLock) {
+                    if (self.archivedBytesCached >= sub) self.archivedBytesCached -= sub;
+                    // 清理状态
+                    for (NSString *aid in assetIDs) {
+                        [self.statusByAssetID removeObjectForKey:aid];
+                        [self.bytesByAssetID removeObjectForKey:aid];
+                        [self.random20AssetIDs removeObject:aid];
                     }
-                    [self.statusByAssetID removeObjectForKey:aid];
-                    [self.bytesByAssetID removeObjectForKey:aid];
-                    [self.random20AssetIDs removeObject:aid];
+                    [self normalizeArchivedBytesCacheLocked];
                 }
+
                 [self saveStateToDisk];
                 [[NSNotificationCenter defaultCenter] postNotificationName:SwipeManagerDidUpdateNotification object:self];
             });
@@ -941,8 +1034,38 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 #pragma mark - PHPhotoLibraryChangeObserver
 
 - (void)photoLibraryDidChange:(PHChange *)changeInstance {
+    [self scheduleReloadModules];
+}
+
+- (void)reloadModulesCoalesced {
+    // 如果正在 reload，就只标记 pendingReload，等这轮结束再来一次
+    @synchronized (self.stateLock) {
+        if (self.isReloading) {
+            self.pendingReload = YES;
+            return;
+        }
+    }
+    [self reloadModules];
+}
+
+- (void)scheduleReloadModules {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self reloadModules];
+        // 如果正在 reload，直接标记 pending，等 reload 结束会自动 schedule
+        @synchronized (self.stateLock) {
+            if (self.isReloading) {
+                self.pendingReload = YES;
+                return;
+            }
+        }
+
+        if (self.reloadScheduled) return;
+        self.reloadScheduled = YES;
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            self.reloadScheduled = NO;
+            [self reloadModules];
+        });
     });
 }
 

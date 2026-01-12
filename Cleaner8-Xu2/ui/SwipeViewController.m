@@ -549,11 +549,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 @property (nonatomic, strong) UICollectionView *recentCV;
 
 @property (nonatomic, strong) UILabel *yearTitleLabel;
-@property (nonatomic, strong) UIButton *yearMoreBtn;
 @property (nonatomic, strong) UICollectionView *monthCV;
 
 @property (nonatomic, strong) UILabel *othersTitleLabel;
-@property (nonatomic, strong) UIButton *othersMoreBtn;
 @property (nonatomic, strong) UICollectionView *othersCV;
 
 @property (nonatomic, strong) NSArray<SwipeModule *> *recentModules;
@@ -1118,11 +1116,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.yearTitleLabel.text = @"";
     [self.monthSectionView addSubview:self.yearTitleLabel];
 
-    self.yearMoreBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    self.yearMoreBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.yearMoreBtn setImage:[UIImage imageNamed:@"ic_todo_small"] forState:UIControlStateNormal];
-    [self.monthSectionView addSubview:self.yearMoreBtn];
-
     UICollectionViewFlowLayout *monthLayout = [UICollectionViewFlowLayout new];
     monthLayout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
     monthLayout.minimumLineSpacing = SW(10);
@@ -1142,11 +1135,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.yearTitleLabel.leadingAnchor constraintEqualToAnchor:self.monthSectionView.leadingAnchor constant:SW(15)],
         [self.yearTitleLabel.topAnchor constraintEqualToAnchor:self.monthSectionView.topAnchor],
 
-        [self.yearMoreBtn.trailingAnchor constraintEqualToAnchor:self.monthSectionView.trailingAnchor constant:-SW(15)],
-        [self.yearMoreBtn.centerYAnchor constraintEqualToAnchor:self.yearTitleLabel.centerYAnchor],
-        [self.yearMoreBtn.widthAnchor constraintEqualToConstant:SW(40)],
-        [self.yearMoreBtn.heightAnchor constraintEqualToConstant:SW(24)],
-
         [self.monthCV.leadingAnchor constraintEqualToAnchor:self.monthSectionView.leadingAnchor],
         [self.monthCV.trailingAnchor constraintEqualToAnchor:self.monthSectionView.trailingAnchor],
         [self.monthCV.topAnchor constraintEqualToAnchor:self.yearTitleLabel.bottomAnchor constant:SW(10)],
@@ -1160,11 +1148,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.othersTitleLabel.font = SWFont(20, UIFontWeightSemibold);
     self.othersTitleLabel.text = NSLocalizedString(@"Others", nil);
     [self.othersSectionView addSubview:self.othersTitleLabel];
-
-    self.othersMoreBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    self.othersMoreBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.othersMoreBtn setImage:[UIImage imageNamed:@"ic_todo_small"] forState:UIControlStateNormal];
-    [self.othersSectionView addSubview:self.othersMoreBtn];
 
     UICollectionViewFlowLayout *otherLayout = [UICollectionViewFlowLayout new];
     otherLayout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
@@ -1184,12 +1167,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     [NSLayoutConstraint activateConstraints:@[
         [self.othersTitleLabel.leadingAnchor constraintEqualToAnchor:self.othersSectionView.leadingAnchor constant:SW(15)],
         [self.othersTitleLabel.topAnchor constraintEqualToAnchor:self.othersSectionView.topAnchor],
-
-        [self.othersMoreBtn.trailingAnchor constraintEqualToAnchor:self.othersSectionView.trailingAnchor constant:-SW(15)],
-        [self.othersMoreBtn.centerYAnchor constraintEqualToAnchor:self.othersTitleLabel.centerYAnchor],
-        [self.othersMoreBtn.widthAnchor constraintEqualToConstant:SW(40)],
-        [self.othersMoreBtn.heightAnchor constraintEqualToConstant:SW(24)],
-
+        
         [self.othersCV.leadingAnchor constraintEqualToAnchor:self.othersSectionView.leadingAnchor],
         [self.othersCV.trailingAnchor constraintEqualToAnchor:self.othersSectionView.trailingAnchor],
         [self.othersCV.topAnchor constraintEqualToAnchor:self.othersTitleLabel.bottomAnchor constant:SW(10)],
@@ -1239,11 +1217,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.recentCV.hidden = !showSections;
 
     self.yearTitleLabel.hidden = !showSections;
-    self.yearMoreBtn.hidden = !showSections;
     self.monthCV.hidden = !showSections;
 
     self.othersTitleLabel.hidden = !showSections;
-    self.othersMoreBtn.hidden = !showSections;
     self.othersCV.hidden = !showSections;
 
     self.permissionBannerHeightC.constant = self.sw_isLimitedAuth ? SW(150.0) : 0.0;

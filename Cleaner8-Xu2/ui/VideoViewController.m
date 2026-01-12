@@ -700,13 +700,13 @@ static inline UIColor *ASBlue(void) {
     t1.translatesAutoresizingMaskIntoConstraints = NO;
     t1.text = title;
     t1.textColor = UIColor.blackColor;
-    t1.font = ASFont(24, UIFontWeightMedium);
+    t1.font = ASFont(24, UIFontWeightRegular);
 
     UILabel *t2 = [UILabel new];
     t2.translatesAutoresizingMaskIntoConstraints = NO;
     t2.text = subtitle;
     t2.textColor = UIColor.blackColor;
-    t2.font = ASFont(17, UIFontWeightMedium);
+    t2.font = ASFont(17, UIFontWeightRegular);
 
     [card addSubview:t1];
     [card addSubview:t2];
@@ -798,7 +798,7 @@ static inline UIColor *ASBlue(void) {
     t1.translatesAutoresizingMaskIntoConstraints = NO;
     t1.text = title;
     t1.textColor = UIColor.blackColor;
-    t1.font = ASFont(24, UIFontWeightMedium);
+    t1.font = ASFont(24, UIFontWeightRegular);
     [row addSubview:t1];
 
     UILabel *t2 = nil;
@@ -807,7 +807,7 @@ static inline UIColor *ASBlue(void) {
         t2.translatesAutoresizingMaskIntoConstraints = NO;
         t2.text = subtitle;
         t2.textColor = UIColor.blackColor;
-        t2.font = ASFont(17, UIFontWeightMedium);
+        t2.font = ASFont(17, UIFontWeightRegular);
         [row addSubview:t2];
     }
 
