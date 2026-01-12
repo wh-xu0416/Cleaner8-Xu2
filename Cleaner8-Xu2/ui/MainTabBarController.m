@@ -1,6 +1,5 @@
 #import "MainTabBarController.h"
 #import "ASFloatingTabBar.h"
-#import "HomeViewController.h"
 #import "VideoViewController.h"
 #import "PrivateViewController.h"
 #import "SwipeViewController.h"
@@ -45,7 +44,6 @@ UIGestureRecognizerDelegate
     [super viewDidLoad];
 
     self.viewControllers = @[
-        [self navWithVC:[HomeViewController new]   title:NSLocalizedString(@"Cleaner", nil) image:@""],
         [self navWithVC:[VideoViewController new]  title:NSLocalizedString(@"Compress", nil) image:@""],
         [self navWithVC:[SwipeViewController new]  title:NSLocalizedString(@"Swipe", nil) image:@""],
         [self navWithVC:[PrivateViewController new]title:NSLocalizedString(@"Private", nil) image:@""],
@@ -55,7 +53,6 @@ UIGestureRecognizerDelegate
     self.tabBar.hidden = YES;
 
     self.floatingTab = [[ASFloatingTabBar alloc] initWithItems:@[
-        [ASFloatingTabBarItem itemWithTitle:NSLocalizedString(@"Cleaner", nil) normal:@"ic_cleaner_n" selected:@"ic_cleaner_s"],
         [ASFloatingTabBarItem itemWithTitle:NSLocalizedString(@"Compress", nil) normal:@"ic_video_n"  selected:@"ic_video_s"],
         [ASFloatingTabBarItem itemWithTitle:NSLocalizedString(@"Swipe", nil) normal:@"ic_swipe_n" selected:@"ic_swipe_s"],
         [ASFloatingTabBarItem itemWithTitle:NSLocalizedString(@"Private", nil) normal:@"ic_private_n" selected:@"ic_private_s"],
@@ -91,7 +88,7 @@ UIGestureRecognizerDelegate
       willShowViewController:(UIViewController *)vc
                     animated:(BOOL)animated {
 
-    BOOL hide = [vc isKindOfClass:HomeViewController.class];
+    BOOL hide = [vc isKindOfClass:VideoViewController.class];
     [nav setNavigationBarHidden:hide animated:animated];
 }
 
