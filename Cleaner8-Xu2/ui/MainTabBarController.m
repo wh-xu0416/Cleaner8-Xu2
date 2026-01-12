@@ -96,7 +96,7 @@ UIGestureRecognizerDelegate
     [super viewDidLayoutSubviews];
 
     CGFloat w = self.view.bounds.size.width;
-    CGFloat h = SW(70);
+    CGFloat h = SW(80);
     CGFloat side = SW(15);
     CGFloat bottom = self.view.safeAreaInsets.bottom;
 

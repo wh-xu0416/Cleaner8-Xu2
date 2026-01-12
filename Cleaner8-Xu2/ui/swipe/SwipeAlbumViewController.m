@@ -785,19 +785,19 @@ static inline NSString *SWImgKey(NSString *prefix, NSString *aid, CGSize px) {
 
     self.nextAlbumBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.nextAlbumBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    self.nextAlbumBtn.backgroundColor = SWHexRGBA(0x024DFFFF);
+    self.nextAlbumBtn.backgroundColor = SWHexRGBA(0xF6F6F6FF);
     self.nextAlbumBtn.layer.cornerRadius = SW(25);
     self.nextAlbumBtn.titleLabel.font = SWFontS(17, UIFontWeightRegular);
-    [self.nextAlbumBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    [self.nextAlbumBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     [self.nextAlbumBtn addTarget:self action:@selector(onNextAlbum) forControlEvents:UIControlEventTouchUpInside];
     [self.doneCard addSubview:self.nextAlbumBtn];
 
     self.viewArchivedBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.viewArchivedBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    self.viewArchivedBtn.backgroundColor = SWHexRGBA(0xF6F6F6FF);
+    self.viewArchivedBtn.backgroundColor = SWHexRGBA(0x024DFFFF);
     self.viewArchivedBtn.layer.cornerRadius = SW(25);
     self.viewArchivedBtn.titleLabel.font = SWFontS(17, UIFontWeightMedium);
-    [self.viewArchivedBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+    [self.viewArchivedBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.viewArchivedBtn addTarget:self action:@selector(onViewArchived) forControlEvents:UIControlEventTouchUpInside];
     [self.doneCard addSubview:self.viewArchivedBtn];
 
@@ -826,21 +826,20 @@ static inline NSString *SWImgKey(NSString *prefix, NSString *aid, CGSize px) {
         [self.doneArchiveValue.centerXAnchor constraintEqualToAnchor:self.doneArchiveTitle.centerXAnchor],
         [self.doneArchiveValue.topAnchor constraintEqualToAnchor:self.doneArchiveTitle.bottomAnchor constant:SW(6)],
 
-        // Right column
         [self.doneKeepTitle.centerXAnchor constraintEqualToAnchor:self.doneTable.trailingAnchor constant:-SW(70)],
         [self.doneKeepTitle.topAnchor constraintEqualToAnchor:self.doneTable.topAnchor constant:SW(14)],
         [self.doneKeepValue.centerXAnchor constraintEqualToAnchor:self.doneKeepTitle.centerXAnchor],
         [self.doneKeepValue.topAnchor constraintEqualToAnchor:self.doneKeepTitle.bottomAnchor constant:SW(6)],
 
-        [self.nextAlbumBtn.topAnchor constraintEqualToAnchor:self.doneTable.bottomAnchor constant:SW(30)],
-        [self.nextAlbumBtn.leadingAnchor constraintEqualToAnchor:self.doneCard.leadingAnchor constant:SW(25)],
-        [self.nextAlbumBtn.trailingAnchor constraintEqualToAnchor:self.doneCard.trailingAnchor constant:-SW(25)],
-        [self.nextAlbumBtn.heightAnchor constraintEqualToConstant:SW(52)],
-
-        [self.viewArchivedBtn.topAnchor constraintEqualToAnchor:self.nextAlbumBtn.bottomAnchor constant:SW(15)],
+        [self.viewArchivedBtn.topAnchor constraintEqualToAnchor:self.doneTable.bottomAnchor constant:SW(30)],
         [self.viewArchivedBtn.leadingAnchor constraintEqualToAnchor:self.doneCard.leadingAnchor constant:SW(25)],
         [self.viewArchivedBtn.trailingAnchor constraintEqualToAnchor:self.doneCard.trailingAnchor constant:-SW(25)],
         [self.viewArchivedBtn.heightAnchor constraintEqualToConstant:SW(52)],
+
+        [self.nextAlbumBtn.topAnchor constraintEqualToAnchor:self.viewArchivedBtn.bottomAnchor constant:SW(15)],
+        [self.nextAlbumBtn.leadingAnchor constraintEqualToAnchor:self.doneCard.leadingAnchor constant:SW(25)],
+        [self.nextAlbumBtn.trailingAnchor constraintEqualToAnchor:self.doneCard.trailingAnchor constant:-SW(25)],
+        [self.nextAlbumBtn.heightAnchor constraintEqualToConstant:SW(52)],
     ]];
 }
 
@@ -864,9 +863,11 @@ static inline NSString *SWImgKey(NSString *prefix, NSString *aid, CGSize px) {
 #pragma mark - Data / Notifications
 
 - (void)handleUpdate {
-    if (self.cardAnimating) return;
-    if (self.sw_actionLocked) return;
-
+    if (self.cardAnimating || self.sw_actionLocked) {
+        self.sw_needsRefreshOnAppear = YES;
+        return;
+    }
+    
     if (!self.isViewLoaded || self.view.window == nil) {
         self.sw_needsRefreshOnAppear = YES;
         return;
@@ -1148,9 +1149,9 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
 
         NSAttributedString *attTitle =
             SWNextAlbumAttributedTitle(left,
-                                      right,
-                                      SWFontS(17, UIFontWeightRegular),
-                                      UIColor.whiteColor);
+                                       right,
+                                       SWFontS(17, UIFontWeightRegular),
+                                       UIColor.blackColor);
 
         [self.nextAlbumBtn setAttributedTitle:attTitle forState:UIControlStateNormal];
         self.nextAlbumBtn.hidden = NO;
@@ -1792,6 +1793,10 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         self.archiveBtn.userInteractionEnabled = YES;
         self.keepBtn.userInteractionEnabled = YES;
         self.cardAnimating = NO;
+        if (self.sw_needsRefreshOnAppear) {
+            self.sw_needsRefreshOnAppear = NO;
+            [self reloadFromManagerAndRender:NO];
+        }
     }];
 }
 
@@ -1980,7 +1985,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     UIButton *viewBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     viewBtn.translatesAutoresizingMaskIntoConstraints = NO;
     viewBtn.backgroundColor = SWHexRGBA(0x024DFFFF);
-    viewBtn.layer.cornerRadius = SW(16);
+    viewBtn.layer.cornerRadius = SW(25);
     viewBtn.titleLabel.font = SWFontS(17, UIFontWeightRegular);
     [viewBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [viewBtn addTarget:self action:@selector(sw_exitViewArchivedTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -1990,7 +1995,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     UIButton *laterBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     laterBtn.translatesAutoresizingMaskIntoConstraints = NO;
     laterBtn.backgroundColor = SWHexRGBA(0xF6F6F6FF);
-    laterBtn.layer.cornerRadius = SW(16);
+    laterBtn.layer.cornerRadius = SW(25);
     laterBtn.titleLabel.font = SWFontS(17, UIFontWeightMedium);
     [laterBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     [laterBtn setTitle:NSLocalizedString(@"Later", nil) forState:UIControlStateNormal];
@@ -2615,6 +2620,10 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     self.sortIconBtn.userInteractionEnabled = YES;
 
     [self attachPanToTopCard];
+    if (self.sw_needsRefreshOnAppear) {
+        self.sw_needsRefreshOnAppear = NO;
+        [self reloadFromManagerAndRender:NO];
+    }
 }
 
 - (void)sw_applyTop3CardsAnimated:(BOOL)animated {
