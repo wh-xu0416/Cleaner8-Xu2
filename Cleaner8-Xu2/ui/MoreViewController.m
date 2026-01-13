@@ -33,7 +33,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 @property(nonatomic,strong) UILabel *titleLab;
 
 @property(nonatomic,strong) UIControl *contactCard;
-@property(nonatomic,strong) UIControl *feedbackCard;
 @property(nonatomic,strong) UIControl *settingCard;
 
 @end
@@ -94,12 +93,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
                                        rightValue:@"ic_todo_small"
                                            action:@selector(tapContact)];
 
-    self.feedbackCard = [self buildCardWithLeftIcon:@"ic_feedback_more"
-                                          leftText:NSLocalizedString(@"Feedback", nil)
-                                         rightType:@"image"
-                                        rightValue:@"ic_todo_small"
-                                            action:@selector(tapFeedBack)];
-
     self.settingCard = [self buildCardWithLeftIcon:@"ic_setting_more"
                                          leftText:NSLocalizedString(@"Setting", nil)
                                         rightType:@"image"
@@ -107,7 +100,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
                                            action:@selector(tapSetting)];
 
     [self.view addSubview:self.contactCard];
-    [self.view addSubview:self.feedbackCard];
     [self.view addSubview:self.settingCard];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -118,11 +110,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         [self.contactCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(20)],
         [self.contactCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(20)],
 
-        [self.feedbackCard.topAnchor constraintEqualToAnchor:self.contactCard.bottomAnchor constant:SW(20)],
-        [self.feedbackCard.leadingAnchor constraintEqualToAnchor:self.contactCard.leadingAnchor],
-        [self.feedbackCard.trailingAnchor constraintEqualToAnchor:self.contactCard.trailingAnchor],
-
-        [self.settingCard.topAnchor constraintEqualToAnchor:self.feedbackCard.bottomAnchor constant:SW(20)],
+        [self.settingCard.topAnchor constraintEqualToAnchor:self.contactCard.bottomAnchor constant:SW(20)],
         [self.settingCard.leadingAnchor constraintEqualToAnchor:self.contactCard.leadingAnchor],
         [self.settingCard.trailingAnchor constraintEqualToAnchor:self.contactCard.trailingAnchor],
     ]];
@@ -220,10 +208,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     if (![nav isKindOfClass:UINavigationController.class]) return;
     ASContactsViewController *contactsViewController = [[ASContactsViewController alloc] init];
     [nav pushViewController:contactsViewController animated:YES];
-}
-
-- (void)tapFeedBack {
-    
 }
 
 - (void)tapSetting {
