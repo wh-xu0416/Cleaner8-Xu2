@@ -713,8 +713,6 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     uint64_t freeBytes = simBytes + dupBytes + recBytes + bigBytes;
     NSString *freeStr = ASHumanSizeTight(freeBytes);
 
-    // 这里按“items”理解：dupVid.count / simVid.count
-    // 如果你想让 Duplicate 显示“组数”，改成：dup.count（并且筛 type）即可
     NSString *line2 = [NSString stringWithFormat:NSLocalizedString(@"%lu Duplicates & %lu Similar Items Found", nil),
                        (unsigned long)dupVid.count,
                        (unsigned long)simVid.count];
@@ -722,7 +720,6 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     self.summaryLine1.attributedText = [self as_attrSummary1WithSize:freeStr];
     self.summaryLine2.attributedText = [self as_attrSummary2WithString:line2];
 
-    // 封面：扫描中 thumb 只设置一次；finished 可重算（但也不会频繁）
     NSArray<ASVideoSubCardVM *> *old = self.modules ?: @[];
 
     ASVideoSubCardVM *(^makeVM)(ASVideoSubCardType, NSString *, NSArray<NSString *> *, NSUInteger, uint64_t) =

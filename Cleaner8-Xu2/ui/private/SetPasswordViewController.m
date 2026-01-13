@@ -63,8 +63,6 @@ static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat
     self.nav.showRightButton = NO;
     [self.view addSubview:self.nav];
 
-    // 原来 88，这里做缩放。注意：如果你的 ASCustomNavBar 内部已考虑 safeTop，
-    // 这里保持你原样的“总高”，只是缩放即可。
     [NSLayoutConstraint activateConstraints:@[
         [self.nav.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.nav.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],

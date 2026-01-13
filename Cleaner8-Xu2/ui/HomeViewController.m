@@ -1794,7 +1794,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return;
     }
 
-    // 你现在用 0.25s timer + 0.6s gate，建议直接把 timer 改成 0.6s（见后面 D）
     self.pendingScanUIUpdate = NO;
 
     __weak typeof(self) weakSelf = self;
@@ -1802,7 +1801,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
 
-        ASScanUIResult *r = [self buildScanUIResultDuringScanning]; // 重活：后台算
+        ASScanUIResult *r = [self buildScanUIResultDuringScanning];
 
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) self2 = weakSelf;
@@ -2556,7 +2555,6 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     if (s2.width <= 1 || s2.height <= 1) s2 = CGSizeMake(SW(120), SW(120));
     CGSize t2 = CGSizeMake(MAX(1, s2.width * scale), MAX(1, s2.height * scale));
 
-    // options（可复用你原来的配置）
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.networkAccessAllowed = YES;
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
@@ -2566,7 +2564,7 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     __weak typeof(self) weakSelf = self;
     NSArray<NSString *> *idsCopy = [ids copy]; // 防止外面改动
 
-    // 1) 后台取 PHAsset（缓存 + 批量 fetch）
+    // 后台取 PHAsset（缓存 + 批量 fetch）
     dispatch_async(self.photoFetchQueue, ^{
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
@@ -2577,7 +2575,7 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
         PHAsset *a0 = assets.count > 0 ? assets[0] : nil;
         PHAsset *a1 = assets.count > 1 ? assets[1] : nil;
 
-        // 2) 回主线程做 requestImage + UI set（避免跨线程写 cell/collectionView）
+        // 回主线程做 requestImage + UI set（避免跨线程写 cell/collectionView）
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) self2 = weakSelf;
             if (!self2) return;

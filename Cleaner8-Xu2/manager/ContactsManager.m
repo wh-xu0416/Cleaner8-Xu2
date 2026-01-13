@@ -491,7 +491,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
               idxAttr[NSFileSize],
               idxErr);
 
-        // 7) 再打印一下目录里到底有什么（你现在就是这里能看见除了 index.json 之外的文件）
         NSError *dirErr = nil;
         NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:[self _backupRootURL].path error:&dirErr];
         NSLog(@"[CM][backup] dir files=%@ err=%@", files, dirErr);
@@ -681,7 +680,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
 - (void)restoreContactsFromBackupId:(NSString *)backupId
              contactIndicesInBackup:(NSArray<NSNumber *> *)indices
                         completion:(CMVoidBlock)completion {
-    // 先把备份里解析出来，然后根据 indices 选中，再逐个 addContact
     [self fetchContactsInBackupId:backupId completion:^(NSArray<CNContact *> * _Nullable contacts, NSError * _Nullable error) {
         if (error || !contacts) { if (completion) completion(error); return; }
 
@@ -690,7 +688,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
             NSMutableArray<CNContact *> *selected = [NSMutableArray array];
 
             if (indices.count == 0) {
-                // 若传空：默认全部恢复（你也可以改成报错）
                 [selected addObjectsFromArray:contacts];
             } else {
                 for (NSNumber *n in indices) {
@@ -876,10 +873,8 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
             }
         }
 
-        // 用 primary 做 update（不新建联系人）
         CNMutableContact *merged = [primary mutableCopy];
 
-        // 用“字符串”做去重（可选，但很实用）
         NSMutableSet<NSString *> *phoneKeySet = [NSMutableSet set];
 
         NSMutableArray *phones = [NSMutableArray array];
@@ -887,7 +882,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
         NSMutableArray *addrs  = [NSMutableArray array];
         NSMutableArray *urls   = [NSMutableArray array];
 
-        // helper：clone labeled value（关键点：不要复用原来的 CNLabeledValue）
         CNLabeledValue* (^CloneLV)(CNLabeledValue*) = ^CNLabeledValue* (CNLabeledValue *lv) {
             if (!lv) return nil;
             return [CNLabeledValue labeledValueWithLabel:lv.label value:lv.value];
@@ -900,7 +894,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
                     NSString *p = lv.value.stringValue ?: @"";
                     if (p.length == 0) continue;
 
-                    // 去重 key（简单：按原字符串；你也可以改成只保留数字）
                     if ([phoneKeySet containsObject:p]) continue;
                     [phoneKeySet addObject:p];
 
@@ -933,7 +926,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
                 }
             }
 
-            // 其它字段：按你原逻辑补齐
             if (merged.organizationName.length == 0 && [c isKeyAvailable:CNContactOrganizationNameKey] && c.organizationName.length > 0) {
                 merged.organizationName = c.organizationName;
             }
@@ -1207,7 +1199,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
 #pragma mark - Smart Restore Helpers
 
 - (NSArray<id<CNKeyDescriptor>> *)_keysForSmartRestoreFetch {
-    // 需要“可更新”的 key：你要改哪些字段，就要 fetch 哪些字段
     return @[
         CNContactIdentifierKey,
 
@@ -1578,7 +1569,6 @@ static inline BOOL CMIsEmptyStr(NSString *s) {
                                     userInfo:@{NSLocalizedDescriptionKey:@"Enumerate contacts failed"}];
         }
 
-        // 组装 groups（你 UI 可以按组展示）
         NSMutableArray<CMIncompleteGroup *> *groups = [NSMutableArray array];
         if (missBoth.count > 0) {
             CMIncompleteGroup *g = [CMIncompleteGroup new];

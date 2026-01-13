@@ -338,10 +338,8 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
                 NSArray<NSString *> *allIDs = [self assetIDsFromFetchResult:all];
                 NSSet *allIDSet = [NSSet setWithArray:allIDs];
 
-                // 如果你确实需要缓存 fetchResult，放在 lock 内写
                 self.allFetchResult = all;
 
-                // 1) 清理状态：相册已删除的asset
                 NSMutableArray<NSString *> *toRemove = [NSMutableArray array];
                 [self.statusByAssetID enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSNumber *obj, BOOL *stop) {
                     if (![allIDSet containsObject:key]) [toRemove addObject:key];
@@ -355,7 +353,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
                             unsigned long long v = b.unsignedLongLongValue;
                             if (self.archivedBytesCached >= v) self.archivedBytesCached -= v;
                         }
-                        // bytesByAssetID 后面也会 remove
                     }
 
                     [self.statusByAssetID removeObjectForKey:aid];
@@ -363,7 +360,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
                     [self.random20AssetIDs removeObject:aid];
                 }
 
-                // 清理 moduleCursor
                 NSMutableArray *cursorKeysToRemove = [NSMutableArray array];
                 [self.moduleCursorAssetIDByID enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *obj, BOOL *stop) {
                     if (![allIDSet containsObject:obj]) [cursorKeysToRemove addObject:key];
@@ -372,7 +368,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
                     [self.moduleCursorAssetIDByID removeObjectForKey:k];
                 }
 
-                // 清理 undoStack：移除相册已不存在的 asset
                 NSIndexSet *bad = [self.undoStack indexesOfObjectsPassingTest:^BOOL(SwipeUndoRecord *r, NSUInteger idx, BOOL *stop) {
                     return (r.assetID.length == 0) || ![allIDSet containsObject:r.assetID];
                 }];
@@ -1060,7 +1055,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
     @synchronized (self.stateLock) {
 
-        // 1) 清掉栈里已经不存在的 asset（可选但推荐）
+        // 1) 清掉栈里已经不存在的 asset
         for (NSInteger i = (NSInteger)self.undoStack.count - 1; i >= 0; i--) {
             SwipeUndoRecord *r = self.undoStack[i];
             if (r.assetID.length == 0 || [self assetForID:r.assetID] == nil) {

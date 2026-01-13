@@ -626,7 +626,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         NSMutableArray<NSNumber *> *idxs = [NSMutableArray array];
         for (NSInteger i = 0; i < (NSInteger)self.contacts.count; i++) [idxs addObject:@(i)];
 
-        // 你想保持排序也行：按名字排序（可留可删）
         [idxs sortUsingComparator:^NSComparisonResult(NSNumber *n1, NSNumber *n2) {
             CNContact *c1 = self.contacts[n1.integerValue];
             CNContact *c2 = self.contacts[n2.integerValue];

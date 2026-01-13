@@ -1059,7 +1059,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
     BOOL busy = self.fullScanRunning || self.incrementalRunning;
 
-    // 1) 忙时：只处理“权限被撤销/未决定”
     if (busy) {
         if (current == ASPhotoAuthStateNone || raw == PHAuthorizationStatusNotDetermined) {
             [self cancel];
@@ -1071,7 +1070,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         return token;
     }
 
-    // 2) 未决定：请求权限
     if (raw == PHAuthorizationStatusNotDetermined) {
         __weak typeof(self) weakSelf = self;
         [self as_requestPhotoPermission:^(ASPhotoAuthState st) {
@@ -1093,7 +1091,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         return token;
     }
 
-    // 3) 已经无权限
     if (current == ASPhotoAuthStateNone) {
         [self as_storeAuthState:ASPhotoAuthStateNone];
         showPlaceholderOnMain();
@@ -1102,7 +1099,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         return token;
     }
 
-    // 4) 历史权限没记录：当作变化，全量
     if (!hasStored) {
         [self as_storeAuthState:current];
         [self dropCacheFile];
@@ -1110,7 +1106,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         return token;
     }
 
-    // 5) 权限变化：无视缓存，全量
     if (last != current) {
         [self as_storeAuthState:current];
         [self dropCacheFile];
@@ -1118,7 +1113,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         return token;
     }
 
-    // 6) 权限没变：先用缓存（必须 finished），然后 schedule 增量
     [self as_storeAuthState:current];
 
     if ([self loadCacheIfExists]) {
@@ -1129,7 +1123,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
             ASScanState st = self.cache.snapshot.state;
 
             if (st == ASScanStateFinished) {
-                // 你原来的逻辑：emit + purge + scheduleIncrementalCheck
                 [self emitProgress];
                 dispatch_async(self.workQ, ^{
                     [self refreshAllAssetsFetchResult];
@@ -1137,7 +1130,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
                     [self scheduleIncrementalCheck];
                 });
             } else if (st == ASScanStateScanning) {
-                // ✅ 新逻辑：展示半成品 + 继续扫描
                 [self emitProgress];
                 dispatch_async(self.workQ, ^{
                     [self resumeFullScanFromCache];
@@ -1167,7 +1159,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     self.fullScanRunning = YES;
     self.cancelled = NO;
 
-    // 1) 从 cache 恢复所有 M 容器（复用你 incrementalRebuild 的初始化方式）
     self.dupGroupsM = [self deepMutableGroups:self.cache.duplicateGroups];
     self.simGroupsM = [self deepMutableGroups:self.cache.similarGroups];
     self.screenshotsM = [self.cache.screenshots mutableCopy] ?: [NSMutableArray array];
@@ -1183,21 +1174,17 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
     self.currentDay = self.cache.currentDayStart;
 
-    // 恢复运行态
     self.blurryImagesSeen = self.cache.blurryImagesSeen;
     self.blurryBytesRunning = self.cache.blurryBytesRunning;
     self.otherCandidateBytes = self.cache.otherCandidateBytes;
 
-    // 2) 恢复 otherCandidateMap（用 otherPhotosM 重建）
     self.otherCandidateMap = [NSMutableDictionary dictionary];
     for (ASAssetModel *m in self.otherPhotosM) {
         if (m.localId.length) self.otherCandidateMap[m.localId] = m;
     }
 
-    // 3) 关键：构建 “已处理 ID 集合” （用于跳过已扫）
     NSMutableSet<NSString *> *processed = [self as_collectCachedIdsFromCache];
 
-    // 4) 关键：构建 day -> seed index（保证同一天续扫不会漏匹配）
     NSMutableDictionary<NSDate*, NSMutableArray<ASAssetModel*>*> *seedImg = [NSMutableDictionary dictionary];
     NSMutableDictionary<NSDate*, NSMutableArray<ASAssetModel*>*> *seedVid = [NSMutableDictionary dictionary];
 
@@ -1212,11 +1199,9 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         [seedVid[d0] addObject:m];
     }
 
-    // 5) 重置 index（每进新 day 需要 seed）
     [self.indexImage removeAllObjects];
     [self.indexVideo removeAllObjects];
 
-    // 6) 开始继续扫描（依旧按 creationDate desc）
     PHFetchResult<PHAsset *> *result = [PHAsset fetchAssetsWithOptions:[self allImageVideoFetchOptions]];
 
     NSDate *maxAnchor = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
@@ -1227,7 +1212,7 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
             NSString *lid = asset.localIdentifier ?: @"";
             if (lid.length && [processed containsObject:lid]) {
-                continue; //  已经扫过，跳过
+                continue;
             }
 
             NSDate *cd = ASPrimaryDateForAsset(asset);
@@ -1240,7 +1225,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
             if (!self.currentDay || ![day isEqualToDate:self.currentDay]) {
                 self.currentDay = day;
 
-                // 切天：清 index + seed
                 [self.indexImage removeAllObjects];
                 [self.indexVideo removeAllObjects];
 
@@ -1267,7 +1251,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
             ASAssetModel *model = [self buildModelForAsset:asset computeCompareBits:YES error:&error];
             if (!model) continue;
 
-            // 下面这段基本复用你 full scan 的分类逻辑（截图/模糊/录屏/大视频/分组）
             self.snapshot.scannedCount += 1;
             self.snapshot.scannedBytes += model.fileSizeBytes;
 
@@ -1327,17 +1310,14 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         }
     }
 
-    // ✅ 用最终的 result 重建 Other（排除 dup/sim/screenshot/blurry）
     self.otherPhotosM = [[self buildOtherPhotosFromAllAssetsFetchResult:result] mutableCopy];
 
-    // ✅ 重算 otherBytes & snapshot
     self.otherCandidateBytes = 0;
     for (ASAssetModel *m in self.otherPhotosM) self.otherCandidateBytes += m.fileSizeBytes;
 
     self.snapshot.otherCount = self.otherPhotosM.count;
     self.snapshot.otherBytes = self.otherCandidateBytes;
 
-    // 7) 扫完：置 Finished、写最终 cache、apply、emit
     self.snapshot.state = ASScanStateFinished;
     [self setAllModulesState:ASModuleScanStateFinished];
 
@@ -1370,7 +1350,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     NSArray *ids = [self as_currentAllAssetIDsFromFetchResult:self.allAssetsFetchResult];
     [self as_saveBaselineAllAssetIDs:ids];
 
-    // 8) Finished 后：做一次“对账式增量”（Step 8 会实现）
     dispatch_async(self.workQ, ^{
         [self reconcilePendingChangesAfterFullScan];
     });
@@ -1378,7 +1357,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     self.fullScanRunning = NO;
 }
 
-/// 无权限时，让首页有一个“空态”
 - (void)resetPublicStateForNoPermission {
     // stop pending incremental timers / debounce
     if (self.incrementalDebounceBlock) {
@@ -1694,7 +1672,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     if (self.cache.snapshot.state != ASScanStateFinished) return;
     if (self.fullScanRunning || self.incrementalRunning) return;
 
-    // 1) baseline diff 兜底（防 scan 中被杀导致未记录 change）
     [self refreshAllAssetsFetchResult];
     NSArray<NSString *> *currentAll = [self as_currentAllAssetIDsFromFetchResult:self.allAssetsFetchResult];
     NSSet *currentSet = [NSSet setWithArray:(currentAll ?: @[])];
@@ -1702,34 +1679,27 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     NSArray<NSString *> *base = self.cache.baselineAllAssetIDsAtStart ?: @[];
     NSSet *baseSet = [NSSet setWithArray:base];
 
-    // inserted = current - base
     NSMutableSet<NSString*> *inserted = [NSMutableSet setWithSet:currentSet.mutableCopy];
     [inserted minusSet:baseSet];
 
-    // removed = base - current
     NSMutableSet<NSString*> *removed = [NSMutableSet setWithSet:baseSet.mutableCopy];
     [removed minusSet:currentSet];
 
-    // 2) 合并进持久化 pending
     [self.pendingUpsertIDsPersist unionSet:inserted];
     [self.pendingRemovedIDsPersist unionSet:removed];
 
-    // removed 覆盖 upsert
     for (NSString *rid in self.pendingRemovedIDsPersist) {
         [self.pendingUpsertIDsPersist removeObject:rid];
     }
 
     if (self.pendingUpsertIDsPersist.count == 0 && self.pendingRemovedIDsPersist.count == 0) {
-        // 对账完也要刷新 baseline（以后正常增量用）
         [self as_saveBaselineAllAssetIDs:currentAll ?: @[]];
         return;
     }
 
-    // 3) 真正跑一次 incrementalRebuild（此时 cache 已 finished，安全）
     NSArray<PHAsset*> *upserts = [self as_fetchAssetsByLocalIdsChunked:self.pendingUpsertIDsPersist.allObjects];
     NSArray<NSString*> *rmIDs = self.pendingRemovedIDsPersist.allObjects;
 
-    // 清空 pending（先清，避免增量里又触发重复）
     [self.pendingUpsertIDsPersist removeAllObjects];
     [self.pendingRemovedIDsPersist removeAllObjects];
     self.cache.pendingUpsertIDs = @[];
@@ -1738,7 +1708,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
     [self incrementalRebuildWithInserted:upserts removedIDs:rmIDs];
 
-    // 注意：incrementalRebuild 结束时你会调用 as_saveBaselineAllAssetIDs
 }
 
 - (void)otherCandidateAddIfNeeded:(ASAssetModel *)model asset:(PHAsset *)asset {
@@ -1782,7 +1751,7 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
 - (BOOL)isCacheValid {
     if (!self.didLoadCacheFromDisk) {
-        [self loadCacheIfExists];   // 失败会返回 NO 并 drop 无效文件
+        [self loadCacheIfExists];
     }
     return [self isSnapshotCacheUsableForUI:self.cache.snapshot];
 }
@@ -1854,7 +1823,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
         if (cachedIds.count == 0) return;
 
-        // 拉取现存 assets
         PHFetchResult<PHAsset *> *exist = [PHAsset fetchAssetsWithLocalIdentifiers:cachedIds.allObjects options:nil];
         NSMutableSet<NSString *> *existIds = [NSMutableSet setWithCapacity:exist.count];
         for (PHAsset *a in exist) if (a.localIdentifier.length) [existIds addObject:a.localIdentifier];
@@ -1865,7 +1833,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
         if (deleted.count == 0) return;
 
-        // 从 cache 可变容器加载并删除
         self.dupGroupsM = [self deepMutableGroups:self.cache.duplicateGroups];
         self.simGroupsM = [self deepMutableGroups:self.cache.similarGroups];
         self.screenshotsM = [self.cache.screenshots mutableCopy] ?: [NSMutableArray array];
@@ -1986,7 +1953,6 @@ static inline BOOL ASModelIsScreenshot(ASAssetModel *m) {
         if (self.blurryBytesRunning >= leastBlurry.fileSizeBytes) self.blurryBytesRunning -= leastBlurry.fileSizeBytes;
         else self.blurryBytesRunning = 0;
 
-        // ✅ 踢出的那张，加回 other（必须用 model-only，不能用当前 asset）
         [self otherCandidateAddModelIfNeeded:leastBlurry];
     }
 
@@ -2482,7 +2448,6 @@ static const NSUInteger kASLocalIdChunk = 3500;
                 return;
             }
 
-            // cache finished 且不 busy：走你原有 debounce incremental（保持原逻辑）
             NSMutableArray<PHAsset*> *upserts = [NSMutableArray arrayWithArray:insertedRaw];
             [upserts addObjectsFromArray:changedRaw];
             [self scheduleIncrementalRebuildWithInserted:upserts removed:removedRaw];
@@ -2604,7 +2569,6 @@ static const NSUInteger kASLocalIdChunk = 3500;
     self.blurryPhotosM = [self.cache.blurryPhotos mutableCopy] ?: [NSMutableArray array];
     self.otherPhotosM  = [self.cache.otherPhotos  mutableCopy] ?: [NSMutableArray array];
 
-    // ✅ 重建 blurryBytesRunning
     self.blurryBytesRunning = 0;
     for (ASAssetModel *bm in self.blurryPhotosM) self.blurryBytesRunning += bm.fileSizeBytes;
 
