@@ -1035,10 +1035,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         [self.sectionsCard.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:0],
     ]];
 
-    self.sectionsCardBottomC = [self.sectionsCard.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:0];
-    self.sectionsCardBottomC.priority = UILayoutPriorityRequired;
-    self.sectionsCardBottomC.active = YES;
-
     self.sectionsCardBottomToContentC = [self.sectionsCard.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:0];
     self.sectionsCardBottomToContentC.priority = UILayoutPriorityRequired;
 
@@ -1243,6 +1239,11 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     }
 
     [self sw_updateSectionVisibility];
+    
+    [self.view setNeedsLayout];
+    [UIView performWithoutAnimation:^{
+        [self.view layoutIfNeeded];
+    }];
 }
 
 - (void)sw_onTapPermissionGate {

@@ -114,7 +114,7 @@ static inline UIColor *ASColorHex(uint32_t rgb, CGFloat alpha) {
     NSInteger c = self.buttons.count;
     if (c <= 0) return;
 
-    self.layer.cornerRadius = SW(44);
+    self.layer.cornerRadius = SW(40);
 
     self.layer.shadowPath =
         [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:self.layer.cornerRadius].CGPath;
