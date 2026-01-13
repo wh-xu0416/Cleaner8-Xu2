@@ -718,7 +718,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.ring = [UIView new];
         self.ring.translatesAutoresizingMaskIntoConstraints = NO;
         self.ring.backgroundColor = UIColor.clearColor;
-        self.ring.layer.cornerRadius = SW(34);
         self.ring.layer.masksToBounds = YES;
         [self.contentView addSubview:self.ring];
 
@@ -726,7 +725,6 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.iv.translatesAutoresizingMaskIntoConstraints = NO;
         self.iv.contentMode = UIViewContentModeScaleAspectFill;
         self.iv.clipsToBounds = YES;
-        self.iv.layer.cornerRadius = SW(33);
         self.iv.layer.masksToBounds = YES;
         [self.ring addSubview:self.iv];
 
@@ -776,6 +774,16 @@ typedef NS_ENUM(NSInteger, ASPreviewKind) { ASPreviewKindPhoto, ASPreviewKindVid
         self.best.hidden = YES;
     }
     return self;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+
+    CGFloat d = MIN(self.contentView.bounds.size.width, self.contentView.bounds.size.height);
+    CGFloat inset = SW(3);
+
+    self.ring.layer.cornerRadius = d * 0.5;
+    self.iv.layer.cornerRadius   = MAX(0, (d - inset * 2.0) * 0.5);
 }
 
 - (void)prepareForReuse {
