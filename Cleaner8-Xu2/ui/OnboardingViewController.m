@@ -3,6 +3,7 @@
 #import "Common.h"
 #import <AppTrackingTransparency/AppTrackingTransparency.h>
 #import <AdSupport/AdSupport.h>
+#import "ASTrackingPermission.h"
 
 static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 static NSString * const kHasRequestedATTKey = @"hasRequestedATT";
@@ -44,7 +45,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    [self requestATTIfNeededOnFirstPage];
+    
 }
 
 - (void)viewDidLoad {
@@ -111,6 +112,10 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 }
 
 - (void)tapContinue {
+    if (self.index == 0) {
+        [ASTrackingPermission requestIfNeededWithDelay:0.0 completion:nil];
+    }
+    
     if (self.index < self.images.count - 1) {
         self.index += 1;
         [self applyImageAtIndex:self.index animated:YES];
