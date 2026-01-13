@@ -370,6 +370,7 @@ static inline UIColor *ASBlue(void) {
         self.studioRow.hidden = NO;
     }
 
+    [self.view setNeedsLayout];
     [UIView performWithoutAnimation:^{
         [self.view layoutIfNeeded];
     }];

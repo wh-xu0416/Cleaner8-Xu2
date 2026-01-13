@@ -78,6 +78,8 @@ FOUNDATION_EXPORT NSString * const SwipeManagerDidUpdateNotification;
 /// 模块 undo：撤回（只在内存中维护栈；状态本身会持久化）
 - (BOOL)undoLastActionInModuleID:(NSString *)moduleID;
 
+- (nullable NSString *)undoLastActionAssetIDInScopeAssetIDSet:(NSSet<NSString *> *)scope;
+
 /// 归档资产ID集合（去重）
 - (NSSet<NSString *> *)archivedAssetIDSet;
 

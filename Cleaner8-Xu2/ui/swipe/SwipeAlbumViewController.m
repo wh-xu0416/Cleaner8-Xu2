@@ -929,8 +929,19 @@ static inline NSString *SWImgKey(NSString *prefix, NSString *aid, CGSize px) {
     for (SwipeModule *m in mgr.modules) {
         if ([m.moduleID isEqualToString:self.module.moduleID]) { latest = m; break; }
     }
-    if (latest) self.module = latest;
+    
+    if (!latest) {
+        [self sw_exitIfNoData];
+        return;
+    }
+  
+    self.module = latest;
 
+    if ((self.module.assetIDs ?: @[]).count == 0) {
+        [self sw_exitIfNoData];
+        return;
+    }
+   
     self.titleLabel.text = self.module.title ?: NSLocalizedString(@"Album", nil);
     
     NSArray<NSString *> *newAll = self.module.assetIDs ?: @[];
@@ -1068,7 +1079,7 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
     [att appendAttributedString:[[NSAttributedString alloc] initWithString:@" " attributes:attrs]];
     [att addAttribute:NSKernAttributeName value:@(5.0) range:NSMakeRange(att.length-1, 1)];
 
-    UIImage *img = [UIImage imageNamed:@"ic_more"];
+    UIImage *img = [UIImage imageNamed:@"ic_next"];
     if (img) {
         NSTextAttachment *ta = [NSTextAttachment new];
         ta.image = img;
@@ -1869,6 +1880,8 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
 - (void)sw_showExitPopup {
     if (self.sw_exitPopup) return;
+    
+    if (![self sw_hasCleanableArchivedBytes]) return;
 
     [self sw_lockAction];
 
@@ -2088,6 +2101,11 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     [self.sw_exitViewArchivedBtn setTitle:btnTitle forState:UIControlStateNormal];
 }
 
+- (BOOL)sw_hasCleanableArchivedBytes {
+    uint64_t totalBytes = (uint64_t)[[SwipeManager shared] totalArchivedBytesCached];
+    return totalBytes > 0;
+}
+
 - (void)sw_exitMaskTapped {
     // 只关闭弹窗，不返回（避免误触就退出）
     [self sw_dismissExitPopupThen:nil];
@@ -2103,6 +2121,21 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         ASArchivedFilesViewController *vc = [ASArchivedFilesViewController new];
         [nav pushViewController:vc animated:YES];
     }];
+}
+
+- (void)sw_exitIfNoData {
+    UINavigationController *nav = self.navigationController ?: [self sw_currentNav];
+    if (!nav) return;
+
+    // 被 push：pop
+    if (nav.viewControllers.firstObject != self) {
+        [nav popViewControllerAnimated:YES];
+        return;
+    }
+    // 根 VC 且是 modal：dismiss
+    if (self.presentingViewController) {
+        [self dismissViewControllerAnimated:YES completion:nil];
+    }
 }
 
 - (void)sw_exitLaterTapped {
@@ -2156,6 +2189,9 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         if (self.cardAnimating) return NO;
 
         if (self.sw_hasOperated && ![self sw_isDoneShowing]) {
+            // 可清理为 0：不弹窗，允许系统返回
+            if (![self sw_hasCleanableArchivedBytes]) return YES;
+
             [self sw_showExitPopup];
             return NO;
         }
@@ -2167,6 +2203,14 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     if (self.cardAnimating) return;
 
     if (self.sw_hasOperated && ![self sw_isDoneShowing]) {
+        // 可清理为 0：不弹窗，直接返回
+        if (![self sw_hasCleanableArchivedBytes]) {
+            UINavigationController *nav = self.navigationController ?: [self sw_currentNav];
+            if (!nav) return;
+            [nav popViewControllerAnimated:YES];
+            return;
+        }
+
         [self sw_showExitPopup];
         return;
     }
@@ -2181,10 +2225,10 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     if (self.sw_actionLocked) return;
     self.sw_hasOperated = YES;
 
-    NSString *undoneAid = [[SwipeManager shared] undoLastActionAssetIDInModuleID:self.module.moduleID];
+    NSSet *scope = [NSSet setWithArray:self.allAssetIDs ?: @[]];
+    NSString *undoneAid = [[SwipeManager shared] undoLastActionAssetIDInScopeAssetIDSet:scope];
     if (undoneAid.length == 0) return;
 
-    // 撤回后：强制按 manager 最新应处理顺序刷新，并把 undone 置顶
     [self sw_forceRebuildFromManagerAnimated:YES keepFocusTop:undoneAid];
 }
 
