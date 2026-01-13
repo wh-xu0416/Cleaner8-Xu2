@@ -16,6 +16,11 @@ static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont system
     UILabel *_title;
     UIButton *_btn;
     UIImageView *_arrow;
+
+    NSLayoutConstraint *_cTitleTop;
+    NSLayoutConstraint *_cBtnBottom;
+    NSLayoutConstraint *_cBtnTopToTitle;
+    NSLayoutConstraint *_cBtnMinH;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -53,17 +58,25 @@ static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont system
         _arrow.image = [[UIImage imageNamed:@"ic_todo"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         [_btn addSubview:_arrow];
 
+        _cTitleTop = [_title.topAnchor constraintEqualToAnchor:self.topAnchor constant:AS(27)];
+        _cBtnBottom = [_btn.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-AS(27)];
+        _cBtnTopToTitle = [_btn.topAnchor constraintEqualToAnchor:_title.bottomAnchor constant:AS(20)];
+        _cBtnMinH = [_btn.heightAnchor constraintGreaterThanOrEqualToConstant:AS(50)];
+
+        _cTitleTop.priority = 999;
+        _cBtnBottom.priority = 999;
+        _cBtnTopToTitle.priority = 999;
+        _cBtnMinH.priority = 999;
+        
         [NSLayoutConstraint activateConstraints:@[
-            [_title.topAnchor constraintEqualToAnchor:self.topAnchor constant:AS(27)],
+            _cTitleTop,
             [_title.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:AS(16)],
             [_title.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-AS(16)],
 
-            [_btn.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-AS(27)],
+            _cBtnBottom,
             [_btn.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-
-            // 50 -> AS(50)
-            [_btn.heightAnchor constraintGreaterThanOrEqualToConstant:AS(50)],
-            [_btn.topAnchor constraintEqualToAnchor:_title.bottomAnchor constant:AS(20)],
+            _cBtnMinH,
+            _cBtnTopToTitle,
 
             [t.leadingAnchor constraintEqualToAnchor:_btn.leadingAnchor constant:AS(32)],
             [t.topAnchor constraintEqualToAnchor:_btn.topAnchor constant:AS(10)],
