@@ -65,7 +65,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
 @property (nonatomic, strong) NSMutableArray<NSString *> *random20AssetIDs;
 
-@property (nonatomic, strong) NSMutableDictionary<NSString *, NSMutableArray<SwipeUndoRecord *> *> *undoStacks;
+@property (nonatomic, strong) NSMutableArray<SwipeUndoRecord *> *undoStack;   // 全局撤回栈（最后一次动作在末尾）
 
 @property (nonatomic, strong) PHCachingImageManager *imageManager;
 @property (nonatomic, strong) dispatch_queue_t stateQueue;
@@ -98,7 +98,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
         _bytesByAssetID = [NSMutableDictionary dictionary];
         _moduleSortAscendingByID = [NSMutableDictionary dictionary];
         _random20AssetIDs = [NSMutableArray array];
-        _undoStacks = [NSMutableDictionary dictionary];
+        _undoStack = [NSMutableArray array];
         _imageManager = [[PHCachingImageManager alloc] init];
         _stateQueue = dispatch_queue_create("swipe.manager.state.queue", DISPATCH_QUEUE_SERIAL);
 
@@ -180,7 +180,6 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
     NSNumber *archBytes  = state[@"archivedBytesCached"];
 
     NSDictionary *cursor = state[@"moduleCursorAssetIDByID"];
-    NSDictionary *undo   = state[@"undoStacksByModuleID"];
 
     if ([status isKindOfClass:NSDictionary.class]) self.statusByAssetID = status.mutableCopy;
     if ([bytes isKindOfClass:NSDictionary.class]) self.bytesByAssetID = bytes.mutableCopy;
@@ -192,24 +191,26 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
         self.moduleCursorAssetIDByID = cursor.mutableCopy;
     }
 
-    if ([undo isKindOfClass:NSDictionary.class]) {
-        NSMutableDictionary *stacks = [NSMutableDictionary dictionary];
-        [undo enumerateKeysAndObjectsUsingBlock:^(NSString *key, id obj, BOOL *stop) {
-            if (![obj isKindOfClass:NSArray.class]) return;
-            NSMutableArray<SwipeUndoRecord *> *stack = [NSMutableArray array];
-            for (id item in (NSArray *)obj) {
-                if (![item isKindOfClass:NSDictionary.class]) continue;
-                NSString *aid = item[@"assetID"];
-                NSNumber *prev = item[@"prevStatus"];
-                if (![aid isKindOfClass:NSString.class] || ![prev isKindOfClass:NSNumber.class]) continue;
-                SwipeUndoRecord *r = [SwipeUndoRecord new];
-                r.assetID = aid;
-                r.previousStatus = (SwipeAssetStatus)prev.integerValue;
-                [stack addObject:r];
-            }
-            if (stack.count > 0) stacks[key] = stack;
-        }];
-        self.undoStacks = stacks;
+    id undoObj = state[@"undoStack"];
+    if ([undoObj isKindOfClass:NSArray.class]) {
+        NSMutableArray<SwipeUndoRecord *> *stack = [NSMutableArray array];
+        for (id item in (NSArray *)undoObj) {
+            if (![item isKindOfClass:NSDictionary.class]) continue;
+            NSString *aid = item[@"assetID"];
+            NSNumber *prev = item[@"prevStatus"];
+            if (![aid isKindOfClass:NSString.class] || ![prev isKindOfClass:NSNumber.class]) continue;
+
+            SwipeUndoRecord *r = [SwipeUndoRecord new];
+            r.assetID = aid;
+            r.previousStatus = (SwipeAssetStatus)prev.integerValue;
+            [stack addObject:r];
+        }
+        self.undoStack = stack;
+    } else {
+        // 旧版本里是按模块存的 undoStacksByModuleID
+        // 因为旧数据没有时间顺序信息，无法可靠恢复“全局最后一步”的顺序
+        // 最安全：直接清空（升级后撤回历史重置一次）
+        self.undoStack = [NSMutableArray array];
     }
 }
 
@@ -223,6 +224,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
         NSDictionary *cursorSnap = nil;
         NSNumber     *archSnap   = nil;
         NSDictionary *undoSerSnap = nil;
+        NSArray *undoSnap = nil;
 
         @synchronized (self.stateLock) {
             statusSnap = [self.statusByAssetID copy] ?: @{};
@@ -232,17 +234,14 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
             cursorSnap = [self.moduleCursorAssetIDByID copy] ?: @{};
             archSnap   = @(self.archivedBytesCached);
 
-            NSMutableDictionary *undoSer = [NSMutableDictionary dictionary];
-            [self.undoStacks enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSMutableArray<SwipeUndoRecord *> *stack, BOOL *stop) {
-                NSArray *stackSnap = [stack copy];
-                NSMutableArray *arr = [NSMutableArray arrayWithCapacity:stackSnap.count];
-                for (SwipeUndoRecord *r in stackSnap) {
-                    if (!r.assetID) continue;
-                    [arr addObject:@{@"assetID": r.assetID, @"prevStatus": @(r.previousStatus)}];
-                }
-                if (arr.count > 0) undoSer[key] = arr;
-            }];
-            undoSerSnap = [undoSer copy] ?: @{};
+
+            NSArray *stackSnap = [self.undoStack copy] ?: @[];
+            NSMutableArray *arr = [NSMutableArray arrayWithCapacity:stackSnap.count];
+            for (SwipeUndoRecord *r in stackSnap) {
+                if (!r.assetID) continue;
+                [arr addObject:@{@"assetID": r.assetID, @"prevStatus": @(r.previousStatus)}];
+            }
+            undoSnap = [arr copy] ?: @[];
         }
 
         NSDictionary *state = @{
@@ -252,7 +251,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
             @"random20AssetIDs": randomSnap,
             @"archivedBytesCached": archSnap,
             @"moduleCursorAssetIDByID": cursorSnap,
-            @"undoStacksByModuleID": undoSerSnap,
+            @"undoStack": undoSnap,
         };
 
         NSError *err = nil;
@@ -373,17 +372,12 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
                     [self.moduleCursorAssetIDByID removeObjectForKey:k];
                 }
 
-                // 清理 undoStacks
-                NSMutableArray *moduleKeysToRemove = [NSMutableArray array];
-                [self.undoStacks enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSMutableArray<SwipeUndoRecord *> *stack, BOOL *stop) {
-                    NSIndexSet *bad = [stack indexesOfObjectsPassingTest:^BOOL(SwipeUndoRecord *r, NSUInteger idx, BOOL *stop2) {
-                        return !r.assetID || ![allIDSet containsObject:r.assetID];
-                    }];
-                    if (bad.count > 0) [stack removeObjectsAtIndexes:bad];
-                    if (stack.count == 0) [moduleKeysToRemove addObject:key];
+                // 清理 undoStack：移除相册已不存在的 asset
+                NSIndexSet *bad = [self.undoStack indexesOfObjectsPassingTest:^BOOL(SwipeUndoRecord *r, NSUInteger idx, BOOL *stop) {
+                    return (r.assetID.length == 0) || ![allIDSet containsObject:r.assetID];
                 }];
-                for (NSString *k in moduleKeysToRemove) {
-                    [self.undoStacks removeObjectForKey:k];
+                if (bad.count > 0) {
+                    [self.undoStack removeObjectsAtIndexes:bad];
                 }
 
         // 最近7天：每天一个模块
@@ -641,7 +635,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
                 [self.statusByAssetID removeObjectForKey:aid];
             }
 
-             [self.undoStacks removeAllObjects];
+            [self.undoStack removeAllObjects];
             [self normalizeArchivedBytesCacheLocked];
         }
 
@@ -672,17 +666,12 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
         SwipeAssetStatus prev = [self statusForAssetID:assetID];
         if (prev == status) return;
 
-        // undo record
-        if (recordUndo && moduleID.length > 0) {
-            NSMutableArray *stack = self.undoStacks[moduleID];
-            if (!stack) {
-                stack = [NSMutableArray array];
-                self.undoStacks[moduleID] = stack;
-            }
+        // undo record (global)
+        if (recordUndo) {
             SwipeUndoRecord *r = [SwipeUndoRecord new];
             r.assetID = assetID;
             r.previousStatus = prev;
-            [stack addObject:r];
+            [self.undoStack addObject:r];
         }
 
         // archived bytes cache update...
@@ -717,19 +706,25 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 }
 
 - (nullable NSString *)undoLastActionAssetIDInModuleID:(NSString *)moduleID {
-    if (moduleID.length == 0) return nil;
+    (void)moduleID; // 不再使用
 
-    NSMutableArray<SwipeUndoRecord *> *stack = self.undoStacks[moduleID];
-    SwipeUndoRecord *last = stack.lastObject;
-    if (!last || last.assetID.length == 0) return nil;
+    SwipeUndoRecord *last = nil;
 
-    [stack removeLastObject];
-    if (stack.count == 0) {
-        [self.undoStacks removeObjectForKey:moduleID];
+    @synchronized (self.stateLock) {
+        // 可能遇到栈顶 asset 已不存在：循环丢弃直到找到可用的
+        while (self.undoStack.count > 0) {
+            last = self.undoStack.lastObject;
+            [self.undoStack removeLastObject];
+
+            if (last.assetID.length == 0) { last = nil; continue; }
+            if ([self assetForID:last.assetID] == nil) { last = nil; continue; } // 已被删除
+            break;
+        }
     }
 
-    // 恢复到之前状态
-    // 注意：sourceModule 传 nil，recordUndo 传 NO，避免撤销动作再次入栈
+    if (!last) return nil;
+
+    // 恢复到之前状态，避免再入栈
     [self setStatus:last.previousStatus
          forAssetID:last.assetID
         sourceModule:nil
@@ -737,6 +732,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
     return last.assetID;
 }
+
 
 #pragma mark - Sorting pref
 
@@ -975,7 +971,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
         if (completion) completion(YES, nil);
         return;
     }
-    
+
     NSMutableDictionary<NSString*, NSNumber*> *toSubtract = [NSMutableDictionary dictionary];
 
     @synchronized (self.stateLock) {
@@ -990,12 +986,27 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
     NSArray<PHAsset *> *assets = [self assetsForIDs:assetIDs];
     if (assets.count == 0) {
-        for (NSString *aid in assetIDs) {
-            [self.statusByAssetID removeObjectForKey:aid];
-            [self.bytesByAssetID removeObjectForKey:aid];
+        @synchronized (self.stateLock) {
+            for (NSString *aid in assetIDs) {
+                [self.statusByAssetID removeObjectForKey:aid];
+                [self.bytesByAssetID removeObjectForKey:aid];
+                [self.random20AssetIDs removeObject:aid];
+            }
+
+            NSSet *delSet = [NSSet setWithArray:assetIDs];
+            NSIndexSet *bad = [self.undoStack indexesOfObjectsPassingTest:^BOOL(SwipeUndoRecord *r, NSUInteger idx, BOOL *stop) {
+                return r.assetID.length == 0 || [delSet containsObject:r.assetID];
+            }];
+            if (bad.count > 0) [self.undoStack removeObjectsAtIndexes:bad];
+
+            [self normalizeArchivedBytesCacheLocked];
         }
+
         [self saveStateToDisk];
-        [[NSNotificationCenter defaultCenter] postNotificationName:SwipeManagerDidUpdateNotification object:self];
+
+        // 强制触发 modules 刷新（reload 完成后会 post SwipeManagerDidUpdateNotification）
+        [self scheduleReloadModules];
+
         if (completion) completion(YES, nil);
         return;
     }
@@ -1010,25 +1021,77 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
                 @synchronized (self.stateLock) {
                     if (self.archivedBytesCached >= sub) self.archivedBytesCached -= sub;
-                    // 清理状态
+
                     for (NSString *aid in assetIDs) {
                         [self.statusByAssetID removeObjectForKey:aid];
                         [self.bytesByAssetID removeObjectForKey:aid];
                         [self.random20AssetIDs removeObject:aid];
                     }
+
+                    NSSet *delSet = [NSSet setWithArray:assetIDs];
+                    NSIndexSet *bad = [self.undoStack indexesOfObjectsPassingTest:^BOOL(SwipeUndoRecord *r, NSUInteger idx, BOOL *stop) {
+                        return r.assetID.length == 0 || [delSet containsObject:r.assetID];
+                    }];
+                    if (bad.count > 0) [self.undoStack removeObjectsAtIndexes:bad];
+
                     [self normalizeArchivedBytesCacheLocked];
                 }
 
                 [self saveStateToDisk];
-                [[NSNotificationCenter defaultCenter] postNotificationName:SwipeManagerDidUpdateNotification object:self];
+
+                // reload modules（reload 完成后会发通知）
+                [self scheduleReloadModules];
             });
         }
+
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(success, error);
             });
         }
     }];
+}
+
+- (nullable NSString *)undoLastActionAssetIDInScopeAssetIDSet:(NSSet<NSString *> *)scope {
+    if (scope.count == 0) return nil;
+
+    SwipeUndoRecord *picked = nil;
+    NSInteger pickedIndex = NSNotFound;
+
+    @synchronized (self.stateLock) {
+
+        // 1) 清掉栈里已经不存在的 asset（可选但推荐）
+        for (NSInteger i = (NSInteger)self.undoStack.count - 1; i >= 0; i--) {
+            SwipeUndoRecord *r = self.undoStack[i];
+            if (r.assetID.length == 0 || [self assetForID:r.assetID] == nil) {
+                [self.undoStack removeObjectAtIndex:i];
+            }
+        }
+
+        // 2) 倒序找第一条 “asset 在当前 scope 里” 的记录
+        for (NSInteger i = (NSInteger)self.undoStack.count - 1; i >= 0; i--) {
+            SwipeUndoRecord *r = self.undoStack[i];
+            if (![scope containsObject:r.assetID]) continue;
+
+            picked = r;
+            pickedIndex = i;
+            break;
+        }
+
+        if (picked && pickedIndex != NSNotFound) {
+            [self.undoStack removeObjectAtIndex:pickedIndex];
+        }
+    }
+
+    if (!picked || picked.assetID.length == 0) return nil;
+
+    // 3) 恢复到之前状态（recordUndo:NO 避免再入栈）
+    [self setStatus:picked.previousStatus
+         forAssetID:picked.assetID
+        sourceModule:nil
+          recordUndo:NO];
+
+    return picked.assetID;
 }
 
 #pragma mark - PHPhotoLibraryChangeObserver
