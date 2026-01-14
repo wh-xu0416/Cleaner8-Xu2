@@ -781,7 +781,7 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
         if (error || !contacts) { if (completion) completion(nil, nil, nil, error); return; }
 
         dispatch_async(self.workQueue, ^{
-            NSMutableDictionary<NSString *, NSMutableArray<CNContact *> *> *nameMap = [NSMutableDictionary dictionary];
+            NSMutableDictionary<NSString *, NSMutableArray<CNContact *> *> *nameMap  = [NSMutableDictionary dictionary];
             NSMutableDictionary<NSString *, NSMutableArray<CNContact *> *> *phoneMap = [NSMutableDictionary dictionary];
 
             for (CNContact *c in contacts) {
@@ -790,6 +790,7 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
                     if (!nameMap[nk]) nameMap[nk] = [NSMutableArray array];
                     [nameMap[nk] addObject:c];
                 }
+
                 if ([c isKeyAvailable:CNContactPhoneNumbersKey]) {
                     for (CNLabeledValue<CNPhoneNumber *> *lv in c.phoneNumbers) {
                         NSString *pk = [self _normalizePhone:lv.value.stringValue];
@@ -803,7 +804,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
 
             NSArray<CMDuplicateGroup *> *(^buildGroups)(NSDictionary<NSString *, NSMutableArray<CNContact *> *> *, CMDuplicateMode) =
             ^(NSDictionary<NSString *, NSMutableArray<CNContact *> *> *map, CMDuplicateMode byMode) {
-
                 NSMutableArray<CMDuplicateGroup *> *groups = [NSMutableArray array];
                 [map enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSMutableArray<CNContact *> *obj, BOOL *stop) {
                     NSOrderedSet *set = [NSOrderedSet orderedSetWithArray:obj];
@@ -818,18 +818,40 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
                 return groups;
             };
 
-            NSArray<CMDuplicateGroup *> *nameGroups  = buildGroups(nameMap,  CMDuplicateModeName);
-            NSArray<CMDuplicateGroup *> *phoneGroups = buildGroups(phoneMap, CMDuplicateModePhone);
+            NSArray<CMDuplicateGroup *> *nameGroups = buildGroups(nameMap, CMDuplicateModeName);
+
+            NSMutableSet<NSString *> *nameDupIDs = [NSMutableSet set];
+            for (CMDuplicateGroup *g in nameGroups) {
+                for (CNContact *c in g.items) {
+                    if (c.identifier.length > 0) {
+                        [nameDupIDs addObject:c.identifier];
+                    }
+                }
+            }
+
+            NSMutableDictionary<NSString *, NSMutableArray<CNContact *> *> *phoneMapFiltered = [NSMutableDictionary dictionary];
+            [phoneMap enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSMutableArray<CNContact *> *obj, BOOL *stop) {
+                NSMutableArray<CNContact *> *filtered = [NSMutableArray array];
+                NSOrderedSet *set = [NSOrderedSet orderedSetWithArray:obj];
+                for (CNContact *c in set.array) {
+                    if (c.identifier.length == 0) continue;
+                    if (![nameDupIDs containsObject:c.identifier]) {
+                        [filtered addObject:c];
+                    }
+                }
+                if (filtered.count >= 2) {
+                    phoneMapFiltered[key] = filtered;
+                }
+            }];
+
+            NSArray<CMDuplicateGroup *> *phoneGroups = buildGroups(phoneMapFiltered, CMDuplicateModePhone);
 
             NSArray<CMDuplicateGroup *> *outGroups = nil;
-
             if (mode == CMDuplicateModeName) {
                 outGroups = nameGroups;
             } else if (mode == CMDuplicateModePhone) {
                 outGroups = phoneGroups;
-            } else if (mode == CMDuplicateModeNameOrPhone) {
-                outGroups = [nameGroups arrayByAddingObjectsFromArray:phoneGroups];
-            } else { // CMDuplicateModeAll
+            } else {
                 outGroups = [nameGroups arrayByAddingObjectsFromArray:phoneGroups];
             }
 

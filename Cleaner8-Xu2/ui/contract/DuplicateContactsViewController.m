@@ -633,9 +633,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                 return;
             }
 
-            NSArray *ng = nameGroups ?: @[];
-            NSArray *pg = phoneGroups ?: @[];
-            weakSelf.allGroups = [ng arrayByAddingObjectsFromArray:pg];
+            weakSelf.allGroups = groups ?: @[];
 
             weakSelf.previewMode = NO;
             weakSelf.previewGroups = nil;
