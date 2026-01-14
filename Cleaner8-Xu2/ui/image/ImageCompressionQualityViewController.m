@@ -20,7 +20,7 @@ static inline CGFloat ASScreenMinSide(void) {
 }
 
 static inline CGFloat ASScaleDown(void) {
-    return MIN(1.0, MIN(SWScaleX(), SWScaleY()));
+    return MIN(SWScaleX(), SWScaleY());
 }
 
 static inline CGFloat ASV(CGFloat v) { return ceil(v * ASScaleDown()); }

@@ -15,7 +15,7 @@ static inline CGFloat SWScaleY(void) {
 }
 
 static inline CGFloat ASScale(void) {
-    return MIN(1.0, MIN(SWScaleX(), SWScaleY()));
+    return MIN(SWScaleX(), SWScaleY());
 }
 static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
 static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {

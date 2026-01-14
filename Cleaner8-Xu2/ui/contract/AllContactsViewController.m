@@ -19,7 +19,7 @@ static inline CGFloat SWScaleY(void) {
 }
 
 static inline CGFloat ASScale(void) {
-    return MIN(1.0, MIN(SWScaleX(), SWScaleY()));
+    return MIN(SWScaleX(), SWScaleY());
 }
 static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
 static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
