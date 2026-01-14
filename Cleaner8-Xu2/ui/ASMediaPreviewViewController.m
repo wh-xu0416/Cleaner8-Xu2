@@ -7,9 +7,19 @@
 #pragma mark - Helpers
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
-static inline CGFloat SWScale(void) {
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
     CGFloat w = UIScreen.mainScreen.bounds.size.width;
-    return MIN(1.0, w / SWDesignWidth());
+    return w / SWDesignWidth();
+}
+
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
+
+static inline CGFloat SWScale(void) {
+    return MIN(SWScaleX(), SWScaleY());
 }
 static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
 static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {

@@ -4,8 +4,6 @@
 #import "VideoCompressionProgressViewController.h"
 #import "ASMediaPreviewViewController.h"
 
-#pragma mark - Scale (Design 402x874, Portrait Only)
-
 static const CGFloat kASDesignBaseWidth  = 402.0;
 static const CGFloat kASDesignBaseHeight = 874.0;
 
@@ -13,7 +11,7 @@ static inline CGFloat ASScaleDown(void) {
     CGSize sz = UIScreen.mainScreen.bounds.size;
     CGFloat sw = sz.width  / kASDesignBaseWidth;
     CGFloat sh = sz.height / kASDesignBaseHeight;
-    return MIN(1.0, MIN(sw, sh));
+    return MIN(sw, sh);
 }
 
 static inline CGFloat ASV(CGFloat v)  { return ceil(v * ASScaleDown()); }

@@ -7,13 +7,20 @@
 #import <PhotosUI/PhotosUI.h>
 #import <Network/Network.h>
 
-#pragma mark - Design Scale (402x874, Portrait Only)
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return w / SWDesignWidth();
+}
 
-static const CGFloat kASDesignBaseWidth  = 402.0;
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
 
 static inline CGFloat ASScaleDown(void) {
-    CGFloat w = UIScreen.mainScreen.bounds.size.width;
-    return MIN(1.0, w / kASDesignBaseWidth);
+    return MIN(SWScaleX(), SWScaleY());
 }
 
 static inline CGFloat ASV(CGFloat v)  { return round(v * ASScaleDown()); }

@@ -1,11 +1,19 @@
 #import "PrivateMediaCell.h"
 
-#pragma mark - Adapt Helpers
-
-static inline CGFloat ASDesignWidth(void) { return 402.0; }
-static inline CGFloat ASScale(void) {
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
     CGFloat w = UIScreen.mainScreen.bounds.size.width;
-    return MIN(1.0, w / ASDesignWidth());
+    return w / SWDesignWidth();
+}
+
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
+
+static inline CGFloat ASScale(void) {
+    return MIN(SWScaleX(), SWScaleY());
 }
 static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
 
