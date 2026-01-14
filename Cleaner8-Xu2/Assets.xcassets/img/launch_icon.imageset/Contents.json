@@ -5,12 +5,12 @@
       "scale" : "1x"
     },
     {
-      "filename" : "2.0图标.png",
+      "filename" : "矩形@2x.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
-      "filename" : "2.0图标 1.png",
+      "filename" : "矩形@3x.png",
       "idiom" : "universal",
       "scale" : "3x"
     }
