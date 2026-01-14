@@ -2,7 +2,17 @@
 #import "ImageCompressionProgressViewController.h"
 #import <Photos/Photos.h>
 
-static const CGFloat kASDesignBaseWidth = 402;
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return w / SWDesignWidth();
+}
+
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
 
 static inline CGFloat ASScreenMinSide(void) {
     CGSize sz = UIScreen.mainScreen.bounds.size;
@@ -10,8 +20,7 @@ static inline CGFloat ASScreenMinSide(void) {
 }
 
 static inline CGFloat ASScaleDown(void) {
-    CGFloat s = ASScreenMinSide() / kASDesignBaseWidth;
-    return MIN(1.0, s);
+    return MIN(1.0, MIN(SWScaleX(), SWScaleY()));
 }
 
 static inline CGFloat ASV(CGFloat v) { return ceil(v * ASScaleDown()); }

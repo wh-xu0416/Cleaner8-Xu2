@@ -9,9 +9,19 @@
 
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
-static inline CGFloat SWScale(void) {
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
     CGFloat w = UIScreen.mainScreen.bounds.size.width;
-    return MIN(1.0, w / SWDesignWidth());
+    return w / SWDesignWidth();
+}
+
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
+
+static inline CGFloat SWScale(void) {
+    return MIN(1.0, MIN(SWScaleX(), SWScaleY()));
 }
 static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
 static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
@@ -80,7 +90,7 @@ static inline UIColor *SWHexRGBA(uint32_t hex) {
 }
 
 static inline UIFont *SWFont(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:size weight:weight];
+    return SWFontS(size, weight);
 }
 
 static inline NSString *SWDayKeyFromModule(SwipeModule *m) {

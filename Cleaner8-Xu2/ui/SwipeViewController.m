@@ -14,9 +14,19 @@ NS_ASSUME_NONNULL_BEGIN
 
 #pragma mark - Helpers
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
-static inline CGFloat SWScale(void) {
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
     CGFloat w = UIScreen.mainScreen.bounds.size.width;
-    return MIN(1.0, w / SWDesignWidth());
+    return w / SWDesignWidth();
+}
+
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
+
+static inline CGFloat SWScale(void) {
+    return MIN(1.0, MIN(SWScaleX(), SWScaleY()));
 }
 static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
 static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
@@ -496,15 +506,12 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 @property (nonatomic, strong) UIView *monthSectionView;
 @property (nonatomic, strong) UIView *othersSectionView;
 
-// sectionsCard 顶部约束：无 banner 时连 cardsContainer；有 banner 时连 permissionBanner
 @property (nonatomic, strong) NSLayoutConstraint *sectionsTopToCardsC;
 @property (nonatomic, strong) NSLayoutConstraint *sectionsTopToBannerC;
 
-// contentView 底部跟随（有权限时跟 sectionsCard；无权限时跟 noAuthPlaceholder）
 @property (nonatomic, strong) NSLayoutConstraint *sectionsCardBottomToContentC;
 @property (nonatomic, strong) NSLayoutConstraint *noAuthBottomToContentC;
 
-// 让白卡片底部在滚动底部继续延伸（白底留出 safeBottom+80 的空白）
 @property (nonatomic, strong) NSLayoutConstraint *sectionsStackBottomPadC;
 
 @property (nonatomic, assign) BOOL sw_hasPhotoAccess;
@@ -1182,7 +1189,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 
         self.cardsTopC.constant = safeTop + SW(40.0);
 
-        CGFloat bottomPad = safeBottom + SW(80.0);
+        CGFloat bottomPad = safeBottom + SW(100.0);
         self.sectionsStackBottomPadC.constant = -bottomPad;
 
         self.scrollView.scrollIndicatorInsets = UIEdgeInsetsMake(safeTop, 0, safeBottom, 0);

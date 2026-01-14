@@ -10,9 +10,19 @@
 #import <Photos/Photos.h>
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
-static inline CGFloat SWScale(void) {
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
     CGFloat w = UIScreen.mainScreen.bounds.size.width;
-    return MIN(1.0, w / SWDesignWidth());
+    return w / SWDesignWidth();
+}
+
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
+
+static inline CGFloat SWScale(void) {
+    return MIN(1.0, MIN(SWScaleX(), SWScaleY()));
 }
 static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
 static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
@@ -110,6 +120,14 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
 @property (nonatomic, strong) ASPrivateEntryCard *photoCard;
 @property (nonatomic, strong) ASPrivateEntryCard *videoCard;
 @property (nonatomic, strong) ASPrivatePermissionBanner *banner;
+
+@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UIView *contentView;
+
+// 为了 banner 隐藏时不占位
+@property (nonatomic, strong) NSLayoutConstraint *bannerTopC;
+@property (nonatomic, strong) NSLayoutConstraint *bannerHeightC;
+
 @end
 
 @implementation PrivateViewController
@@ -148,7 +166,7 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
 - (void)buildUI {
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
 
-    // top bar
+    // top bar（固定不滚动）
     UIView *bar = [UIView new];
     bar.translatesAutoresizingMaskIntoConstraints = NO;
     bar.backgroundColor = UIColor.clearColor;
@@ -166,9 +184,9 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
     self.lockBtn.contentEdgeInsets = SWInsets(10, 10, 10, 10);
     [self.lockBtn addTarget:self action:@selector(lockTap) forControlEvents:UIControlEventTouchUpInside];
     [bar addSubview:self.lockBtn];
-    
+
     [NSLayoutConstraint activateConstraints:@[
-        [bar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:SW(8)],
+        [bar.topAnchor constraintEqualToAnchor:safe.topAnchor constant:SW(8)],
         [bar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [bar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [bar.heightAnchor constraintEqualToConstant:SW(45)],
@@ -180,18 +198,47 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
 
         [self.navTitle.centerXAnchor constraintEqualToAnchor:bar.centerXAnchor],
         [self.navTitle.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
-
         [self.navTitle.leadingAnchor constraintGreaterThanOrEqualToAnchor:bar.leadingAnchor constant:SW(20)],
         [self.navTitle.trailingAnchor constraintLessThanOrEqualToAnchor:self.lockBtn.leadingAnchor constant:-SW(12)],
     ]];
 
+    self.scrollView = [UIScrollView new];
+    self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollView.alwaysBounceVertical = YES;
+    if (@available(iOS 11.0, *)) {
+        self.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    }
+    [self.view addSubview:self.scrollView];
 
-    // image + text
+    [NSLayoutConstraint activateConstraints:@[
+        [self.scrollView.topAnchor constraintEqualToAnchor:bar.bottomAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
+    ]];
+
+    self.contentView = [UIView new];
+    self.contentView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.scrollView addSubview:self.contentView];
+
+    if (@available(iOS 11.0, *)) {
+        [NSLayoutConstraint activateConstraints:@[
+            [self.contentView.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
+            [self.contentView.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor],
+            [self.contentView.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor],
+            [self.contentView.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
+
+            [self.contentView.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
+        ]];
+    } else {
+    }
+
+    // image + text（放到 contentView 里）
     UIImageView *img = [UIImageView new];
     img.translatesAutoresizingMaskIntoConstraints = NO;
     img.contentMode = UIViewContentModeScaleAspectFit;
     img.image = [[UIImage imageNamed:@"ic_private"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-    [self.view addSubview:img];
+    [self.contentView addSubview:img];
 
     UILabel *desc = [UILabel new];
     desc.translatesAutoresizingMaskIntoConstraints = NO;
@@ -200,23 +247,25 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
     desc.font = SWFontS(17, UIFontWeightMedium);
     desc.textAlignment = NSTextAlignmentCenter;
     desc.numberOfLines = 2;
-    [self.view addSubview:desc];
+    [self.contentView addSubview:desc];
 
     [NSLayoutConstraint activateConstraints:@[
-        [img.topAnchor constraintEqualToAnchor:bar.bottomAnchor constant:SW(40)],
-        [img.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [img.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:SW(40)],
+        [img.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
         [img.widthAnchor constraintEqualToConstant:SW(182)],
         [img.heightAnchor constraintEqualToConstant:SW(168)],
 
         [desc.topAnchor constraintEqualToAnchor:img.bottomAnchor constant:SW(2)],
-        [desc.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [desc.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+        [desc.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.leadingAnchor constant:SW(20)],
+        [desc.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-SW(20)],
     ]];
 
-    // cards
+    // cards（放到 contentView 里）
     self.photoCard = [[ASPrivateEntryCard alloc] initWithIcon:@"ic_photo_permission_not" title:NSLocalizedString(@"Secret Photos", nil)];
     self.videoCard = [[ASPrivateEntryCard alloc] initWithIcon:@"ic_video_lock" title:NSLocalizedString(@"Secret Videos", nil)];
-    [self.view addSubview:self.photoCard];
-    [self.view addSubview:self.videoCard];
+    [self.contentView addSubview:self.photoCard];
+    [self.contentView addSubview:self.videoCard];
 
     [self.photoCard addTarget:self action:@selector(openPhotos) forControlEvents:UIControlEventTouchUpInside];
     [self.videoCard addTarget:self action:@selector(openVideos) forControlEvents:UIControlEventTouchUpInside];
@@ -225,15 +274,15 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
 
     [NSLayoutConstraint activateConstraints:@[
         [self.photoCard.topAnchor constraintEqualToAnchor:desc.bottomAnchor constant:SW(40)],
-        [self.photoCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(15)],
-        [self.photoCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(15)],
+        [self.photoCard.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:SW(15)],
+        [self.photoCard.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-SW(15)],
 
         [self.videoCard.topAnchor constraintEqualToAnchor:self.photoCard.bottomAnchor constant:SW(20)],
         [self.videoCard.leadingAnchor constraintEqualToAnchor:self.photoCard.leadingAnchor],
         [self.videoCard.trailingAnchor constraintEqualToAnchor:self.photoCard.trailingAnchor],
     ]];
 
-    // permission banner (默认隐藏，按权限显示)
+    // permission banner（也放到 contentView 里）
     self.banner = [ASPrivatePermissionBanner new];
     self.banner.translatesAutoresizingMaskIntoConstraints = NO;
     self.banner.hidden = YES;
@@ -243,15 +292,21 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
         if (url) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
         [ws refreshPermissionBanner];
     };
-    [self.view addSubview:self.banner];
+    [self.contentView addSubview:self.banner];
+
+    self.bannerTopC = [self.banner.topAnchor constraintEqualToAnchor:self.videoCard.bottomAnchor constant:SW(34)];
+    self.bannerHeightC = [self.banner.heightAnchor constraintEqualToConstant:SW(145)];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.banner.topAnchor constraintEqualToAnchor:self.videoCard.bottomAnchor constant:SW(34)],
-        [self.banner.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        self.bannerTopC,
+        [self.banner.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
         [self.banner.widthAnchor constraintEqualToConstant:SW(310)],
-        [self.banner.heightAnchor constraintEqualToConstant:SW(145)],
+        self.bannerHeightC,
+
+        [self.banner.bottomAnchor constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.bottomAnchor constant:-SW(100)],
     ]];
 }
+
 
 - (void)updateLockUI {
     BOOL enabled = [ASPasscodeManager isEnabled];
@@ -292,7 +347,14 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
 }
 
 - (void)refreshPermissionBanner {
-    self.banner.hidden = ![self needFullAccess];
+    BOOL show = [self needFullAccess];
+    self.banner.hidden = !show;
+
+    // 隐藏时高度=0，间距=0；显示时恢复
+    self.bannerHeightC.constant = show ? SW(145) : 0;
+    self.bannerTopC.constant = show ? SW(34) : 0;
+
+    [self.view layoutIfNeeded];
 }
 
 #pragma mark - Navigation

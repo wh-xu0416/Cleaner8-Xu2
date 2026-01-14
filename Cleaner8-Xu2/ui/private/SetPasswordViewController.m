@@ -8,10 +8,20 @@
 
 #pragma mark - Adapt Helpers
 
-static inline CGFloat ASDesignWidth(void) { return 402.0; }
-static inline CGFloat ASScale(void) {
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
     CGFloat w = UIScreen.mainScreen.bounds.size.width;
-    return MIN(1.0, w / ASDesignWidth());
+    return w / SWDesignWidth();
+}
+
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
+
+static inline CGFloat ASScale(void) {
+    return MIN(1.0, MIN(SWScaleX(), SWScaleY()));
 }
 static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
 static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
@@ -63,8 +73,6 @@ static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat
     self.nav.showRightButton = NO;
     [self.view addSubview:self.nav];
 
-    // 原来 88，这里做缩放。注意：如果你的 ASCustomNavBar 内部已考虑 safeTop，
-    // 这里保持你原样的“总高”，只是缩放即可。
     [NSLayoutConstraint activateConstraints:@[
         [self.nav.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.nav.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -149,7 +157,6 @@ static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat
     [prev.trailingAnchor constraintEqualToAnchor:row.trailingAnchor].active = YES;
 
     [NSLayoutConstraint activateConstraints:@[
-        // 原来 110 / 10 / 20 / 16 都缩放
         [self.titleLabel.topAnchor constraintEqualToAnchor:self.nav.bottomAnchor constant:AS(110)],
         [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
 
