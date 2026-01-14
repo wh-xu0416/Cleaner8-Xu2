@@ -280,7 +280,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
     NSString *t = self.badgeBtn.currentTitle ?: @"";
     CGSize ts = [t sizeWithAttributes:@{NSFontAttributeName:self.badgeBtn.titleLabel.font ?: [UIFont systemFontOfSize:SW(20)]}];
     UIImage *bi = [self.badgeBtn imageForState:UIControlStateNormal];
-    CGFloat spacing = bi ? 8 : 0;
+    CGFloat spacing = bi ? SW(8) : 0;
     UIEdgeInsets in = self.badgeBtn.contentEdgeInsets;
     CGFloat badgeW = ceil(in.left + ts.width + spacing + (bi?bi.size.width:0) + in.right);
     CGFloat badgeH = SW(48);
