@@ -532,7 +532,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
     dispatch_async(self.workQueue, ^{
         [self _ensureBackupDir];
 
-        // 关键：打印 bundleId + root，排查“换沙盒/换包”
         NSLog(@"[CM][list] bundleId=%@", [[NSBundle mainBundle] bundleIdentifier]);
         NSLog(@"[CM][list] root=%@", [self _backupRootURL].path);
         NSLog(@"[CM][list] index=%@", [self _backupIndexURL].path);
@@ -563,10 +562,8 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
             return;
         }
 
-        // index 空：扫目录兜底
         NSArray<CMBackupInfo *> *scanned = [self _scanBackupsFromDisk];
 
-        // ⭐️ 关键修正：只有 scanned 非空才重建 index，避免每次进来都写成空 index（size=24）
         if (scanned.count > 0) {
             NSMutableArray *arr = [NSMutableArray array];
             for (CMBackupInfo *info in scanned) {
@@ -680,6 +677,7 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
 - (void)restoreContactsFromBackupId:(NSString *)backupId
              contactIndicesInBackup:(NSArray<NSNumber *> *)indices
                         completion:(CMVoidBlock)completion {
+    // 先把备份里解析出来，然后根据 indices 选中，再逐个 addContact
     [self fetchContactsInBackupId:backupId completion:^(NSArray<CNContact *> * _Nullable contacts, NSError * _Nullable error) {
         if (error || !contacts) { if (completion) completion(error); return; }
 
@@ -701,7 +699,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
             CNSaveRequest *req = [[CNSaveRequest alloc] init];
             for (CNContact *c in selected) {
                 CNMutableContact *mc = [c mutableCopy];
-                // 注意：从 vCard 读出来的 contact 没有 identifier（或不可用），直接 add 即可
                 [req addContact:mc toContainerWithIdentifier:nil];
             }
 
@@ -717,11 +714,11 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
 #pragma mark - Normalization helpers
 
 - (BOOL)_isNameMissing:(CNContact *)c {
-    // 用系统全名格式化（对中文更稳）
+    // 用系统全名格式化
     NSString *full = [CNContactFormatter stringFromContact:c style:CNContactFormatterStyleFullName];
     if (full.length > 0) return NO;
 
-    // 注意：必须 isKeyAvailable，避免 “property not fetched” 崩溃
+    // 必须 isKeyAvailable，避免 “property not fetched” 崩溃
     if ([c isKeyAvailable:CNContactGivenNameKey] && c.givenName.length > 0) return NO;
     if ([c isKeyAvailable:CNContactFamilyNameKey] && c.familyName.length > 0) return NO;
     if ([c isKeyAvailable:CNContactMiddleNameKey] && c.middleName.length > 0) return NO;
@@ -733,14 +730,14 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
 
 - (BOOL)_isPhoneMissing:(CNContact *)c {
     if (![c isKeyAvailable:CNContactPhoneNumbersKey]) {
-        // 没取到 key 时按缺失处理（也可以改成 NO 并补日志）
+        // 没取到 key 时按缺失处理
         return YES;
     }
     return (c.phoneNumbers.count == 0);
 }
 
 - (NSString *)_normalizeName:(CNContact *)c {
-    // 先用系统格式化全名（对中文更稳）
+    // 先用系统格式化全名
     NSString *full = [CNContactFormatter stringFromContact:c style:CNContactFormatterStyleFullName];
     if (full.length == 0) {
         full = [NSString stringWithFormat:@"%@%@%@",
@@ -1093,7 +1090,104 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
     });
 }
 
-#pragma mark - Smart Restore (match by phone/email, merge & dedupe)
+// 是否“已存在”（只用于去重；不做 update）
+- (BOOL)_backupContactExistsByPhoneOrEmail:(CNContact *)backup
+                                 phoneSet:(NSSet<NSString *> *)phoneSet
+                                 emailSet:(NSSet<NSString *> *)emailSet {
+
+    if ([backup isKeyAvailable:CNContactPhoneNumbersKey]) {
+        for (CNLabeledValue<CNPhoneNumber *> *lv in (backup.phoneNumbers ?: @[])) {
+            NSString *k = [self _normalizePhoneForMatch:lv.value.stringValue];
+            if (k.length > 0 && [phoneSet containsObject:k]) return YES;
+        }
+    }
+    if ([backup isKeyAvailable:CNContactEmailAddressesKey]) {
+        for (CNLabeledValue<NSString *> *lv in (backup.emailAddresses ?: @[])) {
+            NSString *k = [self _normalizeEmailForMatch:lv.value];
+            if (k.length > 0 && [emailSet containsObject:k]) return YES;
+        }
+    }
+    return NO;
+}
+
+// 从备份 contact 构建一个“可安全新增”的 CNMutableContact（不碰 note 等敏感字段）
+- (CNMutableContact *)_mutableContactForAddFromBackupContact:(CNContact *)b {
+    CNMutableContact *mc = [CNMutableContact new];
+
+    // name
+    if ([b isKeyAvailable:CNContactGivenNameKey])  mc.givenName  = b.givenName ?: @"";
+    if ([b isKeyAvailable:CNContactFamilyNameKey]) mc.familyName = b.familyName ?: @"";
+    if ([b isKeyAvailable:CNContactMiddleNameKey]) mc.middleName = b.middleName ?: @"";
+    if ([b isKeyAvailable:CNContactNamePrefixKey]) mc.namePrefix = b.namePrefix ?: @"";
+    if ([b isKeyAvailable:CNContactNameSuffixKey]) mc.nameSuffix = b.nameSuffix ?: @"";
+    if ([b isKeyAvailable:CNContactNicknameKey])   mc.nickname   = b.nickname ?: @"";
+
+    // org/job
+    if ([b isKeyAvailable:CNContactOrganizationNameKey]) mc.organizationName = b.organizationName ?: @"";
+    if ([b isKeyAvailable:CNContactDepartmentNameKey])   mc.departmentName   = b.departmentName ?: @"";
+    if ([b isKeyAvailable:CNContactJobTitleKey])         mc.jobTitle         = b.jobTitle ?: @"";
+
+    // image/birthday
+    if ([b isKeyAvailable:CNContactImageDataKey] && b.imageData) mc.imageData = b.imageData;
+    if ([b isKeyAvailable:CNContactBirthdayKey] && b.birthday) mc.birthday = b.birthday;
+    if ([b isKeyAvailable:CNContactNonGregorianBirthdayKey] && b.nonGregorianBirthday) mc.nonGregorianBirthday = b.nonGregorianBirthday;
+
+    // phones
+    if ([b isKeyAvailable:CNContactPhoneNumbersKey]) {
+        NSMutableArray *arr = [NSMutableArray array];
+        for (CNLabeledValue<CNPhoneNumber *> *lv in (b.phoneNumbers ?: @[])) {
+            [arr addObject:[CNLabeledValue labeledValueWithLabel:lv.label value:lv.value]];
+        }
+        mc.phoneNumbers = arr;
+    }
+
+    // emails
+    if ([b isKeyAvailable:CNContactEmailAddressesKey]) {
+        NSMutableArray *arr = [NSMutableArray array];
+        for (CNLabeledValue<NSString *> *lv in (b.emailAddresses ?: @[])) {
+            [arr addObject:[CNLabeledValue labeledValueWithLabel:lv.label value:lv.value]];
+        }
+        mc.emailAddresses = arr;
+    }
+
+    // urls
+    if ([b isKeyAvailable:CNContactUrlAddressesKey]) {
+        NSMutableArray *arr = [NSMutableArray array];
+        for (CNLabeledValue<NSString *> *lv in (b.urlAddresses ?: @[])) {
+            [arr addObject:[CNLabeledValue labeledValueWithLabel:lv.label value:lv.value]];
+        }
+        mc.urlAddresses = arr;
+    }
+
+    // addresses
+    if ([b isKeyAvailable:CNContactPostalAddressesKey]) {
+        NSMutableArray *arr = [NSMutableArray array];
+        for (CNLabeledValue<CNPostalAddress *> *lv in (b.postalAddresses ?: @[])) {
+            [arr addObject:[CNLabeledValue labeledValueWithLabel:lv.label value:lv.value]];
+        }
+        mc.postalAddresses = arr;
+    }
+
+    return mc;
+}
+
+- (void)_indexMutableForSets:(CNContact *)c
+                    phoneSet:(NSMutableSet<NSString *> *)phoneSet
+                    emailSet:(NSMutableSet<NSString *> *)emailSet {
+
+    if ([c isKeyAvailable:CNContactPhoneNumbersKey]) {
+        for (CNLabeledValue<CNPhoneNumber *> *lv in (c.phoneNumbers ?: @[])) {
+            NSString *k = [self _normalizePhoneForMatch:lv.value.stringValue];
+            if (k.length > 0) [phoneSet addObject:k];
+        }
+    }
+    if ([c isKeyAvailable:CNContactEmailAddressesKey]) {
+        for (CNLabeledValue<NSString *> *lv in (c.emailAddresses ?: @[])) {
+            NSString *k = [self _normalizeEmailForMatch:lv.value];
+            if (k.length > 0) [emailSet addObject:k];
+        }
+    }
+}
 
 - (void)restoreContactsSmartFromBackupId:(NSString *)backupId
                  contactIndicesInBackup:(NSArray<NSNumber *> *)indices
@@ -1103,7 +1197,6 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
         if (error || !backupContacts) { if (completion) completion(error); return; }
 
         dispatch_async(self.workQueue, ^{
-            // 1) 选中要恢复的备份联系人
             NSMutableArray<CNContact *> *selected = [NSMutableArray array];
             if (indices.count == 0) {
                 [selected addObjectsFromArray:backupContacts];
@@ -1124,7 +1217,15 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
                 return;
             }
 
-            // 2) 拉取“本机默认容器”的现有联系人（只要能匹配所需的 key）
+            NSString *containerId = [self.store defaultContainerIdentifier];
+            if (containerId.length == 0) {
+                NSError *e = [NSError errorWithDomain:@"ContactsManager"
+                                                 code:502
+                                             userInfo:@{NSLocalizedDescriptionKey:@"Default container not found"}];
+                dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(e); });
+                return;
+            }
+
             NSError *fetchErr = nil;
             NSArray<CNContact *> *existing = [self _fetchAllContactsInDefaultContainerForSmartMatch:&fetchErr];
             if (fetchErr) {
@@ -1132,65 +1233,52 @@ NSString * const CMBackupsDidChangeNotification = @"CMBackupsDidChangeNotificati
                 return;
             }
 
-            // 3) 建索引：phone/email -> CNContact（默认取第一个）
-            NSMutableDictionary<NSString *, CNContact *> *phoneMap = [NSMutableDictionary dictionary];
-            NSMutableDictionary<NSString *, CNContact *> *emailMap = [NSMutableDictionary dictionary];
+            NSMutableSet<NSString *> *phoneSet = [NSMutableSet set];
+            NSMutableSet<NSString *> *emailSet = [NSMutableSet set];
 
             for (CNContact *c in existing) {
-                // phone
                 if ([c isKeyAvailable:CNContactPhoneNumbersKey]) {
                     for (CNLabeledValue<CNPhoneNumber *> *lv in (c.phoneNumbers ?: @[])) {
                         NSString *k = [self _normalizePhoneForMatch:lv.value.stringValue];
-                        if (k.length > 0 && !phoneMap[k]) phoneMap[k] = c;
+                        if (k.length > 0) [phoneSet addObject:k];
                     }
                 }
-                // email
                 if ([c isKeyAvailable:CNContactEmailAddressesKey]) {
                     for (CNLabeledValue<NSString *> *lv in (c.emailAddresses ?: @[])) {
                         NSString *k = [self _normalizeEmailForMatch:lv.value];
-                        if (k.length > 0 && !emailMap[k]) emailMap[k] = c;
+                        if (k.length > 0) [emailSet addObject:k];
                     }
                 }
             }
 
-            // 4) 逐个智能恢复：匹配到就 update(合并去重)，否则 add
-            NSError *lastErr = nil;
+            CNSaveRequest *req = [CNSaveRequest new];
+            NSUInteger addCount = 0;
 
             for (CNContact *b in selected) {
-                CNContact *matched = [self _matchExistingContactForBackupContact:b phoneMap:phoneMap emailMap:emailMap];
-
-                if (matched) {
-                    // update：把备份信息合并到 matched 上（补全/合并/去重）
-                    CNMutableContact *mc = [matched mutableCopy];
-                    [self _mergeBackupContact:b intoExistingMutable:mc];
-
-                    CNSaveRequest *req = [CNSaveRequest new];
-                    [req updateContact:mc];
-
-                    NSError *e = nil;
-                    BOOL ok = [self.store executeSaveRequest:req error:&e];
-                    if (!ok) lastErr = e;
-
-                    // 更新索引（因为 mc 可能新增了 phone/email）
-                    [self _reindexContact:mc phoneMap:phoneMap emailMap:emailMap];
-                } else {
-                    // add：新增到默认容器
-                    CNMutableContact *mc = [b mutableCopy];
-
-                    CNSaveRequest *req = [CNSaveRequest new];
-                    [req addContact:mc toContainerWithIdentifier:nil];
-
-                    NSError *e = nil;
-                    BOOL ok = [self.store executeSaveRequest:req error:&e];
-                    if (!ok) lastErr = e;
-
-                    // add 成功后，系统会给 identifier；但这里即使拿不到也不影响索引逻辑
-                    [self _reindexContact:mc phoneMap:phoneMap emailMap:emailMap];
+                if ([self _backupContactExistsByPhoneOrEmail:b phoneSet:phoneSet emailSet:emailSet]) {
+                    continue;
                 }
+
+                CNMutableContact *mc = [self _mutableContactForAddFromBackupContact:b];
+                [req addContact:mc toContainerWithIdentifier:containerId];
+                addCount++;
+
+                [self _indexMutableForSets:mc phoneSet:phoneSet emailSet:emailSet];
             }
 
+            if (addCount == 0) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (completion) completion(nil);
+                });
+                return;
+            }
+
+            NSError *saveErr = nil;
+            BOOL ok = [self.store executeSaveRequest:req error:&saveErr];
+
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(lastErr); // 有错误则返回最后一个错误；全成功返回 nil
+                if (!ok) { if (completion) completion(saveErr); }
+                else { if (completion) completion(nil); }
             });
         });
     }];
@@ -1455,7 +1543,7 @@ static inline BOOL CMIsEmptyStr(NSString *s) {
         if (error || !backupContacts) { if (completion) completion(error); return; }
 
         dispatch_async(self.workQueue, ^{
-            // 1) 选中要恢复的联系人
+            // 选中要恢复的联系人
             NSMutableArray<CNContact *> *selected = [NSMutableArray array];
             if (indices.count == 0) {
                 [selected addObjectsFromArray:backupContacts];
@@ -1468,6 +1556,13 @@ static inline BOOL CMIsEmptyStr(NSString *s) {
                 }
             }
 
+            if (selected.count == 0) {
+                NSError *e = [NSError errorWithDomain:@"ContactsManager" code:422
+                                             userInfo:@{NSLocalizedDescriptionKey:@"No contacts selected to restore"}];
+                dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(e); });
+                return;
+            }
+
             NSString *containerId = [self.store defaultContainerIdentifier];
             if (containerId.length == 0) {
                 NSError *e = [NSError errorWithDomain:@"ContactsManager" code:420
@@ -1476,55 +1571,22 @@ static inline BOOL CMIsEmptyStr(NSString *s) {
                 return;
             }
 
-            // 2) 删除默认容器内所有联系人（best-effort）
-            NSPredicate *pred = [CNContact predicateForContactsInContainerWithIdentifier:containerId];
-            NSError *fetchErr = nil;
-            NSArray<CNContact *> *existing =
-                [self.store unifiedContactsMatchingPredicate:pred
-                                                 keysToFetch:@[CNContactIdentifierKey]
-                                                       error:&fetchErr] ?: @[];
-
-            NSError *firstErr = fetchErr;
-            NSInteger deleteFail = 0;
-
-            for (CNContact *c in existing) {
-                @autoreleasepool {
-                    if (c.identifier.length == 0) continue;
-                    CNSaveRequest *req = [CNSaveRequest new];
-                    [req deleteContact:[c mutableCopy]];
-                    NSError *e = nil;
-                    if (![self.store executeSaveRequest:req error:&e]) {
-                        deleteFail++;
-                        if (!firstErr) firstErr = e;
-                    }
-                }
-            }
-
-            // 3) 添加选中联系人
-            NSInteger addFail = 0;
+            // 只新增：不管现有联系人，不去重，不跳过
+            CNSaveRequest *req = [CNSaveRequest new];
             for (CNContact *c in selected) {
                 @autoreleasepool {
-                    CNSaveRequest *req = [CNSaveRequest new];
-                    [req addContact:[c mutableCopy] toContainerWithIdentifier:containerId];
-                    NSError *e = nil;
-                    if (![self.store executeSaveRequest:req error:&e]) {
-                        addFail++;
-                        if (!firstErr) firstErr = e;
-                    }
+                    // 从 vCard 解析出来的 CNContact 没有可用 identifier，直接 add 即可
+                    CNMutableContact *mc = [c mutableCopy];
+                    [req addContact:mc toContainerWithIdentifier:containerId];
                 }
             }
 
+            NSError *saveErr = nil;
+            BOOL ok = [self.store executeSaveRequest:req error:&saveErr];
+
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (deleteFail > 0 || addFail > 0) {
-                    NSString *msg = [NSString stringWithFormat:@"Overwrite finished with issues. deleteFail=%ld addFail=%ld",
-                                     (long)deleteFail, (long)addFail];
-                    NSMutableDictionary *ui = [NSMutableDictionary dictionary];
-                    ui[NSLocalizedDescriptionKey] = msg;
-                    if (firstErr) ui[NSUnderlyingErrorKey] = firstErr;
-                    if (completion) completion([NSError errorWithDomain:@"ContactsManager" code:421 userInfo:ui]);
-                } else {
-                    if (completion) completion(nil);
-                }
+                if (!ok) { if (completion) completion(saveErr); }
+                else { if (completion) completion(nil); }
             });
         });
     }];
