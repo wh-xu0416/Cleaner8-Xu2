@@ -308,15 +308,16 @@
 				DEVELOPMENT_TEAM = 357A26CRTD;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Cleaner8-Xu2/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = Compressly;
+				INFOPLIST_KEY_CFBundleDisplayName = "";
 				"INFOPLIST_KEY_CFBundleDisplayName[sdk=iphoneos*]" = Compressly;
-				INFOPLIST_KEY_NSContactsUsageDescription = "We are requesting access to our contacts only to identify and organize them.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Access to your photo library is required to read photos/videos, and to perform image processing and compression. All processing is done on the device itself.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Access to your photo library is required to read photos/videos, and to perform image processing and compression. All processing is done on the device itself.";
-				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Tracking enables personalized features in the app. Your data will be kept strictly confidential and will never be shared with third parties. Allow tracking to experience all features?";
+				INFOPLIST_KEY_NSContactsUsageDescription = "";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -347,15 +348,16 @@
 				DEVELOPMENT_TEAM = 357A26CRTD;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Cleaner8-Xu2/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = Compressly;
+				INFOPLIST_KEY_CFBundleDisplayName = "";
 				"INFOPLIST_KEY_CFBundleDisplayName[sdk=iphoneos*]" = Compressly;
-				INFOPLIST_KEY_NSContactsUsageDescription = "We are requesting access to our contacts only to identify and organize them.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Access to your photo library is required to read photos/videos, and to perform image processing and compression. All processing is done on the device itself.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Access to your photo library is required to read photos/videos, and to perform image processing and compression. All processing is done on the device itself.";
-				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Tracking enables personalized features in the app. Your data will be kept strictly confidential and will never be shared with third parties. Allow tracking to experience all features?";
+				INFOPLIST_KEY_NSContactsUsageDescription = "";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

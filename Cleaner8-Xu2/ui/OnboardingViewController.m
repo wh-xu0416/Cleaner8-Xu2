@@ -108,7 +108,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         [self.continueBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(45)],
         [self.continueBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(45)],
         [self.continueBtn.heightAnchor constraintEqualToConstant:SW(56)],
-        [self.continueBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-SW(113)],
+        [self.continueBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-SW(56)],
     ]];
 }
 

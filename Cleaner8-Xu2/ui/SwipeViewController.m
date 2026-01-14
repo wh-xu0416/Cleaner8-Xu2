@@ -1254,31 +1254,12 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 }
 
 - (void)sw_onTapPermissionGate {
-    PHAuthorizationStatus st = [self sw_currentPHAuthStatus];
-
-    if (st == PHAuthorizationStatusNotDetermined) {
-        __weak typeof(self) ws = self;
-        [[SwipeManager shared] requestAuthorizationAndLoadIfNeeded:^(BOOL granted) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(ws) self = ws;
-                if (!self) return;
-                [self sw_updatePermissionUI];
-                if (granted) [self reloadAllFromManager];
-            });
-        }];
-        return;
-    }
-
-    if (@available(iOS 14.0, *)) {
-        if (st == PHAuthorizationStatusLimited) {
-            [PHPhotoLibrary.sharedPhotoLibrary presentLimitedLibraryPickerFromViewController:self];
-            return;
-        }
-    }
-
     NSURL *url = [NSURL URLWithString:UIApplicationOpenSettingsURLString];
-    if ([[UIApplication sharedApplication] canOpenURL:url]) {
-        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    if (!url) return;
+
+    UIApplication *app = UIApplication.sharedApplication;
+    if ([app canOpenURL:url]) {
+        [app openURL:url options:@{} completionHandler:nil];
     }
 }
 
