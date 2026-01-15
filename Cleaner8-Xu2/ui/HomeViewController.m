@@ -1141,7 +1141,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 - (void)storeAuthLevel:(ASPhotoAuthLevel)lvl {
     [NSUserDefaults.standardUserDefaults setInteger:lvl forKey:kASLastPhotoAuthLevelKey];
-    [NSUserDefaults.standardUserDefaults synchronize];
+//    [NSUserDefaults.standardUserDefaults synchronize];
 }
 
 - (BOOL)hasPhotoAccess {
