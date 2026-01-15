@@ -3,6 +3,7 @@
 #import "VideoViewController.h"
 #import "MainTabBarController.h"
 #import "LaunchViewController.h"
+#import "PaywallPresenter.h"
 
 @implementation SceneDelegate
 
@@ -23,6 +24,8 @@ options:(UISceneConnectionOptions *)connectionOptions {
 
     self.window.rootViewController = rootNav;
     [self.window makeKeyAndVisible];
+    
+    [[PaywallPresenter shared] start];
 }
 
 @end

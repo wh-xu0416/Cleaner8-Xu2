@@ -4,6 +4,7 @@
 #import "Common.h"
 #import "ASSelectTitleBar.h"
 #import <Photos/Photos.h>
+#import "PaywallPresenter.h"
 
 #pragma mark - Adapt Helpers (402)
 
@@ -553,6 +554,11 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
 
+        if (![PaywallPresenter shared].isProActive) {
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"swipe_delete"];
+            return;
+        }
+        
         NSArray *delIDs = self.selectedIDs.allObjects;
         [[SwipeManager shared] deleteAssetsWithIDs:delIDs completion:^(__unused BOOL success, __unused NSError * _Nullable error) {
             dispatch_async(dispatch_get_main_queue(), ^{

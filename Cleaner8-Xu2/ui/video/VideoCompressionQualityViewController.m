@@ -3,6 +3,7 @@
 #import <Photos/Photos.h>
 #import "VideoCompressionProgressViewController.h"
 #import "ASMediaPreviewViewController.h"
+#import "PaywallPresenter.h"
 
 static const CGFloat kASDesignBaseWidth  = 402.0;
 static const CGFloat kASDesignBaseHeight = 874.0;
@@ -835,6 +836,11 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
 }
 
 - (void)onCompress {
+    if (![PaywallPresenter shared].isProActive) {
+        [[PaywallPresenter shared] showSubscriptionPageWithSource:@"video_compress"];
+        return;
+    }
+    
     uint64_t before = self.totalBeforeBytes;
     double r = ASRemainRatioForQuality(self.quality);
     uint64_t after = (uint64_t)llround((double)before * r);

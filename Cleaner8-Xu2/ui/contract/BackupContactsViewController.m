@@ -5,6 +5,7 @@
 #import "Common.h"
 #import <UIKit/UIKit.h>
 #import "UIViewController+ASPrivateBackground.h"
+#import "PaywallPresenter.h"
 
 #pragma mark - UI Helpers
 
@@ -299,6 +300,11 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
 - (void)onBottomButtonTap {
     if (self.selectedBackupIds.count == 0) {
         [self onAddBackups];
+        return;
+    }
+    
+    if (![PaywallPresenter shared].isProActive) {
+        [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact_delete_backup"];
         return;
     }
     [self confirmDeleteSelectedBackups];

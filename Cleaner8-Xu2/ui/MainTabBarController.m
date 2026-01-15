@@ -7,6 +7,7 @@
 #import "MoreViewController.h"
 #import "Common.h"
 #import "SwipeManager.h"
+#import "PaywallPresenter.h"
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
@@ -79,6 +80,8 @@ UIGestureRecognizerDelegate
 
     [self.view addSubview:self.floatingTab];
     [self.view bringSubviewToFront:self.floatingTab];
+    
+    [[PaywallPresenter shared] showPaywallIfNeededWithSource:@"home"];
 }
 
 - (void)viewDidAppear:(BOOL)animated {

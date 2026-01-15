@@ -1,5 +1,6 @@
 #import "ImageCompressionQualityViewController.h"
 #import "ImageCompressionProgressViewController.h"
+#import "PaywallPresenter.h"
 #import <Photos/Photos.h>
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
@@ -327,20 +328,16 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
 @property (nonatomic, strong) CAGradientLayer *bgGradient;
 
-// Header
 @property (nonatomic, strong) UIButton *backBtn;
 @property (nonatomic, strong) UILabel *titleLabel;
 
-// Preview (grid)
 @property (nonatomic, strong) UICollectionView *grid;
 
-// Before/After
 @property (nonatomic, strong) UILabel *beforeLabel;
 @property (nonatomic, strong) UIImageView *arrowView;
 @property (nonatomic, strong) UILabel *afterLabel;
 @property (nonatomic, strong) UILabel *saveLabel;
 
-// Select card
 @property (nonatomic, strong) UIView *selectCard;
 @property (nonatomic, strong) UILabel *selectTitle;
 @property (nonatomic, strong) UIView *whiteBox;
@@ -348,7 +345,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 @property (nonatomic, strong) ASImageQualityRow *rowMedium;
 @property (nonatomic, strong) ASImageQualityRow *rowLarge;
 
-// Bottom
 @property (nonatomic, strong) UIButton *compressBtn;
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIView *scrollContentView;
@@ -400,7 +396,6 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 #pragma mark - UI
 
 - (void)buildUI {
-    // ===== 统一缩放常量（保持布局一致，只等比缩小）=====
     CGFloat side = ASClamp(ASV(20), 14, 20);
 
     CGFloat headerH = ASClamp(ASV(56), 50, 56);
@@ -728,7 +723,21 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
 
 - (void)onCompress {
     if (self.assets.count == 0) return;
+   
+    if (![PaywallPresenter shared].isProActive) {
 
+        NSString *source = @"image_compress";
+
+        // 方案1：看第一个资源（通常你的压缩入口一次只会选一种类型）
+        PHAsset *asset = (PHAsset *)self.assets.firstObject;
+        if ((asset.mediaSubtypes & PHAssetMediaSubtypePhotoLive) != 0) {
+            source = @"livephoto_compress";
+        }
+
+        [[PaywallPresenter shared] showSubscriptionPageWithSource:source];
+        return;
+    }
+    
     uint64_t before = self.totalBeforeBytes;
     double r = ASImageRemainRatioForQuality(self.quality);
     uint64_t estAfter = (uint64_t)llround((double)before * r);

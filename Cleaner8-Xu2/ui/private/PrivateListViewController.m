@@ -11,6 +11,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import "ASMediaPreviewViewController.h"
 #import "ASPrivatePermissionBanner.h"
+#import "PaywallPresenter.h"
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
@@ -130,7 +131,6 @@ static inline UIColor *ASHexBlack(void) {
     [super viewDidLayoutSubviews];
     [self as_updatePrivateBackgroundLayout];
 
-    // grid size: 4 columns, spacing = AS(2), left/right inset = AS(15)
     UICollectionViewFlowLayout *lay = (UICollectionViewFlowLayout *)self.cv.collectionViewLayout;
     CGFloat w = self.cv.bounds.size.width;
 
@@ -139,7 +139,7 @@ static inline UIColor *ASHexBlack(void) {
     CGFloat item = floor((w - (columns - 1) * spacing) / (CGFloat)columns);
     lay.itemSize = CGSizeMake(item, item);
 
-    CGFloat bottomInset = AS(70) + self.view.safeAreaInsets.bottom; // 原 70
+    CGFloat bottomInset = AS(70) + self.view.safeAreaInsets.bottom;
 
     self.cv.contentInset = UIEdgeInsetsMake(0, 0, bottomInset, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
@@ -272,7 +272,6 @@ static inline UIColor *ASHexBlack(void) {
     self.emptyStack.hidden = YES;
     [self.view addSubview:self.emptyStack];
 
-    // 让整体尽量居中，但别压到顶部/底部按钮
     NSLayoutConstraint *centerY = [self.emptyStack.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-AS(10)];
     centerY.priority = UILayoutPriorityDefaultHigh;
 
@@ -315,7 +314,6 @@ static inline UIColor *ASHexBlack(void) {
         [self.emptyTextLabel.bottomAnchor constraintEqualToAnchor:self.emptyView.bottomAnchor],
     ]];
 
-    // Permission banner (默认隐藏)
     self.permissionBanner = [ASPrivatePermissionBanner new];
     self.permissionBanner.translatesAutoresizingMaskIntoConstraints = NO;
     self.permissionBanner.hidden = YES;
@@ -326,7 +324,6 @@ static inline UIColor *ASHexBlack(void) {
 
     [self.emptyStack addArrangedSubview:self.permissionBanner];
 
-    // banner 宽度贴合页面左右 15
     [NSLayoutConstraint activateConstraints:@[
         [self.permissionBanner.widthAnchor constraintEqualToAnchor:self.view.widthAnchor constant:-AS(30)],
     ]];
@@ -500,6 +497,11 @@ static inline UIColor *ASHexBlack(void) {
         NSArray<NSURL *> *toDelete = [self selectedURLs];
         if (toDelete.count == 0) return;
 
+        if (![PaywallPresenter shared].isProActive) {
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:(_mediaType == ASPrivateMediaTypeVideo) ? @"private_video_delete" : @"private_photo_delete"];
+            return;
+        }
+        
         [[ASPrivateMediaStore shared] deleteItems:toDelete];
 
         NSMutableIndexSet *rm = [NSMutableIndexSet indexSet];

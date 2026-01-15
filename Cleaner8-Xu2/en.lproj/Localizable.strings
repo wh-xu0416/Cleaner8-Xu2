@@ -259,3 +259,17 @@
 "You can perform this action now to free up space, or do it at any convenient time" = "You can perform this action now to free up space, or do it at any convenient time";
 "You deleted %@ photos today." = "You deleted %@ photos today.";
 "You will save about " = "You will save about ";
+"common.back" = "Back";
+"common.loading" = "Loading…";
+"common.waiting_connection" = "Waiting for connection…";
+"common.restore_purchase" = "Restore Purchase";
+
+"subscription.choose_plan" = "Choose a Plan";
+"subscription.plan_item_format" = "%@   %@";
+
+"paywall.unlock_pro" = "Unlock Pro";
+"paywall.subscribe_weekly" = "Subscribe Weekly";
+"paywall.subscribe_weekly_with_price" = "Subscribe Weekly  %@";
+"paywall.see_all_plans" = "See all plans";
+"paywall.weekly_fallback" = "Weekly";
+"common.network_tip_to_settings" = "No network or Cellular is disabled for this app. Tap to open Settings.";

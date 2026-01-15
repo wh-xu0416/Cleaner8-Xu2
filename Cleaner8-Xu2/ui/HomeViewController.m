@@ -7,6 +7,7 @@
 #import "VideoSubPageViewController.h"
 #import "ASPrivatePermissionBanner.h"
 #import "Common.h"
+#import "PaywallPresenter.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -20,10 +21,6 @@ typedef NS_ENUM(NSInteger, ASPhotoAuthLevel) {
 
 static inline UIColor *ASBlue(void) {
     return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; // #024DFFFF
-}
-
-static inline void ASLogCost(NSString *name, CFTimeInterval start) {
-    NSLog(@"⏱️ %@ %.2fms", name, (CFAbsoluteTimeGetCurrent() - start) * 1000.0);
 }
 
 static NSString * const kASLastPhotoAuthLevelKey = @"as_last_photo_auth_level_v1";
@@ -438,7 +435,15 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
 
         _proBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
         _proBtn.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
+        [_proBtn addTarget:self action:@selector(tapProBtn) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:_proBtn];
+        
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(onSubscriptionStateChanged)
+                                                     name:@"subscriptionStateChanged"
+                                                   object:nil];
+
+        [self updateProButtonVisibility];
 
         _proGradient = [CAGradientLayer layer];
         _proGradient.colors = @[
@@ -603,6 +608,33 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     } else {
         [_bar setRedRatio:0 yellowRatio:0 grayRatio:1];
     }
+}
+
+- (void)onSubscriptionStateChanged {
+    [self updateProButtonVisibility];
+}
+
+- (void)updateProButtonVisibility {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        SubscriptionState state = [StoreKit2Manager shared].state;
+
+        BOOL isActive = (state == SubscriptionStateActive);
+
+        if (state == SubscriptionStateUnknown) {
+            self->_proBtn.hidden = NO;
+            return;
+        }
+
+        self->_proBtn.hidden = isActive;
+    });
+}
+
+- (void)tapProBtn {
+    [[PaywallPresenter shared] showSubscriptionPageWithSource:@"home"];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 @end
@@ -1450,11 +1482,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 }
 
 - (void)rebuildModulesAndReloadIsFinal:(BOOL)isFinal {
-    CFTimeInterval t0 = CFAbsoluteTimeGetCurrent();
 
     if (self.scanMgr.snapshot.state == ASScanStateScanning && isFinal) {
         [self scheduleScanUIUpdateCoalesced];
-        ASLogCost(@"TOTAL rebuildModulesAndReload (scanning)", t0);
         return;
     }
 
@@ -1496,8 +1526,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
                 [self2 updateHeaderDuringScanning];
                 [self2 refreshVisibleCellsAndCovers];
-
-                ASLogCost(@"TOTAL rebuildModulesAndReload (async)", t0);
             });
         }
     });

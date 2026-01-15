@@ -2,6 +2,7 @@
 #import "ContactsManager.h"
 #import "ASSelectTitleBar.h"
 #import "Common.h"
+#import "PaywallPresenter.h"
 #import <Contacts/Contacts.h>
 #import <UIKit/UIKit.h>
 #import <ContactsUI/ContactsUI.h>
@@ -850,6 +851,11 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     NSInteger n = [self selectedMergeableContactCount];
     if (n < 2) return;
 
+    if (![PaywallPresenter shared].isProActive) {
+        [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact_merge"];
+        return;
+    }
+  
     __weak typeof(self) weakSelf = self;
 
     NSString *msg = [NSString stringWithFormat:NSLocalizedString(@"This will merge %ld contacts. Continue?", nil), (long)n];
@@ -1059,7 +1065,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         CMDuplicateGroup *g = self.allGroups[section];
         return g.items.count;
     }
-    // preview：每组显示 1 个合并预览 cell
     return 1;
 }
 

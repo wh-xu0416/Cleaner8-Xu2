@@ -259,3 +259,17 @@
 "You can perform this action now to free up space, or do it at any convenient time" = "You can perform this action now to free up space, or do it at any convenient time";
 "You deleted %@ photos today." = "You deleted %@ photos today.";
 "You will save about " = "You will save about ";
+"common.back" = "返回";
+"common.loading" = "加载中…";
+"common.waiting_connection" = "等待网络连接…";
+"common.restore_purchase" = "恢复购买";
+
+"subscription.choose_plan" = "选择套餐";
+"subscription.plan_item_format" = "%@   %@";
+
+"paywall.unlock_pro" = "解锁专业版";
+"paywall.subscribe_weekly" = "订阅周会员";
+"paywall.subscribe_weekly_with_price" = "订阅周会员  %@";
+"paywall.see_all_plans" = "查看全部方案";
+"paywall.weekly_fallback" = "周订阅";
+"common.network_tip_to_settings" = "网络不可用或已关闭本应用蜂窝数据，点此前往设置开启";

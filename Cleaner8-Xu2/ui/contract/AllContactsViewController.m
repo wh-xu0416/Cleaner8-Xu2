@@ -5,6 +5,7 @@
 #import <UIKit/UIKit.h>
 #import <ContactsUI/ContactsUI.h>
 #import "Common.h"
+#import "PayWallPresenter.h"
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
@@ -917,10 +918,22 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
 
 - (void)onSingleAction {
     if (self.mode == AllContactsModeBackup) {
+        if (![PaywallPresenter shared].isProActive) {
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact_delete_backup"];
+            return;
+        }
         [self doBackupSelected];
     } else if (self.mode == AllContactsModeIncomplete) {
+        if (![PaywallPresenter shared].isProActive) {
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact_delete_incomplete"];
+            return;
+        }
         [self confirmDeleteIncompleteThenRun];
     } else {
+        if (![PaywallPresenter shared].isProActive) {
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact_delete"];
+            return;
+        }
         [self confirmDeleteAllContactsWithBackupOption];
     }
 }
@@ -1196,7 +1209,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
 
 - (void)onRestore {
     if (self.selectedBackupIndices.count == 0) return;
-
+    
     __weak typeof(self) weakSelf = self;
     NSArray<NSNumber *> *indices = self.selectedBackupIndices.allObjects;
 

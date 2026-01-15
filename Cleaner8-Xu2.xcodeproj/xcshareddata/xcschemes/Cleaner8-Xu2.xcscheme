@@ -80,6 +80,9 @@
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
+      <StoreKitConfigurationFileReference
+         identifier = "../../Cleaner8-Xu2/StoreKitTest.storekit">
+      </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

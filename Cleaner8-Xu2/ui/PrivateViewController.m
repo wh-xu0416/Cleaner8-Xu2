@@ -204,7 +204,7 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
 
     self.scrollView = [UIScrollView new];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.scrollView.alwaysBounceVertical = YES;
+    self.scrollView.alwaysBounceVertical = NO;
     if (@available(iOS 11.0, *)) {
         self.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     }
