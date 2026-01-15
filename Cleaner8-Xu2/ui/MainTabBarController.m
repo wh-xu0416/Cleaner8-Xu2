@@ -81,7 +81,11 @@ UIGestureRecognizerDelegate
     [self.view addSubview:self.floatingTab];
     [self.view bringSubviewToFront:self.floatingTab];
     
-    [[PaywallPresenter shared] showPaywallIfNeededWithSource:@"home"];
+    
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [[PaywallPresenter shared] showPaywallIfNeededWithSource:@"home"];
+    });
 }
 
 - (void)viewDidAppear:(BOOL)animated {

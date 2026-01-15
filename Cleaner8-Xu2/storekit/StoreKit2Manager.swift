@@ -3,21 +3,10 @@ import StoreKit
 import Network
 import UIKit
 
-@objc enum SubscriptionState: Int {
-    case unknown
-    case inactive
-    case active
-}
-
 extension Notification.Name {
+    static let storeSnapshotChanged = Notification.Name("storeSnapshotChanged")
     static let subscriptionStateChanged = Notification.Name("subscriptionStateChanged")
-    static let storeProductsUpdated = Notification.Name("storeProductsUpdated")
-    static let storeNetworkChanged = Notification.Name("storeNetworkChanged")
-}
-
-final class CompletionBox: @unchecked Sendable {
-    let block: (Bool) -> Void
-    init(_ block: @escaping (Bool) -> Void) { self.block = block }
+    static let purchaseStateChanged = Notification.Name("purchaseStateChanged")
 }
 
 final class WeakBox<T: AnyObject>: @unchecked Sendable {
@@ -25,219 +14,303 @@ final class WeakBox<T: AnyObject>: @unchecked Sendable {
     init(_ value: T) { self.value = value }
 }
 
-/// OC 可见的产品模型（不暴露 StoreKit.Product struct）
+final class CompletionBox<T>: @unchecked Sendable {
+    let block: (T) -> Void
+    init(_ block: @escaping (T) -> Void) { self.block = block }
+}
+
+@objc enum SubscriptionState: Int {
+    case unknown
+    case inactive
+    case active
+}
+
+@objc enum StoreAvailability: Int {
+    case unknown
+    case available
+    case unavailable   // 例如无网络、或商店不可用（你可以先只用网络判断）
+}
+
+@objc enum ProductsLoadState: Int {
+    case idle
+    case loading
+    case ready
+    case failed
+}
+
+@objc enum PurchaseFlowState: Int {
+    case idle
+    case purchasing
+    case pending
+    case cancelled
+    case succeeded
+    case failed
+    case restoring
+    case restored
+}
+
 @objcMembers
 final class SK2ProductModel: NSObject {
     let productID: String
     let displayName: String
     let displayPrice: String
 
-    /// ✅ 你说“价格和符号都要”：这里把符号也拆出来给你
-    let currencySymbol: String
-
-    /// 如果你还想要 code（比如 USD/CNY），这里也给一个（来自 priceFormatStyle）
-    let currencyCode: String
-
-    fileprivate let raw: Product
+    @nonobjc private let raw: Product
 
     init(raw: Product) {
         self.raw = raw
         self.productID = raw.id
         self.displayName = raw.displayName
         self.displayPrice = raw.displayPrice
-
-        // ✅ currencyCode 通常是 ISO 4217 (如 USD/JPY)，符号用 displayPrice 里提取更贴近商店展示
-        self.currencyCode = raw.priceFormatStyle.currencyCode
-        self.currencySymbol = SK2ProductModel.extractCurrencySymbol(from: raw.displayPrice)
-
         super.init()
-    }
-
-    /// 从 "¥300" / "$9.99" / "9,99 €" / "PLN 9,99" 等字符串里提取“符号部分”
-    private static func extractCurrencySymbol(from displayPrice: String) -> String {
-        let s = displayPrice.trimmingCharacters(in: .whitespacesAndNewlines)
-        let digits = CharacterSet.decimalDigits
-
-        // 1) 前缀符号（$ / ¥ / PLN 这类）
-        if let firstDigit = s.rangeOfCharacter(from: digits) {
-            let prefix = String(s[..<firstDigit.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !prefix.isEmpty { return prefix }
-        }
-
-        // 2) 后缀符号（€ 这类）
-        if let lastDigit = s.rangeOfCharacter(from: digits, options: .backwards) {
-            let suffix = String(s[lastDigit.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !suffix.isEmpty { return suffix }
-        }
-
-        // 3) 兜底：剔除数字/空格后剩余
-        let fallback = s.filter { !$0.isNumber && !$0.isWhitespace }
-        return fallback
     }
 }
 
 @objcMembers
-final class StoreKit2Manager: NSObject {
-    private var pathMonitor: NWPathMonitor?
-    private let pathQueue = DispatchQueue(label: "xx.sk2.network.monitor")
-    private var isRefreshingAfterNetwork = false
+final class StoreSnapshot: NSObject {
+    let networkAvailable: Bool
+    let availability: StoreAvailability
 
-    static let shared = StoreKit2Manager()
+    let productsState: ProductsLoadState
+    let products: [SK2ProductModel]
+
+    let subscriptionState: SubscriptionState
+
+    let purchaseState: PurchaseFlowState
+    let lastErrorMessage: String?
+
+    init(networkAvailable: Bool,
+         availability: StoreAvailability,
+         productsState: ProductsLoadState,
+         products: [SK2ProductModel],
+         subscriptionState: SubscriptionState,
+         purchaseState: PurchaseFlowState,
+         lastErrorMessage: String?) {
+        self.networkAvailable = networkAvailable
+        self.availability = availability
+        self.productsState = productsState
+        self.products = products
+        self.subscriptionState = subscriptionState
+        self.purchaseState = purchaseState
+        self.lastErrorMessage = lastErrorMessage
+        super.init()
+    }
+}
+
+final class StoreKit2Manager: NSObject {
+
+    @objc static let shared = StoreKit2Manager()
 
     let productIDs: [String] = [
         "com.demo.pro.weekly",
         "com.demo.pro.yearly"
     ]
 
-    /// ✅ 网络是否可用（OC 可读）
-    @objc private(set) var networkAvailable: Bool = true {
-           didSet {
-               if oldValue != networkAvailable {
-                   postOnMain(.storeNetworkChanged)
-               }
-           }
-       }
+    // ObjC 需要读 snapshot
+    @objc private(set) var snapshot: StoreSnapshot = StoreSnapshot(
+        networkAvailable: true,
+        availability: .unknown,
+        productsState: .idle,
+        products: [],
+        subscriptionState: .unknown,
+        purchaseState: .idle,
+        lastErrorMessage: nil
+    )
 
+    // ObjC Presenter 里用的 state
+    @objc var state: SubscriptionState { snapshot.subscriptionState }
 
-    /// OC 用的产品数组
-    private(set) var products: [SK2ProductModel] = [] {
-        didSet { postOnMain(.storeProductsUpdated) }
-    }
-
-    private(set) var state: SubscriptionState = .unknown {
-        didSet {
-            if oldValue != state { postOnMain(.subscriptionStateChanged) }
-        }
-    }
-
+    // MARK: - Internal state (全部是 Swift-only，不要暴露给 ObjC)
+    private var pathMonitor: NWPathMonitor?
+    private let pathQueue = DispatchQueue(label: "xx.sk2.network.monitor")
     private var isStarted = false
     private var rawProducts: [Product] = []
     private var updatesTask: Task<Void, Never>?
+    private var isRefreshingAfterNetwork = false
 
-    // MARK: - 启动入口
-
-    func start() {
+    // MARK: - Start
+    @objc func start() {
         guard !isStarted else { return }
         isStarted = true
-
+        
         startNetworkMonitor()
         observeAppForeground()
-
+        
         Task { @MainActor [weak self] in
             guard let self else { return }
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            await self.refreshProducts()
-            await self.refreshSubscriptionState()
+            await self.refreshAll(reason: "start")
             self.listenForTransactionUpdates()
         }
     }
 
-    // MARK: - Products
+    // MARK: - Refresh
+    @MainActor
+    func refreshAll(reason: String) async {
+        await refreshProducts()
+        await refreshSubscriptionState()
+    }
 
     @MainActor
     func refreshProducts() async {
+        updateSnapshot { old in
+            StoreSnapshot(
+                networkAvailable: old.networkAvailable,
+                availability: old.networkAvailable ? .available : .unavailable,
+                productsState: .loading,
+                products: old.products,
+                subscriptionState: old.subscriptionState,
+                purchaseState: old.purchaseState,
+                lastErrorMessage: nil
+            )
+        }
+
         do {
             let list = try await Product.products(for: productIDs)
             self.rawProducts = list
-            self.products = list.map { SK2ProductModel(raw: $0) }
+            let models = list.map { SK2ProductModel(raw: $0) }
+
+            updateSnapshot { old in
+                StoreSnapshot(
+                    networkAvailable: old.networkAvailable,
+                    availability: old.networkAvailable ? .available : .unavailable,
+                    productsState: .ready,
+                    products: models,
+                    subscriptionState: old.subscriptionState,
+                    purchaseState: old.purchaseState,
+                    lastErrorMessage: nil
+                )
+            }
         } catch {
-            // ✅ 网络波动时不强制清空（避免 UI 抖动）；只有当本来就空才保持空
-            if self.products.isEmpty {
-                self.rawProducts = []
-                self.products = []
+            let msg = error.localizedDescription
+            updateSnapshot { old in
+                StoreSnapshot(
+                    networkAvailable: old.networkAvailable,
+                    availability: old.networkAvailable ? .available : .unavailable,
+                    productsState: .failed,
+                    products: old.products,
+                    subscriptionState: old.subscriptionState,
+                    purchaseState: old.purchaseState,
+                    lastErrorMessage: msg
+                )
             }
         }
     }
-
-    // MARK: - Subscription State
 
     @MainActor
     func refreshSubscriptionState() async {
+        var newState: SubscriptionState = .inactive
+
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
                productIDs.contains(transaction.productID) {
-                state = .active
-                return
+                newState = .active
+                break
             }
         }
-        state = .inactive
+
+        updateSnapshot { old in
+            StoreSnapshot(
+                networkAvailable: old.networkAvailable,
+                availability: old.availability,
+                productsState: old.productsState,
+                products: old.products,
+                subscriptionState: newState,
+                purchaseState: old.purchaseState,
+                lastErrorMessage: old.lastErrorMessage
+            )
+        }
     }
 
-    // MARK: - OC 友好的购买/恢复接口（completion）
-
-    @preconcurrency
-    func purchase(productID: String, completion: @escaping (Bool) -> Void) {
-        let box = CompletionBox(completion)
+    @objc(purchaseWithProductID:completion:)
+    func purchaseWithProductID(_ productID: String,
+                               completion: @escaping (PurchaseFlowState) -> Void) {
+        let box = CompletionBox<PurchaseFlowState>(completion)
 
         Task { @MainActor [weak self] in
-            guard let self else { box.block(false); return }
-            let ok = await self.purchaseAsync(productID: productID)
-            box.block(ok)
+            guard let self else { box.block(.failed); return }
+            let st = await self.purchaseAsync(productID: productID)
+            box.block(st)
+        }
+    }
+
+    @objc(restoreWithCompletion:)
+    func restoreWithCompletion(_ completion: @escaping (PurchaseFlowState) -> Void) {
+        let box = CompletionBox<PurchaseFlowState>(completion)
+
+        Task { @MainActor [weak self] in
+            guard let self else { box.block(.failed); return }
+            let st = await self.restoreAsync()
+            box.block(st)
         }
     }
 
     @MainActor
-    private func purchaseAsync(productID: String) async -> Bool {
-        guard let product = rawProducts.first(where: { $0.id == productID }) else { return false }
+    private func purchaseAsync(productID: String) async -> PurchaseFlowState {
+        if rawProducts.first(where: { $0.id == productID }) == nil, snapshot.networkAvailable {
+            await refreshProducts()
+        }
+        guard let product = rawProducts.first(where: { $0.id == productID }) else {
+            setPurchaseState(.failed, err: "Product not loaded")
+            return .failed
+        }
+
+        setPurchaseState(.purchasing, err: nil)
 
         do {
             let result = try await product.purchase()
-            if case .success(let verification) = result {
+            switch result {
+            case .success(let verification):
                 let transaction = try checkVerified(verification)
-                await transaction.finish()
                 await refreshSubscriptionState()
-                return true
+                await transaction.finish()
+                setPurchaseState(.succeeded, err: nil)
+                return .succeeded
+
+            case .pending:
+                setPurchaseState(.pending, err: nil)
+                return .pending
+
+            case .userCancelled:
+                setPurchaseState(.cancelled, err: nil)
+                return .cancelled
+
+            @unknown default:
+                setPurchaseState(.failed, err: "Unknown purchase result")
+                return .failed
             }
-        } catch { }
-        return false
-    }
-
-    @preconcurrency
-    func restore(completion: @escaping (Bool) -> Void) {
-        let box = CompletionBox(completion)
-
-        Task { @MainActor [weak self] in
-            guard let self else { box.block(false); return }
-            let ok = await self.restoreAsync()
-            box.block(ok)
+        } catch {
+            setPurchaseState(.failed, err: error.localizedDescription)
+            return .failed
         }
     }
 
     @MainActor
-    private func restoreAsync() async -> Bool {
+    private func restoreAsync() async -> PurchaseFlowState {
+        setPurchaseState(.restoring, err: nil)
         do { try await AppStore.sync() } catch { }
         await refreshSubscriptionState()
-        return state == .active
+
+        let ok = (snapshot.subscriptionState == .active)
+        setPurchaseState(ok ? .restored : .failed, err: ok ? nil : "No active subscription found")
+        return ok ? .restored : .failed
     }
 
-    // MARK: - Transaction Updates
-
+    // MARK: - Transaction updates
     private func listenForTransactionUpdates() {
         updatesTask?.cancel()
-
         updatesTask = Task.detached(priority: .background) { [weak self] in
             guard let self else { return }
             for await update in Transaction.updates {
                 if Task.isCancelled { return }
-                if case .verified(_) = update {
+                if case .verified(let transaction) = update {
                     await self.refreshSubscriptionState()
+                    await transaction.finish()
                 }
             }
         }
     }
 
-    // MARK: - Verify
-
-    private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
-        switch result {
-        case .verified(let safe): return safe
-        case .unverified:
-            throw NSError(domain: "StoreKit2", code: -1)
-        }
-    }
-
-    // MARK: - Network
-
+    // MARK: - Network / Foreground
     private func startNetworkMonitor() {
         if pathMonitor != nil { return }
 
@@ -251,7 +324,7 @@ final class StoreKit2Manager: NSObject {
 
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.networkAvailable = available
+                self.updateNetwork(available: available)
                 if available {
                     await self.refreshIfNeededAfterNetworkBack()
                 }
@@ -283,26 +356,71 @@ final class StoreKit2Manager: NSObject {
         isRefreshingAfterNetwork = true
         defer { isRefreshingAfterNetwork = false }
 
-        // ✅ 商品为空才重拉
-        if products.isEmpty {
-            await refreshProducts()
-        }
-
-        // ✅ 状态 unknown/inactive 时顺带刷新
-        if state == .unknown || state == .inactive {
+        await refreshProducts()
+        if snapshot.subscriptionState == .unknown {
             await refreshSubscriptionState()
         }
     }
 
-    // MARK: - Notify on main
+    // MARK: - Snapshot updates
+    @MainActor
+    private func updateNetwork(available: Bool) {
+        updateSnapshot { old in
+            StoreSnapshot(
+                networkAvailable: available,
+                availability: available ? .available : .unavailable,
+                productsState: old.productsState,
+                products: old.products,
+                subscriptionState: old.subscriptionState,
+                purchaseState: old.purchaseState,
+                lastErrorMessage: old.lastErrorMessage
+            )
+        }
+    }
 
-    private func postOnMain(_ name: Notification.Name) {
-        if Thread.isMainThread {
-            NotificationCenter.default.post(name: name, object: nil)
-        } else {
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: name, object: nil)
-            }
+    @MainActor
+    private func setPurchaseState(_ st: PurchaseFlowState, err: String?) {
+        updateSnapshot { old in
+            StoreSnapshot(
+                networkAvailable: old.networkAvailable,
+                availability: old.availability,
+                productsState: old.productsState,
+                products: old.products,
+                subscriptionState: old.subscriptionState,
+                purchaseState: st,
+                lastErrorMessage: err
+            )
+        }
+    }
+
+    @MainActor
+    private func updateSnapshot(_ transform: (StoreSnapshot) -> StoreSnapshot) {
+        let old = snapshot
+        let new = transform(old)
+        snapshot = new
+
+        NotificationCenter.default.post(name: .storeSnapshotChanged, object: new)
+
+        if old.subscriptionState != new.subscriptionState {
+            NotificationCenter.default.post(name: .subscriptionStateChanged, object: new.subscriptionState)
+        }
+
+        if old.purchaseState != new.purchaseState || old.lastErrorMessage != new.lastErrorMessage {
+            NotificationCenter.default.post(
+                name: .purchaseStateChanged,
+                object: new.purchaseState,
+                userInfo: ["error": new.lastErrorMessage as Any]
+            )
+        }
+    }
+
+    // MARK: - Verify
+    private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
+        switch result {
+        case .verified(let safe):
+            return safe
+        case .unverified(_, let error):
+            throw error
         }
     }
 }

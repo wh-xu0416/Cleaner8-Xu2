@@ -39,6 +39,8 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 }
 
 @interface MoreViewController ()
+@property(nonatomic,strong) NSLayoutConstraint *contactTopToProCst;
+@property(nonatomic,strong) NSLayoutConstraint *contactTopToTitleCst;
 
 @property(nonatomic,strong) UIScrollView *scrollView;
 @property(nonatomic,strong) UIView *contentView;
@@ -70,6 +72,19 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [super viewDidLoad];
     self.view.backgroundColor = ASRGB(246, 248, 251);
     [self buildUI];
+
+    [[StoreKit2Manager shared] start];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(onSubscriptionStateChanged)
+                                                 name:@"subscriptionStateChanged"
+                                               object:nil];
+
+    [self updateProCardVisibility];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -154,6 +169,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [self.contentView addSubview:self.titleLab];
 
     self.proCard = [self buildProCard];
+
     [self.contentView addSubview:self.proCard];
 
     self.contactCard = [self buildCardWithLeftIcon:@"ic_contact_more"
@@ -178,15 +194,23 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [self.contentView addSubview:self.feedbackCard];
     [self.contentView addSubview:self.settingCard];
 
+    self.contactTopToProCst =
+        [self.contactCard.topAnchor constraintEqualToAnchor:self.proCard.bottomAnchor constant:SW(40)];
+
+    self.contactTopToTitleCst =
+        [self.contactCard.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:SW(40)];
+
+    self.contactTopToProCst.active = YES;
+    self.contactTopToTitleCst.active = NO;
+
     [NSLayoutConstraint activateConstraints:@[
         [self.titleLab.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:SW(13)],
         [self.titleLab.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
 
-        [self.proCard.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:SW(64)],
+        [self.proCard.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:SW(40)],
         [self.proCard.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:SW(20)],
         [self.proCard.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-SW(20)],
 
-        [self.contactCard.topAnchor constraintEqualToAnchor:self.proCard.bottomAnchor constant:SW(40)],
         [self.contactCard.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:SW(20)],
         [self.contactCard.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-SW(20)],
 
@@ -202,13 +226,41 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     ]];
 }
 
+- (void)onSubscriptionStateChanged {
+    [self updateProCardVisibility];
+}
+
+- (void)updateProCardVisibility {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        SubscriptionState state = [StoreKit2Manager shared].state;
+
+        // unknown：先显示（避免刚进来闪）
+        if (state == SubscriptionStateUnknown) {
+            self.proCard.hidden = NO;
+            self.contactTopToProCst.active = YES;
+            self.contactTopToTitleCst.active = NO;
+            [self.view layoutIfNeeded];
+            return;
+        }
+
+        BOOL isActive = (state == SubscriptionStateActive);
+
+        self.proCard.hidden = isActive;
+        self.contactTopToProCst.active = !isActive;
+        self.contactTopToTitleCst.active = isActive;
+
+        [self.view layoutIfNeeded];
+    });
+}
+
 #pragma mark - Pro Card
 
 - (UIControl *)buildProCard {
     UIControl *card = [UIControl new];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor = UIColor.clearColor;
-
+    
+    [card addTarget:self action:@selector(tapPro) forControlEvents:UIControlEventTouchUpInside];
     card.layer.cornerRadius = SW(16);
     card.layer.masksToBounds = NO;
     card.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.08].CGColor;
@@ -216,12 +268,11 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     card.layer.shadowOffset = CGSizeMake(0, SW(10));
     card.layer.shadowRadius = SW(20);
 
-    [card addTarget:self action:@selector(tapPro) forControlEvents:UIControlEventTouchUpInside];
-
     UIView *bgView = [UIView new];
     bgView.translatesAutoresizingMaskIntoConstraints = NO;
     bgView.layer.cornerRadius = SW(16);
     bgView.layer.masksToBounds = YES;
+    bgView.userInteractionEnabled = NO;
     [card addSubview:bgView];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -246,6 +297,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
     UIView *content = [UIView new];
     content.translatesAutoresizingMaskIntoConstraints = NO;
+    content.userInteractionEnabled = NO;
     [bgView addSubview:content];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -306,7 +358,10 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         gradient.frame = bgView.bounds;
         [CATransaction commit];
     });
-
+    vipIcon.userInteractionEnabled = NO;
+    proLab.userInteractionEnabled = NO;
+    todoWhite.userInteractionEnabled = NO;
+    subLab.userInteractionEnabled = NO;
     return card;
 }
 

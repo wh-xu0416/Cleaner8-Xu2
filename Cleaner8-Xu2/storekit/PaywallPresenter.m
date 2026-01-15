@@ -41,10 +41,30 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
 // 栏门页
 - (void)showPaywallIfNeededWithSource:(NSString * _Nullable)source {
     dispatch_async(dispatch_get_main_queue(), ^{
+        [[StoreKit2Manager shared] start];
+
         SubscriptionState state = [StoreKit2Manager shared].state;
-        if (state == SubscriptionStateInactive) {
-            [self showPaywallWithSource:source];
+        if (state == SubscriptionStateActive) return;
+
+        if (state == SubscriptionStateUnknown) {
+            __weak typeof(self) weakSelf = self;
+            __block id token = [[NSNotificationCenter defaultCenter]
+                addObserverForName:@"subscriptionStateChanged"
+                            object:nil
+                             queue:[NSOperationQueue mainQueue]
+                        usingBlock:^(NSNotification * _Nonnull note) {
+
+                [[NSNotificationCenter defaultCenter] removeObserver:token];
+                SubscriptionState st = [StoreKit2Manager shared].state;
+                if (st == SubscriptionStateInactive) {
+                    [weakSelf showPaywallWithSource:source];
+                }
+            }];
+            return;
         }
+
+        // 已确定是未订阅
+        [self showPaywallWithSource:source];
     });
 }
 

@@ -27,43 +27,105 @@ static inline NSString *LF(NSString *key, ...) {
     self.view.backgroundColor = UIColor.whiteColor;
     self.allowDismiss = YES;
 
-    // ✅ 确保 manager 已启动（否则 products 永远空）
     [[StoreKit2Manager shared] start];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(onSubscriptionChanged)
-                                                 name:@"subscriptionStateChanged"
-                                               object:nil];
-
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(onProductsUpdated)
-                                                 name:@"storeProductsUpdated"
-                                               object:nil];
-
-    // ✅ 新增：监听网络变化（无网->等待连接；有网->manager 会自动刷新 products/state）
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(onNetworkChanged)
-                                                 name:@"storeNetworkChanged"
+                                             selector:@selector(onStoreSnapshotChanged:)
+                                                 name:@"storeSnapshotChanged"
                                                object:nil];
 
     [self buildUI];
-    [self reloadProducts];
+    [self render];
 }
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-- (void)onNetworkChanged {
-    [self reloadProducts];
+- (void)onStoreSnapshotChanged:(NSNotification *)note {
+    [self render];
 }
 
-- (void)onProductsUpdated {
-    [self reloadProducts];
-}
+#pragma mark - Render
 
-- (void)onSubscriptionChanged {
-    if ([StoreKit2Manager shared].state == SubscriptionStateActive) {
+- (void)render {
+    // 清空列表
+    for (UIView *v in self.stack.arrangedSubviews) {
+        [self.stack removeArrangedSubview:v];
+        [v removeFromSuperview];
+    }
+
+    StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;
+    BOOL hasNet = snap.networkAvailable;
+    
+    BOOL busy = (snap.purchaseState == PurchaseFlowStatePurchasing ||
+                 snap.purchaseState == PurchaseFlowStateRestoring ||
+                 snap.purchaseState == PurchaseFlowStatePending);
+
+    // 无网提示
+    if (!hasNet) {
+        NSString *tip = L(@"common.network_tip_to_settings");
+        NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:tip];
+        [att addAttribute:NSUnderlineStyleAttributeName value:@(NSUnderlineStyleSingle)
+                   range:NSMakeRange(0, tip.length)];
+        self.netTipLab.attributedText = att;
+        self.netTipLab.hidden = NO;
+    } else {
+        self.netTipLab.hidden = YES;
+    }
+
+    // 顶部 loading / error
+    if (!hasNet) {
+        self.loadingLab.hidden = NO;
+        self.loadingLab.text = L(@"common.waiting_connection");
+        self.restoreBtn.enabled = NO;
+        return;
+    }
+
+    if (snap.productsState == ProductsLoadStateIdle ||
+        snap.productsState == ProductsLoadStateLoading) {
+        self.loadingLab.hidden = NO;
+        self.loadingLab.text = L(@"common.loading");
+        self.restoreBtn.enabled = NO;
+        return;
+    }
+
+    if (snap.productsState == ProductsLoadStateFailed && snap.products.count == 0) {
+        self.loadingLab.hidden = NO;
+        self.loadingLab.text = (snap.lastErrorMessage.length > 0) ? snap.lastErrorMessage : L(@"common.loading");
+        self.restoreBtn.enabled = hasNet && !busy;
+        return;
+    }
+
+    self.loadingLab.hidden = YES;
+
+    // 列表
+    NSInteger idx = 0;
+    for (SK2ProductModel *p in snap.products) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+
+        NSString *line = LF(@"subscription.plan_item_format", p.displayName, p.displayPrice);
+        [btn setTitle:line forState:UIControlStateNormal];
+
+        btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+        btn.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+        btn.tag = idx++;
+        btn.layer.cornerRadius = 10;
+        btn.layer.borderWidth = 1;
+        btn.layer.borderColor = [UIColor colorWithWhite:0 alpha:0.12].CGColor;
+        btn.contentEdgeInsets = UIEdgeInsetsMake(14, 14, 14, 14);
+
+        // 有网 + 不忙 才能点
+        btn.enabled = hasNet && !busy;
+
+        [btn addTarget:self action:@selector(tapProduct:) forControlEvents:UIControlEventTouchUpInside];
+        [self.stack addArrangedSubview:btn];
+    }
+
+    self.restoreBtn.enabled = hasNet && !busy;
+
+    // 已订阅 => 自动关闭
+    if (snap.subscriptionState == SubscriptionStateActive) {
         if (self.presentingViewController) {
             [self dismissViewControllerAnimated:YES completion:nil];
         }
@@ -163,64 +225,6 @@ static inline NSString *LF(NSString *key, ...) {
     }
 }
 
-#pragma mark - Products
-
-- (void)reloadProducts {
-    for (UIView *v in self.stack.arrangedSubviews) {
-        [self.stack removeArrangedSubview:v];
-        [v removeFromSuperview];
-    }
-
-    BOOL hasNet = [StoreKit2Manager shared].networkAvailable;
-    NSArray<SK2ProductModel *> *products = [StoreKit2Manager shared].products;
-
-    // ✅ 无网提示（点击去设置）
-    if (!hasNet) {
-        NSString *tip = L(@"common.network_tip_to_settings");
-        NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:tip];
-        [att addAttribute:NSUnderlineStyleAttributeName value:@(NSUnderlineStyleSingle)
-                   range:NSMakeRange(0, tip.length)];
-        self.netTipLab.attributedText = att;
-        self.netTipLab.hidden = NO;
-    } else {
-        self.netTipLab.hidden = YES;
-    }
-
-    // ✅ 无数据时：根据网络展示“加载中/等待连接”
-    if (products.count == 0) {
-        self.loadingLab.hidden = NO;
-        self.loadingLab.text = hasNet ? L(@"common.loading") : L(@"common.waiting_connection");
-        self.restoreBtn.enabled = hasNet;
-        return;
-    }
-
-    self.loadingLab.hidden = YES;
-    self.restoreBtn.enabled = hasNet;
-
-    NSInteger idx = 0;
-    for (SK2ProductModel *p in products) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-
-        // ✅ 列表行文案可本地化（格式字符串）
-        NSString *line = LF(@"subscription.plan_item_format", p.displayName, p.displayPrice);
-        [btn setTitle:line forState:UIControlStateNormal];
-
-        btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-        btn.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
-        btn.tag = idx++;
-        btn.layer.cornerRadius = 10;
-        btn.layer.borderWidth = 1;
-        btn.layer.borderColor = [UIColor colorWithWhite:0 alpha:0.12].CGColor;
-        btn.contentEdgeInsets = UIEdgeInsetsMake(14, 14, 14, 14);
-
-        // ✅ 无网时直接禁用购买（避免点了没反应）
-        btn.enabled = hasNet;
-
-        [btn addTarget:self action:@selector(tapProduct:) forControlEvents:UIControlEventTouchUpInside];
-        [self.stack addArrangedSubview:btn];
-    }
-}
-
 #pragma mark - Actions
 
 - (void)tapBack {
@@ -229,31 +233,86 @@ static inline NSString *LF(NSString *key, ...) {
 }
 
 - (void)tapProduct:(UIButton *)sender {
-    if (![StoreKit2Manager shared].networkAvailable) return;
+    StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;
+    if (!snap.networkAvailable) return;
+    if (snap.productsState != ProductsLoadStateReady) return;
 
-    NSArray<SK2ProductModel *> *products = [StoreKit2Manager shared].products;
+    NSArray<SK2ProductModel *> *products = snap.products;
     if (sender.tag < 0 || sender.tag >= products.count) return;
 
     SK2ProductModel *model = products[sender.tag];
     sender.enabled = NO;
 
-    [[StoreKit2Manager shared] purchaseWithProductID:model.productID completion:^(BOOL ok) {
+    [[StoreKit2Manager shared] purchaseWithProductID:model.productID completion:^(PurchaseFlowState st) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            // ok 时会自动 dismiss；失败则恢复可点
-            sender.enabled = !ok && [StoreKit2Manager shared].networkAvailable;
-        });
+               [self render];
+
+               switch (st) {
+                   case PurchaseFlowStatePending:
+                       [self showToast:L(@"paywall.purchase_pending")];
+                       break;
+
+                   case PurchaseFlowStateCancelled:
+                       [self showToast:L(@"paywall.purchase_cancelled")];
+                       break;
+
+                   case PurchaseFlowStateSucceeded:
+                       // 注意：你有 subscriptionState==Active 自动 dismiss，
+                       // 这里弹窗可能一闪而过。建议用 toast 或者不提示。
+                       [self showToast:L(@"paywall.purchase_success")];
+                       break;
+
+                   case PurchaseFlowStateFailed: {
+                       NSString *msg = [StoreKit2Manager shared].snapshot.lastErrorMessage;
+                       [self showToast:(msg.length ? msg : L(@"paywall.purchase_failed"))];
+                       break;
+                   }
+
+                   default:
+                       break;
+               }
+           });
     }];
 }
 
 - (void)tapRestore {
-    if (![StoreKit2Manager shared].networkAvailable) return;
+    StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;
+    if (!snap.networkAvailable) return;
 
     self.restoreBtn.enabled = NO;
-    [[StoreKit2Manager shared] restoreWithCompletion:^(BOOL ok) {
+
+    [[StoreKit2Manager shared] restoreWithCompletion:^(PurchaseFlowState st) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            self.restoreBtn.enabled = [StoreKit2Manager shared].networkAvailable;
+            [self render];
+            
+            switch (st) {
+                        case PurchaseFlowStateRestored:
+                            [self showToast:L(@"paywall.restore_success")];
+                            break;
+                        case PurchaseFlowStateFailed: {
+                            NSString *msg = [StoreKit2Manager shared].snapshot.lastErrorMessage;
+                            [self showToast:(msg.length ? msg : L(@"paywall.restore_failed"))];
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+
         });
     }];
 }
+
+- (void)showToast:(NSString *)msg {
+    if (msg.length == 0) return;
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:nil
+                                                                message:msg
+                                                         preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:ac animated:YES completion:nil];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [ac dismissViewControllerAnimated:YES completion:nil];
+    });
+}
+
 
 @end
