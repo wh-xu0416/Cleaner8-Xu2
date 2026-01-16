@@ -1253,7 +1253,6 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     }];
 }
 
-
 - (void)updatePermissionUIForStatus:(PHAuthorizationStatus)st {
 
     ASPhotoAuthLevel lvl = [self mapToAuthLevel:st];
@@ -2534,7 +2533,7 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     return out;
 }
 
-#pragma mark - Thumbnails (Images)
+#pragma mark - Thumbnails
 
 - (void)loadThumbsForVM:(ASHomeModuleVM *)vm
                intoCell:(HomeModuleCell *)cell
@@ -2543,16 +2542,13 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     NSArray<NSString *> *ids = vm.thumbLocalIds ?: @[];
     if (ids.count == 0) return;
 
-    // 这些都在主线程读取一次，后面异步对齐校验用
     NSString *expectedKey = cell.appliedCoverKey ?: @"";
     NSInteger token = cell.renderToken;
     BOOL needsTwo = vm.showsTwoThumbs;
 
-    // 先取消旧请求（主线程安全地改 cell 状态）
     [self cancelCellRequests:cell];
     [cell stopVideoIfNeeded];
 
-    // 计算 targetSize（主线程，避免并发读 cell bounds/frame）
     CGFloat scale = UIScreen.mainScreen.scale;
 
     CGSize s1 = cell.img1.bounds.size;
@@ -2572,9 +2568,8 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     opt.synchronous = NO;
 
     __weak typeof(self) weakSelf = self;
-    NSArray<NSString *> *idsCopy = [ids copy]; // 防止外面改动
+    NSArray<NSString *> *idsCopy = [ids copy];
 
-    // 后台取 PHAsset（缓存 + 批量 fetch）
     dispatch_async(self.photoFetchQueue, ^{
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
@@ -2585,7 +2580,6 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
         PHAsset *a0 = assets.count > 0 ? assets[0] : nil;
         PHAsset *a1 = assets.count > 1 ? assets[1] : nil;
 
-        // 回主线程做 requestImage + UI set（避免跨线程写 cell/collectionView）
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) self2 = weakSelf;
             if (!self2) return;
@@ -2593,20 +2587,17 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
             HomeModuleCell *nowCell = (HomeModuleCell *)[self2.cv cellForItemAtIndexPath:indexPath];
             if (![nowCell isKindOfClass:HomeModuleCell.class]) return;
 
-            // 复用/滚动校验：token + key + ids 必须一致
             if (nowCell.renderToken != token) return;
             NSString *k = (nowCell.appliedCoverKey != nil) ? nowCell.appliedCoverKey : @"";
             if (![k isEqualToString:(expectedKey != nil ? expectedKey : @"")]) return;
 
             if (![nowCell.representedLocalIds isEqualToArray:idsCopy]) return;
 
-            // 如果只需要一张图，确保第二张清空
             if (!needsTwo) {
                 nowCell.img2.image = nil;
                 nowCell.hasFinalThumb2 = YES;
             }
 
-            // 通用 setImg：degraded 先上屏但不置 final
             void (^setImg)(NSInteger idx, UIImage *img, NSDictionary *info) = ^(NSInteger idx, UIImage *img, NSDictionary *info) {
                 BOOL degraded = [info[PHImageResultIsDegradedKey] boolValue];
 
@@ -2634,7 +2625,6 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
                 });
             };
 
-            // 发起 requestImage（主线程写 reqId）
             if (a0) {
                 nowCell.reqId1 = [self2.imgMgr requestImageForAsset:a0
                                                          targetSize:t1
@@ -2658,7 +2648,6 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
                     setImg(1, result, info ?: @{});
                 }];
             } else {
-                // 第二张不存在/不需要：避免残留
                 nowCell.img2.image = needsTwo ? nowCell.img2.image : nil;
             }
         });

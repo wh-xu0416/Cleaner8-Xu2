@@ -2402,6 +2402,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (!success) return;
+                [weakSelf2.selectedIds removeAllObjects];
 
                 NSUInteger deletedCount = toDelete.count;
                 uint64_t freedBytes = weakSelf2.selectedBytes;
@@ -2411,7 +2412,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
                                                          freedBytes:freedBytes];
                 [weakSelf2.navigationController pushViewController:r animated:YES];
 
-                [weakSelf2.selectedIds removeAllObjects];
+                [[ASPhotoScanManager shared] applyLocalDeletionsForUI:ids];
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     [weakSelf2 rebuildDataFromManager];
                     dispatch_async(dispatch_get_main_queue(), ^{
