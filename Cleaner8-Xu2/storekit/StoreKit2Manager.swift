@@ -3,6 +3,12 @@ import StoreKit
 import Network
 import UIKit
 
+@objcMembers
+public final class ASProductIDs: NSObject {
+    public static let subWeekly: String = "com.demo.pro.weekly"
+    public static let subYearly: String = "com.demo.pro.yearly"
+}
+
 extension Notification.Name {
     static let storeSnapshotChanged = Notification.Name("storeSnapshotChanged")
     static let subscriptionStateChanged = Notification.Name("subscriptionStateChanged")
@@ -101,12 +107,8 @@ final class StoreKit2Manager: NSObject {
 
     @objc static let shared = StoreKit2Manager()
 
-    let productIDs: [String] = [
-        "com.demo.pro.weekly",
-        "com.demo.pro.yearly"
-    ]
+    let productIDs: [String] = [subWeekly,subYearly]
 
-    // ObjC 需要读 snapshot
     @objc private(set) var snapshot: StoreSnapshot = StoreSnapshot(
         networkAvailable: true,
         availability: .unknown,
@@ -117,10 +119,8 @@ final class StoreKit2Manager: NSObject {
         lastErrorMessage: nil
     )
 
-    // ObjC Presenter 里用的 state
     @objc var state: SubscriptionState { snapshot.subscriptionState }
 
-    // MARK: - Internal state (全部是 Swift-only，不要暴露给 ObjC)
     private var pathMonitor: NWPathMonitor?
     private let pathQueue = DispatchQueue(label: "xx.sk2.network.monitor")
     private var isStarted = false

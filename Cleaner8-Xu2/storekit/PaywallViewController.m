@@ -27,9 +27,8 @@ static inline NSString *LF(NSString *key, ...) {
     [super viewDidLoad];
     self.view.backgroundColor = UIColor.whiteColor;
     self.allowDismiss = YES;
-
+    
     [[StoreKit2Manager shared] start];
-
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(onStoreSnapshotChanged:)
                                                  name:@"storeSnapshotChanged"
