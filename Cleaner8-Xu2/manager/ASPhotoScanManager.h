@@ -119,6 +119,7 @@ typedef void (^ASScanProgressBlock)(ASScanSnapshot * _Nullable snapshot);
 @property (nonatomic, readonly) NSArray<ASAssetModel *> *bigVideos;
 @property (nonatomic, readonly) NSArray<ASAssetModel *> *blurryPhotos;
 @property (nonatomic, readonly) NSArray<ASAssetModel *> *otherPhotos;
+- (void)applyLocalDeletionsForUI:(NSArray<NSString *> *)localIds;
 
 /// 手动触发一次「删除资产清理 + 重新统计 + 保存缓存」
 ///（可用于你想显式做一次 purge 的场景）

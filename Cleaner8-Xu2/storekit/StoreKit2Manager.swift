@@ -3,11 +3,6 @@ import StoreKit
 import Network
 import UIKit
 
-@objcMembers
-public final class ASProductIDs: NSObject {
-    public static let subWeekly: String = "com.demo.pro.weekly"
-    public static let subYearly: String = "com.demo.pro.yearly"
-}
 
 extension Notification.Name {
     static let storeSnapshotChanged = Notification.Name("storeSnapshotChanged")
@@ -103,11 +98,17 @@ final class StoreSnapshot: NSObject {
     }
 }
 
+@objcMembers
+public final class ASProductIDs: NSObject {
+    public static let subWeekly: String = "com.demo.pro.weekly"
+    public static let subYearly: String = "com.demo.pro.yearly"
+}
+
 final class StoreKit2Manager: NSObject {
 
     @objc static let shared = StoreKit2Manager()
 
-    let productIDs: [String] = [subWeekly,subYearly]
+    let productIDs: [String] = [ASProductIDs.subWeekly,ASProductIDs.subYearly]
 
     @objc private(set) var snapshot: StoreSnapshot = StoreSnapshot(
         networkAvailable: true,
