@@ -959,6 +959,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.speedIcon.translatesAutoresizingMaskIntoConstraints = NO;
     self.speedIcon.contentMode = UIViewContentModeScaleAspectFit;
     self.speedIcon.image = [UIImage imageNamed:@"ic_speed"];
+    self.speedIcon.hidden = YES;
     [self.progressTrack addSubview:self.speedIcon];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -1276,8 +1277,13 @@ static inline NSString *SWRecentTag(NSString *ymd) {
 - (void)applyCategorizedProgress:(CGFloat)progress {
     self.categorizedProgress = MAX(0, MIN(1, progress));
 
+    self.speedIcon.hidden = (self.categorizedProgress <= 0.001);
+
     CGFloat trackW = self.progressTrack.bounds.size.width;
-    if (trackW <= 0.01) return;
+    if (trackW <= 0.01) {
+        self.progressFillWidthC.constant = 0;
+        return;
+    }
 
     CGFloat fillW  = trackW * self.categorizedProgress;
     self.progressFillWidthC.constant = fillW;
@@ -1285,8 +1291,6 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     CGFloat centerX = fillW;
     centerX = MAX(12, MIN(trackW - SW(12), centerX));
     self.speedCenterXC.constant = centerX;
-
-    self.speedIcon.hidden = (self.categorizedProgress <= 0.001);
 }
 
 - (void)sw_updateArchiveCardText {

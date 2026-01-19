@@ -8,9 +8,9 @@
 #import <Photos/Photos.h>
 
 typedef NS_ENUM(NSInteger, ASPhotoAuthState) {
-    ASPhotoAuthStateNone   = 0, // 0
-    ASPhotoAuthStateLimited= 1, // limit
-    ASPhotoAuthStateFull   = 2, // full
+    ASPhotoAuthStateNone    = 0, // 0
+    ASPhotoAuthStateLimited = 1, // limit
+    ASPhotoAuthStateFull    = 2, // full
 };
 
 static inline NSDate *ASPrimaryDateForAsset(PHAsset *a) {
@@ -27,14 +27,17 @@ static NSString * const kASPhotoAuthStateKey = @"as_photo_auth_state_v1";
 
 static inline ASPhotoAuthState ASNormalizeAuthStatus(PHAuthorizationStatus st) {
     switch (st) {
-        case PHAuthorizationStatusAuthorized: return ASPhotoAuthStateFull;
+        case PHAuthorizationStatusAuthorized:
+            return ASPhotoAuthStateFull;
 #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
-        case PHAuthorizationStatusLimited:    return ASPhotoAuthStateLimited;
+        case PHAuthorizationStatusLimited:
+            return ASPhotoAuthStateLimited;
 #endif
         case PHAuthorizationStatusDenied:
         case PHAuthorizationStatusRestricted:
         case PHAuthorizationStatusNotDetermined:
-        default: return ASPhotoAuthStateNone;
+        default:
+            return ASPhotoAuthStateNone;
     }
 }
 
@@ -42,16 +45,19 @@ static inline ASPhotoAuthState ASNormalizeAuthStatus(PHAuthorizationStatus st) {
 static const NSUInteger kASIncForceFullScanChangeCount = 500;
 static const NSInteger  kASIncForceFullScanDaySpan     = 10;
 
-static const float kBlurKeepPercent = 0.05f;   // 保留最差 5%
-static const NSUInteger kBlurKeepMin = 40;     // 至少 40 张
-static const NSUInteger kBlurKeepMax = 300;    // 最多 300 张
-static const NSUInteger kBlurWarmup  = 80;     // 前 80 张只收集，不入榜（稳定分布）
+static const float      kBlurKeepPercent = 0.05f;   // 保留最差 5%
+static const NSUInteger kBlurKeepMin     = 0;      // 至少 40 张
+static const NSUInteger kBlurKeepMax     = 300;     // 最多 300 张
+static const NSUInteger kBlurWarmup      = 20;
+
+// 并发控制：同时处理 6 张图片（避免 OOM 和发热过高）
+static const NSInteger kASScanConcurrencyLimit = 6;
 
 // 阈值: 缩略图取 512x512
 const ASComparePolicy kPolicySimilar   = { .phashThreshold = 119, .visionThreshold = 0.56f };
 const ASComparePolicy kPolicyDuplicate = { .phashThreshold = 30,  .visionThreshold = 0.20f };
 
-static NSString * const kASCacheFileName = @"as_photo_scan_cache_v3.dat";
+static NSString * const kASCacheFileName  = @"as_photo_scan_cache_v3.dat";
 static NSString * const kASScanSessionKey = @"as_scan_session_id_v1";
 static const uint64_t   kBigVideoMinBytes = (uint64_t)20 * 1024ull * 1024ull;
 
@@ -60,8 +66,8 @@ static const uint64_t   kBigVideoMinBytes = (uint64_t)20 * 1024ull * 1024ull;
 typedef struct {
     int longSide;
     int shortSide;
-    int pxEpsilon;        // ±8 px
-    int ratioPermille;    // ±2% => 20‰
+    int pxEpsilon;      // ±8 px
+    int ratioPermille;  // ±2% => 20‰
 } ASScreenMetrics;
 
 // Blur
@@ -92,23 +98,31 @@ static inline ASScreenMetrics ASScreenMetricsMake(void) {
     int h = (int)bounds.size.height;
 
     ASScreenMetrics m;
-    m.longSide = MAX(w, h);
-    m.shortSide = MIN(w, h);
-    m.pxEpsilon = 8;
+    m.longSide      = MAX(w, h);
+    m.shortSide     = MIN(w, h);
+    m.pxEpsilon     = 8;
     m.ratioPermille = 20;
     return m;
 }
 
 static CGImagePropertyOrientation ASCGImageOrientationFromUIImage(UIImageOrientation o) {
     switch (o) {
-        case UIImageOrientationUp: return kCGImagePropertyOrientationUp;
-        case UIImageOrientationDown: return kCGImagePropertyOrientationDown;
-        case UIImageOrientationLeft: return kCGImagePropertyOrientationLeft;
-        case UIImageOrientationRight: return kCGImagePropertyOrientationRight;
-        case UIImageOrientationUpMirrored: return kCGImagePropertyOrientationUpMirrored;
-        case UIImageOrientationDownMirrored: return kCGImagePropertyOrientationDownMirrored;
-        case UIImageOrientationLeftMirrored: return kCGImagePropertyOrientationLeftMirrored;
-        case UIImageOrientationRightMirrored: return kCGImagePropertyOrientationRightMirrored;
+        case UIImageOrientationUp:
+            return kCGImagePropertyOrientationUp;
+        case UIImageOrientationDown:
+            return kCGImagePropertyOrientationDown;
+        case UIImageOrientationLeft:
+            return kCGImagePropertyOrientationLeft;
+        case UIImageOrientationRight:
+            return kCGImagePropertyOrientationRight;
+        case UIImageOrientationUpMirrored:
+            return kCGImagePropertyOrientationUpMirrored;
+        case UIImageOrientationDownMirrored:
+            return kCGImagePropertyOrientationDownMirrored;
+        case UIImageOrientationLeftMirrored:
+            return kCGImagePropertyOrientationLeftMirrored;
+        case UIImageOrientationRightMirrored:
+            return kCGImagePropertyOrientationRightMirrored;
     }
     return kCGImagePropertyOrientationUp;
 }
@@ -172,8 +186,8 @@ static inline BOOL ASApproxScreenAspect(int w, int h) {
         return YES;
     }
 
-    int64_t lhs = (int64_t)ww * (int64_t)s.shortSide;
-    int64_t rhs = (int64_t)hh * (int64_t)s.longSide;
+    int64_t lhs  = (int64_t)ww * (int64_t)s.shortSide;
+    int64_t rhs  = (int64_t)hh * (int64_t)s.longSide;
     int64_t diff = llabs(lhs - rhs);
     int64_t base = MAX(lhs, rhs);
 
@@ -206,8 +220,8 @@ static BOOL ASIsDeviceApprox16x9(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         ASScreenMetrics s = ASScreen();
-        int64_t lhs = (int64_t)s.longSide * 9;
-        int64_t rhs = (int64_t)s.shortSide * 16;
+        int64_t lhs  = (int64_t)s.longSide * 9;
+        int64_t rhs  = (int64_t)s.shortSide * 16;
         int64_t diff = llabs(lhs - rhs);
         int64_t base = MAX(lhs, rhs);
         is16x9 = (diff * 1000 <= base * 10); // ≤ 1%
@@ -227,9 +241,9 @@ static BOOL ASIsDeviceApprox16x9(void) {
 
 static inline NSString *ASStateName(ASScanState s) {
     switch (s) {
-        case ASScanStateNotScanned:     return @"NotScanned";
-        case ASScanStateScanning: return @"Scanning";
-        case ASScanStateFinished: return @"Finished";
+        case ASScanStateNotScanned: return @"NotScanned";
+        case ASScanStateScanning:   return @"Scanning";
+        case ASScanStateFinished:   return @"Finished";
     }
     return @"Unknown";
 }
@@ -248,12 +262,16 @@ static inline NSString *ASCachePath(void) {
 
 static inline NSDate *ASDayStart(NSDate *date) {
     NSCalendar *cal = [NSCalendar currentCalendar];
-    NSDateComponents *c = [cal components:(NSCalendarUnitYear|NSCalendarUnitMonth|NSCalendarUnitDay) fromDate:date];
+    NSDateComponents *c = [cal components:(NSCalendarUnitYear |
+                                           NSCalendarUnitMonth |
+                                           NSCalendarUnitDay)
+                                 fromDate:date];
     return [cal dateFromComponents:c] ?: date;
 }
 
 static inline BOOL ASIsScreenshot(PHAsset *a) {
-    return (a.mediaType == PHAssetMediaTypeImage) && (a.mediaSubtypes & PHAssetMediaSubtypePhotoScreenshot);
+    return (a.mediaType == PHAssetMediaTypeImage) &&
+           (a.mediaSubtypes & PHAssetMediaSubtypePhotoScreenshot);
 }
 
 static inline BOOL ASIsScreenRecording(PHAsset *asset) {
@@ -290,19 +308,24 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
 #pragma mark - Models
 
 @implementation ASScanSnapshot
-+ (BOOL)supportsSecureCoding { return YES; }
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
 - (instancetype)init {
     _moduleStates = @[
-      @(ASModuleScanStateIdle),@(ASModuleScanStateIdle),@(ASModuleScanStateIdle),
-      @(ASModuleScanStateIdle),@(ASModuleScanStateIdle),@(ASModuleScanStateIdle),
-      @(ASModuleScanStateIdle),@(ASModuleScanStateIdle),@(ASModuleScanStateIdle)
+        @(ASModuleScanStateIdle), @(ASModuleScanStateIdle), @(ASModuleScanStateIdle),
+        @(ASModuleScanStateIdle), @(ASModuleScanStateIdle), @(ASModuleScanStateIdle),
+        @(ASModuleScanStateIdle), @(ASModuleScanStateIdle), @(ASModuleScanStateIdle)
     ];
 
-    if (self=[super init]){
-        _lastUpdated=[NSDate date];
+    if (self = [super init]) {
+        _lastUpdated = [NSDate date];
     }
     return self;
 }
+
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeInteger:self.state forKey:@"state"];
     [coder encodeInteger:self.scannedCount forKey:@"scannedCount"];
@@ -325,8 +348,9 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
     [coder encodeObject:self.phash256Data forKey:@"phash256Data"];
     [coder encodeObject:self.moduleStates forKey:@"moduleStates"];
 }
+
 - (instancetype)initWithCoder:(NSCoder *)coder {
-    if (self=[super init]) {
+    if (self = [super init]) {
         _state = [coder decodeIntegerForKey:@"state"];
         _scannedCount = [coder decodeIntegerForKey:@"scannedCount"];
         _scannedBytes = (uint64_t)[coder decodeInt64ForKey:@"scannedBytes"];
@@ -344,17 +368,20 @@ static inline BOOL ASAllowedForCompare(PHAsset *a) {
         _otherBytes = (uint64_t)[coder decodeInt64ForKey:@"otherBytes"];
         _duplicateGroupCount = [coder decodeIntegerForKey:@"duplicateGroupCount"];
         _similarGroupCount = [coder decodeIntegerForKey:@"similarGroupCount"];
-        _lastUpdated = [coder decodeObjectOfClass:[NSDate class] forKey:@"lastUpdated"] ?: [NSDate date];
-        _phash256Data = [coder decodeObjectOfClass:[NSData class] forKey:@"phash256Data"];
+        _lastUpdated = [coder decodeObjectOfClass:[NSDate class]
+                                           forKey:@"lastUpdated"] ?: [NSDate date];
+        _phash256Data = [coder decodeObjectOfClass:[NSData class]
+                                            forKey:@"phash256Data"];
 
-        NSSet *classes = [NSSet setWithArray:@[[NSArray class],[NSNumber class]]];
+        NSSet *classes = [NSSet setWithArray:@[[NSArray class], [NSNumber class]]];
         _moduleStates = [coder decodeObjectOfClasses:classes forKey:@"moduleStates"];
         if (!_moduleStates || _moduleStates.count != 9) {
-            _moduleStates = @[@0,@0,@0,@0,@0,@0,@0,@0,@0];
+            _moduleStates = @[@0, @0, @0, @0, @0, @0, @0, @0, @0];
         }
     }
     return self;
 }
+
 @end
 
 @implementation ASAssetModel
@@ -677,39 +704,39 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         _pendingRemovedIDsPersist = [NSMutableSet set];
         _lastCheckpointT = 0;
         _lastCheckpointCount = 0;
+    
+            _progressObservers = [NSMutableDictionary dictionary];
+            _observersQ = dispatch_queue_create("as.photo.scan.observers", DISPATCH_QUEUE_SERIAL);
 
-        _progressObservers = [NSMutableDictionary dictionary];
-        _observersQ = dispatch_queue_create("as.photo.scan.observers", DISPATCH_QUEUE_SERIAL);
+            _pendingInsertedMap = [NSMutableDictionary dictionary];
+            _pendingRemovedIDs = [NSMutableSet set];
 
-        _pendingInsertedMap = [NSMutableDictionary dictionary];
-        _pendingRemovedIDs = [NSMutableSet set];
+            _snapshot = [ASScanSnapshot new];
+            _duplicateGroups = @[];
+            _similarGroups = @[];
+            _screenshots = @[];
+            _screenRecordings = @[];
+            _bigVideos = @[];
+            _blurryPhotos = @[];
+            _otherPhotos = @[];
 
-        _snapshot = [ASScanSnapshot new];
-        _duplicateGroups = @[];
-        _similarGroups = @[];
-        _screenshots = @[];
-        _screenRecordings = @[];
-        _bigVideos = @[];
-        _blurryPhotos = @[];
-        _otherPhotos = @[];
+            _indexImage = [NSMutableDictionary dictionary];
+            _indexVideo = [NSMutableDictionary dictionary];
 
-        _indexImage = [NSMutableDictionary dictionary];
-        _indexVideo = [NSMutableDictionary dictionary];
+            _cache = [ASScanCache new];
 
-        _cache = [ASScanCache new];
+            _visionMemo = [[NSCache alloc] init];
+            _visionMemo.countLimit = 3000;
 
-        _visionMemo = [[NSCache alloc] init];
-        _visionMemo.countLimit = 3000;
-
-        if ([self as_currentAuthState] != ASPhotoAuthStateNone) {
-            [self refreshAllAssetsFetchResult];
-        }
-        
-        [[PHPhotoLibrary sharedPhotoLibrary] registerChangeObserver:self];
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(as_appDidEnterBackground)
-                                                     name:UIApplicationDidEnterBackgroundNotification
-                                                   object:nil];
+            if ([self as_currentAuthState] != ASPhotoAuthStateNone) {
+                [self refreshAllAssetsFetchResult];
+            }
+            
+            [[PHPhotoLibrary sharedPhotoLibrary] registerChangeObserver:self];
+            [[NSNotificationCenter defaultCenter] addObserver:self
+                                                     selector:@selector(as_appDidEnterBackground)
+                                                         name:UIApplicationDidEnterBackgroundNotification
+                                                       object:nil];
 
     }
     return self;
@@ -1401,63 +1428,59 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     return [self addProgressObserver:progress];
 }
 
+#pragma mark - Full Scan (Concurrent Pipeline)
+
 - (void)startFullScanWithProgress:(ASScanProgressBlock)progress
                        completion:(ASScanCompletionBlock)completion
 {
     self.fullScanRunning = YES;
     self.cancelled = NO;
 
+    // 1. 设置进度监听
     __block NSUUID *tempToken = nil;
     if (progress) {
         tempToken = [self addProgressObserver:progress];
     }
-
     ASScanCompletionBlock completionCopy = [completion copy];
 
+    // 2. 重置所有容器状态
     self.blurryPhotosM = [NSMutableArray array];
     self.otherPhotosM  = [NSMutableArray array];
+    self.comparableImagesM = [NSMutableArray array];
+    self.comparableVideosM = [NSMutableArray array];
+    self.dupGroupsM = [NSMutableArray array];
+    self.simGroupsM = [NSMutableArray array];
+    self.screenshotsM = [NSMutableArray array];
+    self.screenRecordingsM = [NSMutableArray array];
+    self.bigVideosM = [NSMutableArray array];
+    
+    [self.indexImage removeAllObjects];
+    [self.indexVideo removeAllObjects];
 
+    // 3. 初始化 Snapshot
     self.snapshot = [ASScanSnapshot new];
     self.snapshot.state = ASScanStateScanning;
     [self setAllModulesState:ASModuleScanStateScanning];
     [self emitProgress];
 
+    // 4. 在 workQ 准备数据，避免多线程竞争
     dispatch_async(self.workQ, ^{
         @autoreleasepool {
-            NSError *error = nil;
-
             self.blurryImagesSeen = 0;
             self.blurryBytesRunning = 0;
-            [self.blurryPhotosM removeAllObjects];
-
             [ASBlurMemo() removeAllObjects];
             gBlurDebugPrinted = 0;
 
             self.otherCandidateMap = [NSMutableDictionary dictionary];
             self.otherCandidateBytes = 0;
-
-            self.comparableImagesM = [NSMutableArray array];
-            self.comparableVideosM = [NSMutableArray array];
-
-            self.dupGroupsM = [NSMutableArray array];
-            self.simGroupsM = [NSMutableArray array];
-            self.screenshotsM = [NSMutableArray array];
-            self.screenRecordingsM = [NSMutableArray array];
-            self.bigVideosM = [NSMutableArray array];
-
-            [self.indexImage removeAllObjects];
-            [self.indexVideo removeAllObjects];
-
             self.currentDay = nil;
 
-            PHFetchResult<PHAsset *> *result =
-                [PHAsset fetchAssetsWithOptions:[self allImageVideoFetchOptions]];
-
-            NSDate *maxAnchor = [NSDate dateWithTimeIntervalSince1970:0];
-
+            // 5. 获取资源列表
+            PHFetchResult<PHAsset *> *result = [PHAsset fetchAssetsWithOptions:[self allImageVideoFetchOptions]];
+            
+            // 初始化缓存上下文
             self.cache.scanSessionId = [[NSUUID UUID] UUIDString];
             self.cache.scanStartedAt = [NSDate date];
-            
             self.cache.calendarIdentifier = NSCalendarIdentifierGregorian;
             self.cache.timeZoneName = [NSTimeZone localTimeZone].name;
             [self prepareScanCalendarFromCache];
@@ -1469,177 +1492,242 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
             [self.pendingUpsertIDsPersist removeAllObjects];
             [self.pendingRemovedIDsPersist removeAllObjects];
 
+            // 存一次初始状态
             [self checkpointSaveAsyncForce:YES];
 
+            // 确定模糊检测参数
             self.cache.blurDesiredK = [self blurryDesiredKForLibraryQuick];
             NSUInteger desiredK = self.cache.blurDesiredK;
 
-            for (PHAsset *asset in result) {
-                @autoreleasepool {
+            // 6. 启动并发流水线
+            // 创建并发队列
+            dispatch_queue_t concurrentQ = dispatch_queue_create("as.photo.scan.concurrent", DISPATCH_QUEUE_CONCURRENT);
+            // 信号量控制最大并发数
+            dispatch_semaphore_t semaphore = dispatch_semaphore_create(kASScanConcurrencyLimit);
+            
+            // 切换到并发队列进行繁重的 IO 和计算任务
+            dispatch_async(concurrentQ, ^{
+                [result enumerateObjectsUsingBlock:^(PHAsset * _Nonnull asset, NSUInteger idx, BOOL * _Nonnull stop) {
+                    // 检查取消
                     if (self.cancelled) {
-                        error = [NSError errorWithDomain:@"ASPhotoScan"
-                                                    code:-999
-                                                userInfo:@{NSLocalizedDescriptionKey:@"cancelled"}];
-                        break;
+                        *stop = YES;
+                        return;
                     }
                     
-                    NSDate *cd = ASPrimaryDateForAsset(asset);
-                    NSDate *md = asset.modificationDate ?: cd;
-
-                    if ([cd compare:maxAnchor] == NSOrderedDescending) maxAnchor = cd;
-                    if ([md compare:maxAnchor] == NSOrderedDescending) maxAnchor = md;
-
-                    NSDate *day = [self as_dayStart:cd];
-                    if (!self.currentDay || ![day isEqualToDate:self.currentDay]) {
-                        self.currentDay = day;
-                        [self.indexImage removeAllObjects];
-                        [self.indexVideo removeAllObjects];
-                    }
-
-                    ASAssetModel *model = [self buildModelForAsset:asset computeCompareBits:YES error:&error];
-                    if (!model) { if (error) break; else continue; }
-
-                    self.snapshot.scannedCount += 1;
-                    self.snapshot.scannedBytes += model.fileSizeBytes;
-
-                    if (ASIsScreenshot(asset)) {
-                        [self.screenshotsM addObject:model];
-                        self.snapshot.screenshotCount += 1;
-                        self.snapshot.screenshotBytes += model.fileSizeBytes;
-                        [self emitProgressMaybe];
-                        [self checkpointSaveAsyncForce:NO];
-                        continue;
-                    }
-
-                    if (asset.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(asset)) {
-                        [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateScanning];
-                        [self otherCandidateAddIfNeeded:model asset:asset];
-                        [self emitProgressMaybe];
-                        [self checkpointSaveAsyncForce:NO];
-                    }
-
-                    if (asset.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(asset)) {
-                        float score = [self blurScoreForAsset:asset];
-                        if (score >= 0.f) {
-                            model.blurScore = score;
-                            [self updateBlurryTopKFixed:model desiredK:desiredK];
-                            [self emitProgressMaybe];
-                            [self checkpointSaveAsyncForce:NO];
+                    // 等待信号量 (控制并发数)
+                    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+                    
+                    @autoreleasepool {
+                        NSError *error = nil;
+                        
+                        // [关键优化] buildModelForAsset 内部现在必须包含:
+                        // 1. 加载缩略图
+                        // 2. 计算 pHash
+                        // 3. 计算 Vision Feature (如果是可比图片)
+                        // 确保这一步完成后，Model 已经包含了所有需要对比的数据
+                        ASAssetModel *model = [self buildModelForAsset:asset computeCompareBits:YES error:&error];
+                        
+                        if (model) {
+                            // 在并发线程计算模糊度 (耗时操作)
+                            if (asset.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(asset)) {
+                                float score = [self blurScoreForAsset:asset];
+                                if (score >= 0.f) {
+                                    model.blurScore = score;
+                                }
+                            }
+                            
+                            // 耗时计算完成后，同步回 workQ 进行线程安全的归类
+                            // dispatch_sync 确保顺序性并保护可变数组
+                            dispatch_sync(self.workQ, ^{
+                                [self processSingleScannedModel:model asset:asset desiredK:desiredK];
+                            });
                         }
                     }
-
-                    if (ASIsScreenRecording(asset)) {
-                        [self.screenRecordingsM addObject:model];
-                        self.snapshot.screenRecordingCount += 1;
-                        self.snapshot.screenRecordingBytes += model.fileSizeBytes;
-                        [self emitProgressMaybe];
-                        [self checkpointSaveAsyncForce:NO];
-                        continue;
-                    }
-
-                    if (asset.mediaType == PHAssetMediaTypeVideo && model.fileSizeBytes >= kBigVideoMinBytes) {
-                        [self.bigVideosM addObject:model];
-                        self.snapshot.bigVideoCount += 1;
-                        self.snapshot.bigVideoBytes += model.fileSizeBytes;
-                    }
-
-                    if (!ASAllowedForCompare(asset)) {
-                        [self emitProgressMaybe];
-                        [self checkpointSaveAsyncForce:NO];
-                        continue;
-                    }
-
-                    [self setModule:ASHomeModuleTypeSimilarImage state:ASModuleScanStateAnalyzing];
-                    [self setModule:ASHomeModuleTypeSimilarVideo state:ASModuleScanStateAnalyzing];
-                    [self setModule:ASHomeModuleTypeDuplicateImage state:ASModuleScanStateAnalyzing];
-                    [self setModule:ASHomeModuleTypeDuplicateVideo state:ASModuleScanStateAnalyzing];
-
-                    BOOL grouped = [self matchAndGroup:model asset:asset];
-                    if (grouped && asset.mediaType == PHAssetMediaTypeImage) {
-                        [self otherCandidateRemoveIfExistsLocalId:model.localId];
-                    }
-
-                    if (asset.mediaType == PHAssetMediaTypeImage) {
-                        [self.comparableImagesM addObject:model];
-                    } else if (asset.mediaType == PHAssetMediaTypeVideo) {
-                        [self.comparableVideosM addObject:model];
-                    }
-
-                    [self recomputeCleanableStatsFast];
-                    [self emitProgressMaybe];
-                    [self checkpointSaveAsyncForce:NO];
-                }
-            }
-
-            if (!error && !self.cancelled) {
-                self.snapshot.state = ASScanStateFinished;
-                self.snapshot.duplicateGroupCount = self.dupGroupsM.count;
-                self.snapshot.similarGroupCount = self.simGroupsM.count;
-                self.snapshot.lastUpdated = [NSDate date];
-
-                [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateScanning];
-                self.otherPhotosM = [[self buildOtherPhotosFromAllAssetsFetchResult:result] mutableCopy];
-
-                self.cache.snapshot = [self cloneSnapshot:self.snapshot];
-                self.cache.duplicateGroups = [self.dupGroupsM copy];
-                self.cache.similarGroups = [self.simGroupsM copy];
-                self.cache.screenshots = [self.screenshotsM copy];
-                self.cache.screenRecordings = [self.screenRecordingsM copy];
-                self.cache.bigVideos = [self.bigVideosM copy];
-
-                self.cache.anchorDate = [self as_safeAnchorDate:maxAnchor];
-
-                self.cache.comparableImages = [self.comparableImagesM copy];
-                self.cache.comparableVideos = [self.comparableVideosM copy];
-
-                self.cache.blurryPhotos = [self.blurryPhotosM copy];
-                self.cache.otherPhotos  = [self.otherPhotosM copy];
-
-                if ([self needRefreshHomeStat:self.cache.homeStatRefreshDate]) {
-                    self.cache.homeStatRefreshDate = [NSDate date];
-                }
-                
-                self.cache.pendingUpsertIDs = self.pendingUpsertIDsPersist.allObjects ?: @[];
-                self.cache.pendingRemovedIDs = self.pendingRemovedIDsPersist.allObjects ?: @[];
-                self.cache.currentDayStart = self.currentDay;
-                self.cache.blurryImagesSeen = self.blurryImagesSeen;
-                self.cache.blurryBytesRunning = self.blurryBytesRunning;
-                self.cache.otherCandidateBytes = self.otherCandidateBytes;
-
-                [self saveCacheAsync];
-                [self setModule:ASHomeModuleTypeBlurryPhotos state:ASModuleScanStateFinished];
-                [self setModule:ASHomeModuleTypeOtherPhotos  state:ASModuleScanStateFinished];
-                [self setAllModulesState:ASModuleScanStateFinished];
-
-                [self applyCacheToPublicStateWithCompletion:^{
-                    self.blurryPhotos = self.cache.blurryPhotos ?: @[];
-                    self.otherPhotos  = self.cache.otherPhotos ?: @[];
-                    [self emitProgress];
+                    
+                    // 释放信号量
+                    dispatch_semaphore_signal(semaphore);
                 }];
-
-                [self refreshAllAssetsFetchResult];
-                NSArray *ids = [self as_currentAllAssetIDsFromFetchResult:self.allAssetsFetchResult];
-                [self as_saveBaselineAllAssetIDs:ids];
-
-                if (self.pendingIncremental) {
-                    self.pendingIncremental = NO;
-                    [self scheduleIncrementalCheck];
-                }
-            }
-
-            self.fullScanRunning = NO;
-
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (completionCopy) completionCopy(self.snapshot, error);
-                if (tempToken) [self removeProgressObserver:tempToken];
+                
+                // 循环结束，回到 workQ 处理收尾
+                dispatch_async(self.workQ, ^{
+                    [self finishFullScanWithCompletion:completionCopy tempToken:tempToken];
+                });
             });
-
-            if (self.pendingIncremental) {
-                self.pendingIncremental = NO;
-                [self scheduleIncrementalCheck];
-            }
         }
     });
+}
+
+// 辅助方法：处理单个扫描完成的模型 (必须在 workQ 中调用)
+- (void)processSingleScannedModel:(ASAssetModel *)model asset:(PHAsset *)asset desiredK:(NSUInteger)desiredK {
+    if (self.cancelled) return;
+
+    // 1. 更新全局统计
+    self.snapshot.scannedCount += 1;
+    self.snapshot.scannedBytes += model.fileSizeBytes;
+
+    // 2. 更新时间锚点
+    NSDate *cd = ASPrimaryDateForAsset(asset);
+    NSDate *md = asset.modificationDate ?: cd;
+    NSDate *maxAnchor = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+    if ([cd compare:maxAnchor] == NSOrderedDescending) maxAnchor = cd;
+    if ([md compare:maxAnchor] == NSOrderedDescending) maxAnchor = md;
+    self.cache.anchorDate = [self as_safeAnchorDate:maxAnchor];
+
+    // 3. 更新日期索引 (用于相似度分桶)
+    NSDate *day = [self as_dayStart:cd];
+    if (!self.currentDay || ![day isEqualToDate:self.currentDay]) {
+        self.currentDay = day;
+        [self.indexImage removeAllObjects];
+        [self.indexVideo removeAllObjects];
+    }
+
+    // 4. 分类逻辑
+    if (ASIsScreenshot(asset)) {
+        [self.screenshotsM addObject:model];
+        self.snapshot.screenshotCount += 1;
+        self.snapshot.screenshotBytes += model.fileSizeBytes;
+        // 截图不参与相似度对比，但需触发进度
+        [self emitProgressMaybe];
+        [self checkpointSaveAsyncForce:NO];
+        return;
+    }
+
+    if (asset.mediaType == PHAssetMediaTypeImage) {
+        // 加入 "其他" 候选
+        [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateScanning];
+        [self otherCandidateAddIfNeeded:model asset:asset];
+        
+        // 模糊归类
+        if (model.blurScore >= 0.f) {
+            [self updateBlurryTopKFixed:model desiredK:desiredK];
+        }
+    }
+
+    if (ASIsScreenRecording(asset)) {
+        [self.screenRecordingsM addObject:model];
+        self.snapshot.screenRecordingCount += 1;
+        self.snapshot.screenRecordingBytes += model.fileSizeBytes;
+        [self emitProgressMaybe];
+        [self checkpointSaveAsyncForce:NO];
+        return;
+    }
+
+    if (asset.mediaType == PHAssetMediaTypeVideo && model.fileSizeBytes >= kBigVideoMinBytes) {
+        [self.bigVideosM addObject:model];
+        self.snapshot.bigVideoCount += 1;
+        self.snapshot.bigVideoBytes += model.fileSizeBytes;
+    }
+
+    // 5. 核心对比逻辑 (Duplicate / Similar)
+    if (ASAllowedForCompare(asset)) {
+        [self setModule:ASHomeModuleTypeSimilarImage state:ASModuleScanStateAnalyzing];
+        [self setModule:ASHomeModuleTypeSimilarVideo state:ASModuleScanStateAnalyzing];
+        [self setModule:ASHomeModuleTypeDuplicateImage state:ASModuleScanStateAnalyzing];
+        [self setModule:ASHomeModuleTypeDuplicateVideo state:ASModuleScanStateAnalyzing];
+
+        // 这里不再会有 IO 操作，VisionData 在并发步骤已备好
+        BOOL grouped = [self matchAndGroup:model asset:asset];
+        
+        if (grouped && asset.mediaType == PHAssetMediaTypeImage) {
+            [self otherCandidateRemoveIfExistsLocalId:model.localId];
+        }
+
+        if (asset.mediaType == PHAssetMediaTypeImage) {
+            [self.comparableImagesM addObject:model];
+        } else if (asset.mediaType == PHAssetMediaTypeVideo) {
+            [self.comparableVideosM addObject:model];
+        }
+
+        [self recomputeCleanableStatsFast];
+    }
+
+    [self emitProgressMaybe];
+    [self checkpointSaveAsyncForce:NO];
+}
+
+// 辅助方法：完成扫描后的收尾 (必须在 workQ 中调用)
+- (void)finishFullScanWithCompletion:(ASScanCompletionBlock)completionCopy tempToken:(NSUUID *)tempToken {
+    NSError *error = nil;
+    
+    if (self.cancelled) {
+        error = [NSError errorWithDomain:@"ASPhotoScan"
+                                    code:-999
+                                userInfo:@{NSLocalizedDescriptionKey:@"cancelled"}];
+    } else {
+        // 正常完成
+        self.snapshot.state = ASScanStateFinished;
+        self.snapshot.duplicateGroupCount = self.dupGroupsM.count;
+        self.snapshot.similarGroupCount = self.simGroupsM.count;
+        self.snapshot.lastUpdated = [NSDate date];
+
+        // 构建 OtherPhotos 列表 (排除已归类的图片)
+        // 注意：这里需要传入当前的 fetchResult，因为我们之前可能没保留完整的 result 对象
+        PHFetchResult<PHAsset *> *result = [PHAsset fetchAssetsWithOptions:[self allImageVideoFetchOptions]];
+        
+        [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateScanning];
+        self.otherPhotosM = [[self buildOtherPhotosFromAllAssetsFetchResult:result] mutableCopy];
+
+        // 更新 Cache 对象
+        self.cache.snapshot = [self cloneSnapshot:self.snapshot];
+        self.cache.duplicateGroups = [self.dupGroupsM copy];
+        self.cache.similarGroups = [self.simGroupsM copy];
+        self.cache.screenshots = [self.screenshotsM copy];
+        self.cache.screenRecordings = [self.screenRecordingsM copy];
+        self.cache.bigVideos = [self.bigVideosM copy];
+        self.cache.comparableImages = [self.comparableImagesM copy];
+        self.cache.comparableVideos = [self.comparableVideosM copy];
+        self.cache.blurryPhotos = [self.blurryPhotosM copy];
+        self.cache.otherPhotos  = [self.otherPhotosM copy];
+
+        // 更新 Home 统计刷新时间
+        if ([self needRefreshHomeStat:self.cache.homeStatRefreshDate]) {
+            self.cache.homeStatRefreshDate = [NSDate date];
+        }
+        
+        // 杂项状态更新
+        self.cache.pendingUpsertIDs = self.pendingUpsertIDsPersist.allObjects ?: @[];
+        self.cache.pendingRemovedIDs = self.pendingRemovedIDsPersist.allObjects ?: @[];
+        self.cache.currentDayStart = self.currentDay;
+        self.cache.blurryImagesSeen = self.blurryImagesSeen;
+        self.cache.blurryBytesRunning = self.blurryBytesRunning;
+        self.cache.otherCandidateBytes = self.otherCandidateBytes;
+
+        // 存盘
+        [self saveCacheAsync];
+        
+        // 更新 UI 模块状态
+        [self setModule:ASHomeModuleTypeBlurryPhotos state:ASModuleScanStateFinished];
+        [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateFinished];
+        [self setAllModulesState:ASModuleScanStateFinished];
+
+        // 应用到公开属性
+        [self applyCacheToPublicStateWithCompletion:^{
+            self.blurryPhotos = self.cache.blurryPhotos ?: @[];
+            self.otherPhotos  = self.cache.otherPhotos ?: @[];
+            [self emitProgress];
+        }];
+
+        // 更新 Baseline
+        [self refreshAllAssetsFetchResult];
+        NSArray *ids = [self as_currentAllAssetIDsFromFetchResult:self.allAssetsFetchResult];
+        [self as_saveBaselineAllAssetIDs:ids];
+    }
+
+    self.fullScanRunning = NO;
+
+    // 回调主线程
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (completionCopy) completionCopy(self.snapshot, error);
+        if (tempToken) [self removeProgressObserver:tempToken];
+    });
+
+    // 检查增量
+    if (!self.cancelled && self.pendingIncremental) {
+        self.pendingIncremental = NO;
+        dispatch_async(self.workQ, ^{
+            [self scheduleIncrementalCheck];
+        });
+    }
 }
 
 - (void)reconcilePendingChangesAfterFullScan {
@@ -1937,11 +2025,6 @@ static inline BOOL ASModelIsScreenshot(ASAssetModel *m) {
     self.snapshot.blurryBytes = self.blurryBytesRunning;
 }
 
-static const float kASBlur_MinMeanLuma   = 35.f;
-static const float kASBlur_MaxVarLap     = 140.f;
-static const float kASBlur_MinTenengrad  = 14.0f;
-static const float kASBlur_ROIFrac       = 0.60f;
-
 static inline NSString *ASBlurCacheKeyForAsset(PHAsset *a) {
     NSString *lid = a.localIdentifier ?: @"";
     NSTimeInterval t = (a.modificationDate ?: a.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0]).timeIntervalSince1970;
@@ -2208,42 +2291,6 @@ static inline NSString *ASBlurCacheKeyForAsset(PHAsset *a) {
     return roi;
 }
 
-- (float)varOfLaplacianOnGrayROI:(vImage_Buffer)roi {
-    const int16_t kernel[9] = {
-         0,  1, 0,
-         1, -4, 1,
-         0,  1, 0
-    };
-
-    vImage_Buffer lap8 = {0};
-    lap8.width = roi.width;
-    lap8.height = roi.height;
-    lap8.rowBytes = roi.width;
-    lap8.data = malloc(lap8.rowBytes * lap8.height);
-    if (!lap8.data) return FLT_MAX;
-
-    vImage_Error e = vImageConvolve_Planar8(&roi, &lap8, NULL, 0, 0,
-                                           kernel, 3, 3,
-                                           1, 128, kvImageEdgeExtend);
-    if (e != kvImageNoError) { free(lap8.data); return FLT_MAX; }
-
-    uint8_t *p = (uint8_t *)lap8.data;
-    uint64_t n = (uint64_t)lap8.width * (uint64_t)lap8.height;
-
-    double sum = 0.0, sum2 = 0.0;
-    for (uint64_t i=0; i<n; i++) {
-        double v = (double)((int)p[i] - 128);
-        sum += v;
-        sum2 += v*v;
-    }
-    free(lap8.data);
-
-    double mean = sum / (double)n;
-    double var = (sum2 / (double)n) - mean*mean;
-    if (var < 0) var = 0;
-    return (float)var;
-}
-
 - (float)tenengradOnGrayROI:(vImage_Buffer)roi {
     const int16_t kx[9] = {
         -1, 0, 1,
@@ -2507,12 +2554,10 @@ static const NSUInteger kASLocalIdChunk = 3500;
 - (BOOL)as_shouldForceFullScanForInserted:(NSArray<PHAsset*> *)upserts
                                removedIDs:(NSArray<NSString*> *)removedIDs
 {
-    // 1) baseline：优先用你持久化的全库 baseline
     NSArray<NSString *> *baselineArr = [self as_loadBaselineAllAssetIDs];
     NSSet<NSString *> *baselineSet = baselineArr.count ? [NSSet setWithArray:baselineArr]
                                                        : [self as_collectCachedIdsFromCache];
 
-    // 2) 只认“真正新增”
     NSMutableArray<PHAsset *> *realInserted = [NSMutableArray array];
     for (PHAsset *a in upserts) {
         NSString *lid = a.localIdentifier ?: @"";
@@ -3233,13 +3278,16 @@ static const NSUInteger kASLocalIdChunk = 3500;
     m.fileSizeBytes = [self fetchFileSizeForAsset:asset];
 
     if (computeCompareBits && ASAllowedForCompare(asset)) {
-        UIImage *thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(512, 512)];
-        if (thumb) {
-            m.phash256Data = [self computeColorPHash256Data:thumb];
-//            m.visionPrintData = [self computeVisionPrintDataFromImage:thumb];
+        // [优化]：一次 IO，同时计算 pHash 和 Vision，避免后续 match 时再次读取磁盘
+        @autoreleasepool {
+            UIImage *thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(512, 512)];
+            if (thumb) {
+                m.phash256Data = [self computeColorPHash256Data:thumb];
+                // 提前计算并缓存 Vision 数据，防止 matchAndGroup 时阻塞串行队列
+                m.visionPrintData = [self computeVisionPrintDataFromImage:thumb];
+            }
         }
     }
-
     return m;
 }
 
@@ -3551,27 +3599,23 @@ static inline void ASDCT1D_64(const float *in, float *out) {
 }
 
 - (VNFeaturePrintObservation *)visionObsForModel:(ASAssetModel *)m {
-    if (!m.localId.length || !m.visionPrintData.length) {
-        return nil;
+    // 1. 如果内存里有 Vision 数据（NSData），先解档
+    if (m.visionPrintData.length > 0) {
+        // 尝试检查 Cache 是否已经解档过
+        VNFeaturePrintObservation *cached = [self.visionMemo objectForKey:m.localId];
+        if (cached) return cached;
+        
+        NSError *error = nil;
+        VNFeaturePrintObservation *obs = [NSKeyedUnarchiver unarchivedObjectOfClass:[VNFeaturePrintObservation class] fromData:m.visionPrintData error:&error];
+        if (obs) {
+            // 存入 Memo 供后续对比使用，避免反复解档
+            [self.visionMemo setObject:obs forKey:m.localId];
+            return obs;
+        }
     }
-
-    VNFeaturePrintObservation *cached = [self.visionMemo objectForKey:m.localId];
-    if (cached) {
-        return cached;
-    }
-
-    NSError *error = nil;
-    VNFeaturePrintObservation *obs =
-        [NSKeyedUnarchiver unarchivedObjectOfClass:[VNFeaturePrintObservation class]
-                                          fromData:m.visionPrintData
-                                             error:&error];
-
-    if (obs) {
-        [self.visionMemo setObject:obs forKey:m.localId];
-        return obs;
-    }
-
-    return nil;
+    
+    // 2. 只有当 Model 里没有数据时，才尝试去重新 fetch (兼容旧数据或异常情况)
+    return [self visionFeatureForLocalId:m.localId];
 }
 
 #pragma mark - Grouping
@@ -3713,7 +3757,7 @@ static inline void ASDCT1D_64(const float *in, float *out) {
     s.lastUpdated = [NSDate date];
 
     self.snapshot = s;
-    [self setAllModulesState:ASModuleScanStateFinished]; 
+    [self setAllModulesState:ASModuleScanStateFinished];
     [self recomputeCleanableStatsFast];
 }
 

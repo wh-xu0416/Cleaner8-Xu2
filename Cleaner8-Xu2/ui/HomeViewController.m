@@ -11,6 +11,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 #pragma mark - UI Constants
+
 typedef NS_ENUM(NSInteger, ASPhotoAuthLevel) {
     ASPhotoAuthLevelUnknown = -1,
     ASPhotoAuthLevelNone    = 0,   // Denied / Restricted / NotDetermined(未授权态)
@@ -22,10 +23,6 @@ static inline UIColor *ASBlue(void) {
     return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; // #024DFFFF
 }
 
-static inline void ASLogCost(NSString *name, CFTimeInterval start) {
-    NSLog(@"⏱️ %@ %.2fms", name, (CFAbsoluteTimeGetCurrent() - start) * 1000.0);
-}
-
 static NSString * const kASLastPhotoAuthLevelKey = @"as_last_photo_auth_level_v1";
 
 static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
@@ -34,6 +31,7 @@ static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
+
 static inline CGFloat SWScaleX(void) {
     CGFloat w = UIScreen.mainScreen.bounds.size.width;
     return w / SWDesignWidth();
@@ -47,10 +45,13 @@ static inline CGFloat SWScaleY(void) {
 static inline CGFloat SWScale(void) {
     return MIN(SWScaleX(), SWScaleY());
 }
+
 static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+
 static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
     return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
 }
+
 static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
     return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
 }
@@ -71,16 +72,6 @@ static UIColor *kTextGray(void) { return ASRGB(102, 102, 102); }
 static UIColor *kClutterRed(void) { return ASRGB(245, 19, 19); }
 static UIColor *kAppDataYellow(void) { return ASRGB(255, 181, 46); }
 static UIColor *kTotalGray(void) { return ASRGB(218, 218, 218); }
-
-static CGFloat ASHomeBgHeightForWidth(CGFloat width) {
-    static UIImage *bgImg = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        bgImg = [UIImage imageNamed:@"ic_home_bg"];
-    });
-    if (!bgImg || bgImg.size.width <= 0) return kHeaderHeight;
-    return bgImg.size.height * (width / bgImg.size.width);
-}
 
 static NSString *ASMarketingTotalString(uint64_t totalBytes) {
     double gib = (double)totalBytes / (1024.0 * 1024.0 * 1024.0);
@@ -229,11 +220,11 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     } else {
         CGFloat r = self.redRatio / sum;
         CGFloat y = self.yellowRatio / sum;
-        CGFloat g = self.grayRatio / sum;
+        CGFloat g = self.grayRatio / sum; // Remaining is gray
 
         CGFloat rw = floor(w * r);
         CGFloat yw = floor(w * y);
-        CGFloat gw = w - rw - yw;
+        CGFloat gw = w - rw - yw; // Not strictly used for sizing but concept
 
         self.grayView.frame = CGRectMake(0, 0, w, h);
 
@@ -439,7 +430,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
         _proBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
         _proBtn.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
         [self addSubview:_proBtn];
-
+   
         _proGradient = [CAGradientLayer layer];
         _proGradient.colors = @[
             (id)ASRGB(111, 71, 225).CGColor,
@@ -723,7 +714,22 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     _contentHeight += self.sectionInset.bottom;
 }
 
-- (nullable NSArray<UICollectionViewLayoutAttributes *> *)layoutAttributesForElementsInRect:(CGRect)rect { NSMutableArray<UICollectionViewLayoutAttributes *> *out = [NSMutableArray array]; for (UICollectionViewLayoutAttributes *a in _cache) { if (CGRectIntersectsRect(a.frame, rect)) [out addObject:a]; } return out; } - (nullable UICollectionViewLayoutAttributes *)layoutAttributesForSupplementaryViewOfKind:(NSString *)elementKind atIndexPath:(NSIndexPath *)indexPath { for (UICollectionViewLayoutAttributes *a in _cache) { if (a.representedElementCategory == UICollectionElementCategorySupplementaryView && [a.representedElementKind isEqualToString:elementKind] && [a.indexPath isEqual:indexPath]) { return a; } } return nil; }
+- (nullable NSArray<UICollectionViewLayoutAttributes *> *)layoutAttributesForElementsInRect:(CGRect)rect {
+    NSMutableArray<UICollectionViewLayoutAttributes *> *out = [NSMutableArray array];
+    for (UICollectionViewLayoutAttributes *a in _cache) {
+        if (CGRectIntersectsRect(a.frame, rect)) [out addObject:a];
+    }
+    return out;
+}
+
+- (nullable UICollectionViewLayoutAttributes *)layoutAttributesForSupplementaryViewOfKind:(NSString *)elementKind atIndexPath:(NSIndexPath *)indexPath {
+    for (UICollectionViewLayoutAttributes *a in _cache) {
+        if (a.representedElementCategory == UICollectionElementCategorySupplementaryView && [a.representedElementKind isEqualToString:elementKind] && [a.indexPath isEqual:indexPath]) {
+            return a;
+        }
+    }
+    return nil;
+}
 
 - (CGSize)collectionViewContentSize {
     CGFloat w = self.collectionView ? self.collectionView.bounds.size.width : 0;
@@ -977,7 +983,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     self.representedLocalIds = @[];
     self.thumbKey = nil;
 
-    self.appliedCoverKey = nil;    
+    self.appliedCoverKey = nil;
 
     self.reqId1 = PHInvalidImageRequestID;
     self.reqId2 = PHInvalidImageRequestID;
@@ -1109,7 +1115,6 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 - (void)storeAuthLevel:(ASPhotoAuthLevel)lvl {
     [NSUserDefaults.standardUserDefaults setInteger:lvl forKey:kASLastPhotoAuthLevelKey];
-    [NSUserDefaults.standardUserDefaults synchronize];
 }
 
 - (BOOL)hasPhotoAccess {
@@ -1123,9 +1128,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 - (void)dealloc {
     if (self.scanProgressToken) {
-         [[ASPhotoScanManager shared] removeProgressObserver:self.scanProgressToken];
-         self.scanProgressToken = nil;
-     }
+        [[ASPhotoScanManager shared] removeProgressObserver:self.scanProgressToken];
+        self.scanProgressToken = nil;
+    }
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [self.scanUITimer invalidate];
 }
@@ -1184,7 +1189,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
                                              selector:@selector(onAppDidBecomeActive:)
                                                  name:UIApplicationDidBecomeActiveNotification
                                                object:nil];
-     
+      
 }
 
 - (void)onAppWillResignActive:(NSNotification *)n {
@@ -1253,6 +1258,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     }];
 }
 
+
 - (void)updatePermissionUIForStatus:(PHAuthorizationStatus)st {
 
     ASPhotoAuthLevel lvl = [self mapToAuthLevel:st];
@@ -1268,11 +1274,11 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
     // 布局/头部高度可能跟权限有关，仍然更新
     [self applyLayoutForCurrentAuth];
-    [self invalidateHeaderLayoutIfNeeded];
+//    [self invalidateHeaderLayoutIfNeeded];
 
     // 只有权限/limited 真变化才 reload
     if (authChanged) {
-        [self ensureModulesIfNeeded];        // ✅ 新增
+        [self ensureModulesIfNeeded];
         [self resetCoverStateForAuthChange];
         [self.cv reloadData];
     } else {
@@ -1380,7 +1386,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     self.topGradient.frame = CGRectMake(0, 0, w, gradientH);
 
     UIEdgeInsets safe = self.view.safeAreaInsets;
-    self.cv.contentInset = SWInsets(10, 0, safe.bottom + 70, 0);
+    self.cv.contentInset = SWInsets(10, 0, safe.bottom + 100, 0);
     self.cv.scrollIndicatorInsets = self.cv.contentInset;
 }
 
@@ -1422,10 +1428,24 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     if (![self hasPhotoAccess]) return;
     if (self.modules.count > 0) return;
 
-    // 扫描中先给 6 个占位模块，避免第二次进来 reload 后 item=0
-    self.modules = [self buildModulesFromManagerAndComputeClutterIsFinal:NO];
-    [self.cv reloadData];
-    [self updateHeaderDuringScanning];
+    // 先给一个空的 loading 状态，或者直接异步加载
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(self.homeBuildQueue, ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        
+        // 在后台线程计算
+        NSArray<ASHomeModuleVM *> *initialMods = [self buildModulesFromManagerAndComputeClutterIsFinal:NO];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            // 回到主线程赋值
+            if (self.modules.count == 0) { // 再次检查防止竞态
+                self.modules = initialMods;
+                [self.cv reloadData];
+                [self updateHeaderDuringScanning];
+            }
+        });
+    });
 }
 
 - (void)resetHomeCell:(HomeModuleCell *)cell vm:(ASHomeModuleVM *)vm {
@@ -1449,11 +1469,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 }
 
 - (void)rebuildModulesAndReloadIsFinal:(BOOL)isFinal {
-    CFTimeInterval t0 = CFAbsoluteTimeGetCurrent();
 
     if (self.scanMgr.snapshot.state == ASScanStateScanning && isFinal) {
         [self scheduleScanUIUpdateCoalesced];
-        ASLogCost(@"TOTAL rebuildModulesAndReload (scanning)", t0);
         return;
     }
 
@@ -1495,8 +1513,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
                 [self2 updateHeaderDuringScanning];
                 [self2 refreshVisibleCellsAndCovers];
-
-                ASLogCost(@"TOTAL rebuildModulesAndReload (async)", t0);
             });
         }
     });
@@ -1574,10 +1590,10 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     if (!self.scanUITimer) {
         self.scanUITimer = [NSTimer scheduledTimerWithTimeInterval:0.6
-                                                           target:self
-                                                         selector:@selector(handleScanUITimerFire)
-                                                         userInfo:nil
-                                                          repeats:YES];
+                                                            target:self
+                                                          selector:@selector(handleScanUITimerFire)
+                                                          userInfo:nil
+                                                           repeats:YES];
         self.scanUITimer.tolerance = 0.2;
     }
 }
@@ -1911,7 +1927,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     }
 
     cell.appliedCoverKey = coverKey;
-    cell.thumbKey = coverKey;               
+    cell.thumbKey = coverKey;
     cell.representedLocalIds = ids;
 
     [cell setNeedsLayout];
@@ -1939,8 +1955,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 }
 
 - (NSArray<NSString *> *)thumbsFromFirstGroup:(NSArray<ASAssetGroup *> *)groups
-                                        type:(ASGroupType)type
-                                    maxCount:(NSUInteger)maxCount {
+                                         type:(ASGroupType)type
+                                     maxCount:(NSUInteger)maxCount {
     for (ASAssetGroup *g in groups) {
         if (g.type != type) continue;
         NSMutableArray<NSString *> *ids = [NSMutableArray array];
@@ -1960,84 +1976,78 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     return a.creationDate ?: a.modificationDate ?: [NSDate distantPast];
 }
 
-- (NSArray<NSString *> *)as_pickNewestLocalIds:(NSArray<NSString *> *)localIds limit:(NSUInteger)limit {
-    if (limit == 0 || localIds.count == 0) return @[];
-
-    NSUInteger cap = MIN(localIds.count, 300);
-    NSArray<NSString *> *cands = [localIds subarrayWithRange:NSMakeRange(0, cap)];
-
-    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:cands options:nil];
-    if (fr.count == 0) return @[];
-
-    NSMutableArray<PHAsset *> *arr = [NSMutableArray arrayWithCapacity:fr.count];
-    [fr enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        [arr addObject:obj];
-    }];
-
-    [arr sortUsingComparator:^NSComparisonResult(PHAsset *a, PHAsset *b) {
-        return [[self as_assetBestDate:b] compare:[self as_assetBestDate:a]];
-    }];
-
-    NSMutableArray<NSString *> *out = [NSMutableArray array];
-    for (PHAsset *a in arr) {
-        if (a.localIdentifier.length) {
-            [out addObject:a.localIdentifier];
-            if (out.count == limit) break;
-        }
-    }
-    return out;
-}
+// [优化] 直接使用 Model 排序，不再 Fetch PHAsset，极大提升速度
 - (NSArray<NSString *> *)as_thumbsFromNewestGroup:(NSArray<ASAssetGroup *> *)groups
-                                           type:(ASGroupType)type
-                                       maxCount:(NSUInteger)maxCount
-                                        isValid:(BOOL(^)(NSString *lid))isValidId {
+                                             type:(ASGroupType)type
+                                         maxCount:(NSUInteger)maxCount
+                                          isValid:(BOOL(^)(NSString *lid))isValidId {
 
     if (groups.count == 0 || maxCount == 0) return @[];
 
-    NSMutableArray<NSString *> *repIds = [NSMutableArray array];
-    NSMutableArray<NSArray<NSString *> *> *groupIds = [NSMutableArray array];
-
+    // 1. 找到所有该类型的组
+    NSMutableArray<ASAssetGroup *> *candidates = [NSMutableArray array];
     for (ASAssetGroup *g in groups) {
         if (g.type != type) continue;
-
-        NSMutableArray<NSString *> *ids = [NSMutableArray array];
-        for (ASAssetModel *m in g.assets) {
-            if (!m.localId.length) continue;
-            if (isValidId && !isValidId(m.localId)) continue;
-            [ids addObject:m.localId];
-        }
-        if (ids.count < 2) continue;
-
-        [repIds addObject:ids.firstObject];
-        [groupIds addObject:ids];
+        if (g.assets.count < 2) continue; // 只有1张的不算组
+        [candidates addObject:g];
     }
+    
+    if (candidates.count == 0) return @[];
 
-    if (repIds.count == 0) return @[];
-
-    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:repIds options:nil];
-    if (fr.count == 0) {
-        return [self as_pickNewestLocalIds:groupIds.firstObject limit:maxCount];
-    }
-
-    NSMutableDictionary<NSString *, NSDate *> *dateById = [NSMutableDictionary dictionary];
-    [fr enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        if (obj.localIdentifier.length) dateById[obj.localIdentifier] = [self as_assetBestDate:obj];
+    // 2. 按组内“最新一张照片的时间”对组进行排序 (降序)
+    [candidates sortUsingComparator:^NSComparisonResult(ASAssetGroup *g1, ASAssetGroup *g2) {
+        // 取每个组的第一个asset（通常是原本逻辑里已排好序的，或者是key asset）
+        // 如果 ASAssetModel 有 creationDate，直接用。
+        NSDate *d1 = [NSDate distantPast];
+        NSDate *d2 = [NSDate distantPast];
+        
+        if (g1.assets.firstObject) d1 = ((ASAssetModel *)g1.assets.firstObject).creationDate ?: d1;
+        if (g2.assets.firstObject) d2 = ((ASAssetModel *)g2.assets.firstObject).creationDate ?: d2;
+        
+        return [d2 compare:d1]; // 降序
     }];
 
-    NSInteger bestIdx = 0;
-    NSDate *bestDate = [NSDate distantPast];
+    // 3. 取最新那一组的 Top N LocalIDs
+    ASAssetGroup *bestGroup = candidates.firstObject;
+    NSMutableArray<NSString *> *outIds = [NSMutableArray array];
+    
+    // 假设组内 assets 已经是按时间或相似度排好的，如果没排好，这里可以再排一次 assets
+    NSArray<ASAssetModel *> *sortedAssets = [bestGroup.assets sortedArrayUsingComparator:^NSComparisonResult(ASAssetModel *m1, ASAssetModel *m2) {
+        NSDate *d1 = m1.creationDate ?: [NSDate distantPast];
+        NSDate *d2 = m2.creationDate ?: [NSDate distantPast];
+        return [d2 compare:d1];
+    }];
+    
+    for (ASAssetModel *m in sortedAssets) {
+        if (!m.localId.length) continue;
+        if (isValidId && !isValidId(m.localId)) continue;
+        
+        [outIds addObject:m.localId];
+        if (outIds.count >= maxCount) break;
+    }
+    
+    return outIds;
+}
 
-    for (NSInteger i = 0; i < repIds.count; i++) {
-        NSString *rid = repIds[i];
-        NSDate *d = dateById[rid] ?: [NSDate distantPast];
-        if ([d compare:bestDate] == NSOrderedDescending) {
-            bestDate = d;
-            bestIdx = i;
+// [优化] 针对单纯的 Model 列表 (如 Screenshots, Blurry) 进行排序取 Top
+- (NSArray<NSString *> *)as_pickNewestLocalIdsFromModels:(NSArray<ASAssetModel *> *)models limit:(NSUInteger)limit {
+    if (models.count == 0) return @[];
+    
+    // 浅拷贝避免修改原数组
+    NSArray<ASAssetModel *> *sorted = [models sortedArrayUsingComparator:^NSComparisonResult(ASAssetModel *m1, ASAssetModel *m2) {
+        NSDate *d1 = m1.creationDate ?: [NSDate distantPast];
+        NSDate *d2 = m2.creationDate ?: [NSDate distantPast];
+        return [d2 compare:d1];
+    }];
+    
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    for (ASAssetModel *m in sorted) {
+        if (m.localId.length) {
+            [out addObject:m.localId];
+            if (out.count >= limit) break;
         }
     }
-
-    NSArray<NSString *> *bestGroupAllIds = groupIds[bestIdx];
-    return [self as_pickNewestLocalIds:bestGroupAllIds limit:maxCount];
+    return out;
 }
 
 - (NSArray<ASHomeModuleVM *> *)buildModulesFromManagerAndComputeClutterIsFinal:(BOOL)isFinal {
@@ -2159,32 +2169,30 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     uint64_t used = (self.diskTotalBytes > self.diskFreeBytes) ? (self.diskTotalBytes - self.diskFreeBytes) : 0;
     self.appDataBytes = (used > self.clutterBytes) ? (used - self.clutterBytes) : 0;
 
+    // 1. 相似/重复组 (直接传 Group 数组，不再传 ID)
     NSArray<NSString *> *simThumbs =
     [self as_thumbsFromNewestGroup:sim type:ASGroupTypeSimilarImage maxCount:2 isValid:isValidId];
 
     NSArray<NSString *> *dupThumbs =
     [self as_thumbsFromNewestGroup:dup type:ASGroupTypeDuplicateImage maxCount:2 isValid:isValidId];
 
-    NSMutableArray<NSString *> *shotIds = [NSMutableArray arrayWithCapacity:shots.count];
-    for (ASAssetModel *m in shots)  if (isValidId(m.localId)) [shotIds addObject:m.localId];
-    NSArray<NSString *> *shotThumb = [self as_pickNewestLocalIds:shotIds limit:1];
+    // 2. 截图/模糊/其他 (直接传 Model 数组，利用内存缓存的 Date 排序)
+    // 注意：需确保传入的 models 已经是 isValidId 过滤过的，或者在 pick 方法里过滤
+    // 这里复用前面已过滤好的 valid models: shots, blurs, others
+    
+    NSArray<NSString *> *shotThumb = [self as_pickNewestLocalIdsFromModels:shots limit:1];
+    NSArray<NSString *> *blurThumb = [self as_pickNewestLocalIdsFromModels:blurs limit:1];
+    NSArray<NSString *> *otherThumb = [self as_pickNewestLocalIdsFromModels:others limit:1];
 
-    NSMutableArray<NSString *> *blurIds = [NSMutableArray arrayWithCapacity:blurs.count];
-    for (ASAssetModel *m in blurs)  if (isValidId(m.localId)) [blurIds addObject:m.localId];
-    NSArray<NSString *> *blurThumb = [self as_pickNewestLocalIds:blurIds limit:1];
-
-    NSMutableArray<NSString *> *otherIds = [NSMutableArray arrayWithCapacity:others.count];
-    for (ASAssetModel *m in others) if (isValidId(m.localId)) [otherIds addObject:m.localId];
-    NSArray<NSString *> *otherThumb = [self as_pickNewestLocalIds:otherIds limit:1];
-
-    NSMutableArray<NSString *> *videoIds = [NSMutableArray array];
-    for (ASAssetModel *m in bigs)   if (isValidId(m.localId)) [videoIds addObject:m.localId];
-    for (ASAssetModel *m in recs)   if (isValidId(m.localId)) [videoIds addObject:m.localId];
-    for (ASAssetModel *m in simVid) if (isValidId(m.localId)) [videoIds addObject:m.localId];
-    for (ASAssetModel *m in dupVid) if (isValidId(m.localId)) [videoIds addObject:m.localId];
-
-    NSString *videoCoverId = [self as_pickNewestLocalIds:videoIds limit:1].firstObject;
-    NSArray<NSString *> *videoThumb = videoCoverId.length ? @[videoCoverId] : @[];
+    // 3. 视频 (Video Cover)
+    // 视频比较特殊，来源于多个集合。我们将所有候选 Video Model 收集起来排序
+    NSMutableArray<ASAssetModel *> *videoCandidates = [NSMutableArray array];
+    [videoCandidates addObjectsFromArray:bigs];
+    [videoCandidates addObjectsFromArray:recs];
+    [videoCandidates addObjectsFromArray:simVid];
+    [videoCandidates addObjectsFromArray:dupVid];
+    
+    NSArray<NSString *> *videoThumb = [self as_pickNewestLocalIdsFromModels:videoCandidates limit:1];
 
     ASHomeModuleVM *(^makeVM)(ASHomeCardType, NSString *, NSString *, uint64_t, NSUInteger, NSArray<NSString *> *, BOOL, BOOL) =
     ^ASHomeModuleVM *(ASHomeCardType type,
@@ -2334,8 +2342,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 #pragma mark - Header
 
 - (UICollectionReusableView *)collectionView:(UICollectionView *)collectionView
-           viewForSupplementaryElementOfKind:(NSString *)kind
-                                 atIndexPath:(NSIndexPath *)indexPath {
+          viewForSupplementaryElementOfKind:(NSString *)kind
+                                atIndexPath:(NSIndexPath *)indexPath {
 
     if (![kind isEqualToString:UICollectionElementKindSectionHeader]) {
         return [UICollectionReusableView new];
@@ -2504,6 +2512,7 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     [c stopVideoIfNeeded];
 }
 
+// 缓存查询辅助方法，用于后台加载图片时
 - (NSArray<PHAsset *> *)assetsForLocalIdsCached:(NSArray<NSString *> *)ids {
     if (ids.count == 0) return @[];
 
@@ -2516,6 +2525,8 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     }
 
     if (miss.count) {
+        // [优化] 如果需要的话可以在这里用 PHFetchOptions 来只获取 creationDate 等轻量属性，
+        // 但为了兼容后续可能需要的image请求，直接默认 fetch 也可以。
         PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:miss options:nil];
         [fr enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
             NSString *lid = obj.localIdentifier;
@@ -2533,7 +2544,7 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     return out;
 }
 
-#pragma mark - Thumbnails
+#pragma mark - Thumbnails (Images)
 
 - (void)loadThumbsForVM:(ASHomeModuleVM *)vm
                intoCell:(HomeModuleCell *)cell
@@ -2664,116 +2675,133 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     NSArray<NSString *> *ids = vm.thumbLocalIds ?: @[];
     if (ids.count == 0) return;
 
-    NSString *expectedKey = cell.appliedCoverKey ?: @"";
-    NSInteger token = cell.renderToken;
-
-    [cell stopVideoIfNeeded];
-
-    PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
-    if (fr.count == 0) return;
-
-    PHAsset *asset = fr.firstObject;
-    if (asset.mediaType != PHAssetMediaTypeVideo) {
+    if (self.cv.dragging || self.cv.decelerating) {
         [self loadThumbsForVM:vm intoCell:cell atIndexPath:indexPath];
         return;
     }
 
-    PHVideoRequestOptions *vopt = [PHVideoRequestOptions new];
-    vopt.networkAccessAllowed = YES;
-    vopt.deliveryMode = PHVideoRequestOptionsDeliveryModeAutomatic;
+    NSString *expectedKey = cell.appliedCoverKey ?: @"";
+    NSInteger token = cell.renderToken;
+    NSArray<NSString *> *idsCopy = [ids copy];
+
+    [cell stopVideoIfNeeded];
 
     __weak typeof(self) weakSelf = self;
 
-    cell.videoReqId = [self.imgMgr requestAVAssetForVideo:asset
-                                                 options:vopt
-                                           resultHandler:^(AVAsset * _Nullable avAsset,
-                                                           AVAudioMix * _Nullable audioMix,
-                                                           NSDictionary * _Nullable info) {
+    dispatch_async(self.photoFetchQueue, ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
 
-        if (!avAsset) return;
-        if ([info[PHImageCancelledKey] boolValue]) return;
+        PHAsset *asset = [self assetsForLocalIdsCached:idsCopy].firstObject;
+        if (!asset) return;
+
+        if (asset.mediaType != PHAssetMediaTypeVideo) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) self2 = weakSelf;
+                if (!self2) return;
+                HomeModuleCell *nowCell = (HomeModuleCell *)[self2.cv cellForItemAtIndexPath:indexPath];
+                if (![nowCell isKindOfClass:HomeModuleCell.class]) return;
+                if (nowCell.renderToken != token) return;
+                NSString *k1 = nowCell.appliedCoverKey ?: @"";
+                NSString *k2 = expectedKey ?: @"";
+                if (![k1 isEqualToString:k2]) return;
+
+                if (![nowCell.representedLocalIds isEqualToArray:idsCopy]) return;
+
+                [self2 loadThumbsForVM:vm intoCell:nowCell atIndexPath:indexPath];
+            });
+            return;
+        }
+
+        PHVideoRequestOptions *vopt = [PHVideoRequestOptions new];
+        vopt.networkAccessAllowed = YES;
+        vopt.deliveryMode = PHVideoRequestOptionsDeliveryModeAutomatic;
+
+        PHImageRequestID reqId =
+        [self.imgMgr requestAVAssetForVideo:asset
+                                    options:vopt
+                              resultHandler:^(AVAsset * _Nullable avAsset,
+                                              AVAudioMix * _Nullable audioMix,
+                                              NSDictionary * _Nullable info) {
+
+            if (!avAsset) return;
+            if ([info[PHImageCancelledKey] boolValue]) return;
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) self3 = weakSelf;
+                if (!self3) return;
+
+                HomeModuleCell *nowCell = (HomeModuleCell *)[self3.cv cellForItemAtIndexPath:indexPath];
+                if (![nowCell isKindOfClass:HomeModuleCell.class]) return;
+
+                if (nowCell.renderToken != token) return;
+                NSString *k1 = nowCell.appliedCoverKey ?: @"";
+                NSString *k2 = expectedKey ?: @"";
+                if (![k1 isEqualToString:k2]) return;
+
+                if (![nowCell.representedLocalIds isEqualToArray:idsCopy]) return;
+                if (!nowCell.isVideoCover) return;
+
+                PHImageRequestOptions *iopt = [PHImageRequestOptions new];
+                iopt.networkAccessAllowed = YES;
+                iopt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
+                iopt.resizeMode = PHImageRequestOptionsResizeModeFast;
+
+                CGSize posterSize = CGSizeMake(MAX(1, nowCell.img1.bounds.size.width) * UIScreen.mainScreen.scale,
+                                               MAX(1, nowCell.img1.bounds.size.height) * UIScreen.mainScreen.scale);
+
+                nowCell.reqId1 = [self3.imgMgr requestImageForAsset:asset
+                                                        targetSize:posterSize
+                                                       contentMode:PHImageContentModeAspectFill
+                                                           options:iopt
+                                                     resultHandler:^(UIImage * _Nullable result,
+                                                                     NSDictionary * _Nullable info2) {
+                    if (!result) return;
+                    if ([info2[PHImageCancelledKey] boolValue]) return;
+
+                    BOOL degraded = [info2[PHImageResultIsDegradedKey] boolValue];
+                    if (!degraded || !nowCell.hasFinalThumb1) {
+                        nowCell.img1.image = result;
+                        if (!degraded) nowCell.hasFinalThumb1 = YES;
+                    }
+                }];
+
+                AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:avAsset];
+                AVQueuePlayer *player = [AVQueuePlayer queuePlayerWithItems:@[item]];
+                player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+                player.muted = YES;
+
+                AVPlayerLayer *layer = [AVPlayerLayer playerLayerWithPlayer:player];
+                layer.frame = nowCell.img1.bounds;
+                layer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+
+                [nowCell.playerLayer removeFromSuperlayer];
+                [nowCell.img1.layer addSublayer:layer];
+
+                if (@available(iOS 10.0, *)) {
+                    nowCell.looper = [AVPlayerLooper playerLooperWithPlayer:player templateItem:item];
+                }
+
+                nowCell.player = player;
+                nowCell.playerLayer = layer;
+                [player play];
+            });
+        }];
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) return;
-
-            HomeModuleCell *nowCell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:indexPath];
-            if (!nowCell) return;
-
+            __strong typeof(weakSelf) self2 = weakSelf;
+            if (!self2) return;
+            HomeModuleCell *nowCell = (HomeModuleCell *)[self2.cv cellForItemAtIndexPath:indexPath];
+            if (![nowCell isKindOfClass:HomeModuleCell.class]) return;
             if (nowCell.renderToken != token) return;
-            NSString *k1 = nowCell.appliedCoverKey ? nowCell.appliedCoverKey : @"";
-            NSString *k2 = expectedKey ? expectedKey : @"";
+            NSString *k1 = nowCell.appliedCoverKey ?: @"";
+            NSString *k2 = expectedKey ?: @"";
             if (![k1 isEqualToString:k2]) return;
-            if (![nowCell.representedLocalIds isEqualToArray:ids]) return;
 
-            if (!nowCell.isVideoCover) return;
-
-            PHImageRequestOptions *iopt = [PHImageRequestOptions new];
-            iopt.networkAccessAllowed = YES;
-            iopt.deliveryMode = PHImageRequestOptionsDeliveryModeOpportunistic;
-            iopt.resizeMode = PHImageRequestOptionsResizeModeFast;
-            iopt.synchronous = NO;
-
-            CGSize posterSize = CGSizeMake(MAX(1, nowCell.img1.bounds.size.width) * UIScreen.mainScreen.scale,
-                                           MAX(1, nowCell.img1.bounds.size.height) * UIScreen.mainScreen.scale);
-
-            nowCell.reqId1 = [self.imgMgr requestImageForAsset:asset
-                                                    targetSize:posterSize
-                                                   contentMode:PHImageContentModeAspectFill
-                                                       options:iopt
-                                                 resultHandler:^(UIImage * _Nullable result,
-                                                                 NSDictionary * _Nullable info2) {
-
-                if (!result) return;
-                BOOL cancelled = [info2[PHImageCancelledKey] boolValue];
-                if (cancelled) return;
-
-                BOOL degraded = [info2[PHImageResultIsDegradedKey] boolValue];
-
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    HomeModuleCell *againCell = (HomeModuleCell *)[self.cv cellForItemAtIndexPath:indexPath];
-                    if (!againCell) return;
-
-                    if (againCell.renderToken != token) return;
-                    NSString *k1 = againCell.appliedCoverKey ? againCell.appliedCoverKey : @"";
-                    NSString *k2 = expectedKey ? expectedKey : @"";
-                    if (![k1 isEqualToString:k2]) return;
-                    if (![againCell.representedLocalIds isEqualToArray:ids]) return;
-                    if (!againCell.isVideoCover) return;
-
-                    if (!degraded || !againCell.hasFinalThumb1) {
-                        againCell.img1.image = result;
-                        if (!degraded) againCell.hasFinalThumb1 = YES;
-                    }
-                });
-            }];
-
-            AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:avAsset];
-            AVQueuePlayer *player = [AVQueuePlayer queuePlayerWithItems:@[item]];
-            player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
-            player.muted = YES;
-
-            AVPlayerLayer *layer = [AVPlayerLayer playerLayerWithPlayer:player];
-            layer.frame = nowCell.img1.bounds;
-            layer.videoGravity = AVLayerVideoGravityResizeAspectFill;
-
-            if (nowCell.playerLayer) {
-                [nowCell.playerLayer removeFromSuperlayer];
-            }
-            [nowCell.img1.layer addSublayer:layer];
-
-            if (@available(iOS 10.0, *)) {
-                nowCell.looper = [AVPlayerLooper playerLooperWithPlayer:player templateItem:item];
-            }
-
-            nowCell.player = player;
-            nowCell.playerLayer = layer;
-
-            [player play];
+            nowCell.videoReqId = reqId;
         });
-    }];
+    });
 }
-
 
 - (void)pauseVisibleVideoCovers {
     if (!self.isViewLoaded) return;

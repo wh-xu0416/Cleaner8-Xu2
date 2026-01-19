@@ -190,11 +190,6 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
     self.centerContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.centerContainer.backgroundColor = UIColor.clearColor;
     [self.view addSubview:self.centerContainer];
-    
-    self.centerContainer = [UIView new];
-    self.centerContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.centerContainer.backgroundColor = UIColor.clearColor;
-    [self.view addSubview:self.centerContainer];
 
     self.logoView = [UIImageView new];
     self.logoView.translatesAutoresizingMaskIntoConstraints = NO;
