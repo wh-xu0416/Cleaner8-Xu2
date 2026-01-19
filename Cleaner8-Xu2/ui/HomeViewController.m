@@ -1085,6 +1085,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 @property(nonatomic, strong) NSCache<NSString*, PHAsset*> *assetCache;
 @property(nonatomic, strong) dispatch_queue_t photoFetchQueue;
+@property(nonatomic, assign) PHAuthorizationStatus lastPHStatus;
 @end
 
 @implementation HomeViewController
@@ -1154,13 +1155,20 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.lastPHStatus = PHAuthorizationStatusNotDetermined;
+
     [self setupUI];
     [self computeDiskSpace];
     
     self.assetCache = [NSCache new];
-    self.photoFetchQueue = dispatch_queue_create("com.xiaoxu2.home.photoFetch", DISPATCH_QUEUE_CONCURRENT);
+    dispatch_queue_attr_t buildAttr =
+        dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0);
+    self.homeBuildQueue = dispatch_queue_create("com.xiaoxu2.home.build", buildAttr);
 
-    self.homeBuildQueue = dispatch_queue_create("com.xiaoxu2.home.build", DISPATCH_QUEUE_SERIAL);
+    dispatch_queue_attr_t fetchAttr =
+        dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_CONCURRENT, QOS_CLASS_UTILITY, 0);
+    self.photoFetchQueue = dispatch_queue_create("com.xiaoxu2.home.photoFetch", fetchAttr);
+
     self.lastAppliedAuthLevel = ASPhotoAuthLevelUnknown;
     self.lastAppliedLimited = NO;
 
@@ -1233,7 +1241,10 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
             __strong typeof(weakSelf) self = weakSelf;
             if (!self) return;
             PHAuthorizationStatus st = [self currentPHAuthStatus];
-            [self updatePermissionUIForStatus:st];
+            if (st != self.lastPHStatus) {
+                self.lastPHStatus = st;
+                [self updatePermissionUIForStatus:st];
+            }
         });
     } completion:^(ASScanSnapshot *snapshot, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -1258,9 +1269,7 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     }];
 }
 
-
 - (void)updatePermissionUIForStatus:(PHAuthorizationStatus)st {
-
     ASPhotoAuthLevel lvl = [self mapToAuthLevel:st];
     BOOL limited = (@available(iOS 14.0, *) && st == PHAuthorizationStatusLimited);
 
@@ -1272,17 +1281,12 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
     self.cv.hidden = NO;
 
-    // 布局/头部高度可能跟权限有关，仍然更新
-    [self applyLayoutForCurrentAuth];
-//    [self invalidateHeaderLayoutIfNeeded];
-
-    // 只有权限/limited 真变化才 reload
     if (authChanged) {
+        [self applyLayoutForCurrentAuth];
         [self ensureModulesIfNeeded];
         [self resetCoverStateForAuthChange];
         [self.cv reloadData];
     } else {
-        // 不 reload 的情况下，至少把 header 文案/ banner 状态更新一下
         [self updateHeaderDuringScanning];
     }
 }
@@ -1291,21 +1295,32 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     ASWaterfallLayout *wf = (ASWaterfallLayout *)self.cv.collectionViewLayout;
     if (![wf isKindOfClass:ASWaterfallLayout.class]) return;
 
+    UIEdgeInsets newInset;
+    CGFloat newInter, newLine;
+
     if (![self hasPhotoAccess]) {
-        wf.sectionInset = UIEdgeInsetsMake(0, 0, SW(16), 0);
-        wf.interItemSpacing = 0;
-        wf.lineSpacing = SW(12);
+        newInset = UIEdgeInsetsMake(0, 0, SW(16), 0);
+        newInter = 0;
+        newLine  = SW(12);
     } else {
-        wf.sectionInset = UIEdgeInsetsMake(0, kHomeSideInset, kHomeSideInset, kHomeSideInset);
-        wf.interItemSpacing = kHomeGridGap;
-        wf.lineSpacing = kHomeGridGap;
+        newInset = UIEdgeInsetsMake(0, kHomeSideInset, kHomeSideInset, kHomeSideInset);
+        newInter = kHomeGridGap;
+        newLine  = kHomeGridGap;
     }
 
-    CGFloat newH = [self collectionView:self.cv layout:wf referenceSizeForHeaderInSection:0].height;
-    if (fabs(wf.headerHeight - newH) > 0.5) wf.headerHeight = newH;
+    BOOL changed = NO;
+    if (!UIEdgeInsetsEqualToEdgeInsets(wf.sectionInset, newInset)) { wf.sectionInset = newInset; changed = YES; }
+    if (fabs(wf.interItemSpacing - newInter) > 0.5) { wf.interItemSpacing = newInter; changed = YES; }
+    if (fabs(wf.lineSpacing - newLine) > 0.5) { wf.lineSpacing = newLine; changed = YES; }
 
-    [wf invalidateLayout];
+    CGFloat newH = [self collectionView:self.cv layout:wf referenceSizeForHeaderInSection:0].height;
+    if (fabs(wf.headerHeight - newH) > 0.5) { wf.headerHeight = newH; changed = YES; }
+
+    if (changed) {
+        [wf invalidateLayout];
+    }
 }
+
 
 - (void)invalidateHeaderLayoutIfNeeded {
     ASWaterfallLayout *wf = (ASWaterfallLayout *)self.cv.collectionViewLayout;
@@ -1374,10 +1389,15 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-
+    
+    CGSize old = self.cv.bounds.size;
     self.cv.frame = self.view.bounds;
-    [self applyLayoutForCurrentAuth];
 
+    if (fabs(old.width - self.cv.bounds.size.width) > 0.5 ||
+        fabs(old.height - self.cv.bounds.size.height) > 0.5) {
+        [self applyLayoutForCurrentAuth];
+    }
+    
     CGFloat w = self.view.bounds.size.width;
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) safeTop = self.view.safeAreaInsets.top;
@@ -1877,7 +1897,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
             [self2 updateHeaderDuringScanning];
 
-            // 刷可见 cell 文案/封面（见 B/C：封面也要降载）
             [self2 refreshVisibleCellsAndCovers];
         });
     });
@@ -2295,7 +2314,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                                                                        forIndexPath:indexPath];
         __weak typeof(self) weakSelf = self;
         cell.onTap = ^{
-            [weakSelf onTapPermissionGate]; // NotDetermined 会触发系统授权；Denied/Restricted 会去设置
+            [weakSelf onTapPermissionGate]; 
         };
         return cell;
     }
@@ -2512,7 +2531,6 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     [c stopVideoIfNeeded];
 }
 
-// 缓存查询辅助方法，用于后台加载图片时
 - (NSArray<PHAsset *> *)assetsForLocalIdsCached:(NSArray<NSString *> *)ids {
     if (ids.count == 0) return @[];
 
@@ -2525,8 +2543,6 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     }
 
     if (miss.count) {
-        // [优化] 如果需要的话可以在这里用 PHFetchOptions 来只获取 creationDate 等轻量属性，
-        // 但为了兼容后续可能需要的image请求，直接默认 fetch 也可以。
         PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:miss options:nil];
         [fr enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
             NSString *lid = obj.localIdentifier;
