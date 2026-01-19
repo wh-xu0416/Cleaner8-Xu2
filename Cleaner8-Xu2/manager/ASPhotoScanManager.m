@@ -3265,6 +3265,29 @@ static const NSUInteger kASLocalIdChunk = 3500;
 
 #pragma mark - Build model (size + phash256 + vision)
 
+- (void)ensureVisionPrintDataForGroupMember:(ASAssetModel *)m assetIfAvailable:(PHAsset *)asset {
+    if (!m) return;
+    if (m.visionPrintData.length > 0) return;
+
+    // 优先用传入的 asset（避免再 fetch）
+    PHAsset *a = asset;
+    if (!a && m.localId.length) {
+        PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:@[m.localId] options:nil];
+        a = fr.firstObject;
+    }
+    if (!a) return;
+
+    @autoreleasepool {
+        UIImage *thumb = [self requestThumbnailSyncForAsset:a target:CGSizeMake(512, 512)];
+        if (!thumb.CGImage) return;
+
+        NSData *data = [self computeVisionPrintDataFromImage:thumb];
+        if (data.length > 0) {
+            m.visionPrintData = data;
+        }
+    }
+}
+
 - (ASAssetModel *)buildModelForAsset:(PHAsset *)asset
                  computeCompareBits:(BOOL)computeCompareBits
                               error:(NSError **)err {
@@ -3278,13 +3301,12 @@ static const NSUInteger kASLocalIdChunk = 3500;
     m.fileSizeBytes = [self fetchFileSizeForAsset:asset];
 
     if (computeCompareBits && ASAllowedForCompare(asset)) {
-        // [优化]：一次 IO，同时计算 pHash 和 Vision，避免后续 match 时再次读取磁盘
         @autoreleasepool {
             UIImage *thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(512, 512)];
             if (thumb) {
                 m.phash256Data = [self computeColorPHash256Data:thumb];
                 // 提前计算并缓存 Vision 数据，防止 matchAndGroup 时阻塞串行队列
-                m.visionPrintData = [self computeVisionPrintDataFromImage:thumb];
+//                m.visionPrintData = [self computeVisionPrintDataFromImage:thumb];
             }
         }
     }
@@ -3642,6 +3664,9 @@ static inline void ASDCT1D_64(const float *in, float *out) {
 
         int hd = ASHamming256(model.phash256Data, cand.phash256Data);
         if (hd > kPolicySimilar.phashThreshold) continue;
+        
+        [self ensureVisionPrintDataForGroupMember:cand assetIfAvailable:nil];
+        [self ensureVisionPrintDataForGroupMember:model assetIfAvailable:asset];
 
         float vd = [self visionDistanceBetween:model and:cand];
         if (vd == FLT_MAX) continue;
@@ -4057,6 +4082,9 @@ static inline void ASDCT1D_64(const float *in, float *out) {
         lastT = t;
         [self emitProgress];
     }
+}
+
+- (void)applyDeletedLocalIds:(nonnull NSSet<NSString *> *)deletedIds {
 }
 
 @end

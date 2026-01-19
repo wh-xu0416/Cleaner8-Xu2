@@ -1194,9 +1194,14 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
     [self computeDiskSpace];
     
     self.assetCache = [NSCache new];
-    self.photoFetchQueue = dispatch_queue_create("com.xiaoxu2.home.photoFetch", DISPATCH_QUEUE_CONCURRENT);
+    dispatch_queue_attr_t buildAttr =
+        dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0);
+    self.homeBuildQueue = dispatch_queue_create("com.xiaoxu2.home.build", buildAttr);
 
-    self.homeBuildQueue = dispatch_queue_create("com.xiaoxu2.home.build", DISPATCH_QUEUE_SERIAL);
+    dispatch_queue_attr_t fetchAttr =
+        dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_CONCURRENT, QOS_CLASS_UTILITY, 0);
+    self.photoFetchQueue = dispatch_queue_create("com.xiaoxu2.home.photoFetch", fetchAttr);
+
     self.lastAppliedAuthLevel = ASPhotoAuthLevelUnknown;
     self.lastAppliedLimited = NO;
 
@@ -1647,7 +1652,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 - (ASScanUIResult *)buildScanUIResultDuringScanning {
     ASScanUIResult *r = [ASScanUIResult new];
 
-    // 1) disk
     NSDictionary *attrs = [[NSFileManager defaultManager]
                            attributesOfFileSystemForPath:NSHomeDirectory()
                            error:nil];
@@ -1656,7 +1660,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     r.diskTotal = total;
     r.diskFree  = free;
 
-    // 2) input from scan manager (no PhotoKit fetch here)
     NSArray<ASAssetGroup *> *sim = self.scanMgr.similarGroups ?: @[];
     NSArray<ASAssetGroup *> *dup = self.scanMgr.duplicateGroups ?: @[];
 
@@ -1666,7 +1669,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     NSArray<ASAssetModel *> *blurs  = self.scanMgr.blurryPhotos     ?: @[];
     NSArray<ASAssetModel *> *others = self.scanMgr.otherPhotos      ?: @[];
 
-    // 3) unique clutter bytes (by localId)
     NSMutableDictionary<NSString *, NSNumber *> *uniqBytesById = [NSMutableDictionary dictionary];
 
     void (^addUniq)(ASAssetModel *m) = ^(ASAssetModel *m) {
@@ -1676,7 +1678,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         }
     };
 
-    // helpers: pick thumbs quickly
     NSArray<NSString *> *(^thumbsFromFirstGroup)(NSArray<ASAssetGroup *> *, ASGroupType, NSUInteger) =
     ^NSArray<NSString *> *(NSArray<ASAssetGroup *> *groups, ASGroupType type, NSUInteger maxCount) {
         for (ASAssetGroup *g in groups) {
@@ -1701,7 +1702,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return (NSString *)nil;
     };
 
-    // 4) Similar Images
     {
         uint64_t bytes = 0;
         NSUInteger cnt = 0;
@@ -1721,7 +1721,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         r.simThumbs = thumbsFromFirstGroup(sim, ASGroupTypeSimilarImage, 2);
     }
 
-    // 5) Duplicate Images
     {
         uint64_t bytes = 0;
         NSUInteger cnt = 0;
@@ -1741,7 +1740,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         r.dupThumbs = thumbsFromFirstGroup(dup, ASGroupTypeDuplicateImage, 2);
     }
 
-    // 6) Screenshots / Blurry / Other
     {
         uint64_t bytes = 0; NSUInteger cnt = 0;
         for (ASAssetModel *m in shots) { if (!m.localId.length) continue; cnt++; bytes += m.fileSizeBytes; addUniq(m); }
@@ -1767,7 +1765,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         r.otherThumb = lid ? @[lid] : @[];
     }
 
-    // 7) Videos (simVid + dupVid + bigs + recs)
     {
         uint64_t bytes = 0;
         NSUInteger cnt = 0;
@@ -1812,7 +1809,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         r.vBytes = bytes;
         r.vCount = cnt;
 
-        // video cover：优先 bigs -> recs -> 任意一个视频组里的第一个
+        // video cover
         NSString *cover = firstLocalId(bigs);
         if (!cover) cover = firstLocalId(recs);
         if (!cover) {
@@ -1833,7 +1830,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         r.videoThumb = cover ? @[cover] : @[];
     }
 
-    // 8) clutter/appData
     uint64_t uniqBytes = 0;
     for (NSNumber *n in uniqBytesById.allValues) uniqBytes += n.unsignedLongLongValue;
 
@@ -1875,7 +1871,6 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
             self2.clutterBytes   = r.clutterBytes;
             self2.appDataBytes   = r.appDataBytes;
 
-            // 更新 modules（modules 只有 6 个，主线程改很轻）
             for (ASHomeModuleVM *vm in self2.modules) {
                 switch (vm.type) {
                     case ASHomeCardTypeSimilarPhotos:
@@ -2006,13 +2001,10 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     return @[];
 }
 
-#pragma mark - Final Build (finished 时做存在性校验，确保封面/计数准确)
-
 - (NSDate *)as_assetBestDate:(PHAsset *)a {
     return a.creationDate ?: a.modificationDate ?: [NSDate distantPast];
 }
 
-// [优化] 直接使用 Model 排序，不再 Fetch PHAsset，极大提升速度
 - (NSArray<NSString *> *)as_thumbsFromNewestGroup:(NSArray<ASAssetGroup *> *)groups
                                              type:(ASGroupType)type
                                          maxCount:(NSUInteger)maxCount
@@ -2065,11 +2057,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     return outIds;
 }
 
-// [优化] 针对单纯的 Model 列表 (如 Screenshots, Blurry) 进行排序取 Top
 - (NSArray<NSString *> *)as_pickNewestLocalIdsFromModels:(NSArray<ASAssetModel *> *)models limit:(NSUInteger)limit {
     if (models.count == 0) return @[];
     
-    // 浅拷贝避免修改原数组
     NSArray<ASAssetModel *> *sorted = [models sortedArrayUsingComparator:^NSComparisonResult(ASAssetModel *m1, ASAssetModel *m2) {
         NSDate *d1 = m1.creationDate ?: [NSDate distantPast];
         NSDate *d2 = m2.creationDate ?: [NSDate distantPast];
@@ -2205,23 +2195,16 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     uint64_t used = (self.diskTotalBytes > self.diskFreeBytes) ? (self.diskTotalBytes - self.diskFreeBytes) : 0;
     self.appDataBytes = (used > self.clutterBytes) ? (used - self.clutterBytes) : 0;
 
-    // 1. 相似/重复组 (直接传 Group 数组，不再传 ID)
     NSArray<NSString *> *simThumbs =
     [self as_thumbsFromNewestGroup:sim type:ASGroupTypeSimilarImage maxCount:2 isValid:isValidId];
 
     NSArray<NSString *> *dupThumbs =
     [self as_thumbsFromNewestGroup:dup type:ASGroupTypeDuplicateImage maxCount:2 isValid:isValidId];
 
-    // 2. 截图/模糊/其他 (直接传 Model 数组，利用内存缓存的 Date 排序)
-    // 注意：需确保传入的 models 已经是 isValidId 过滤过的，或者在 pick 方法里过滤
-    // 这里复用前面已过滤好的 valid models: shots, blurs, others
-    
     NSArray<NSString *> *shotThumb = [self as_pickNewestLocalIdsFromModels:shots limit:1];
     NSArray<NSString *> *blurThumb = [self as_pickNewestLocalIdsFromModels:blurs limit:1];
     NSArray<NSString *> *otherThumb = [self as_pickNewestLocalIdsFromModels:others limit:1];
 
-    // 3. 视频 (Video Cover)
-    // 视频比较特殊，来源于多个集合。我们将所有候选 Video Model 收集起来排序
     NSMutableArray<ASAssetModel *> *videoCandidates = [NSMutableArray array];
     [videoCandidates addObjectsFromArray:bigs];
     [videoCandidates addObjectsFromArray:recs];
@@ -2331,7 +2314,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
                                                                        forIndexPath:indexPath];
         __weak typeof(self) weakSelf = self;
         cell.onTap = ^{
-            [weakSelf onTapPermissionGate]; // NotDetermined 会触发系统授权；Denied/Restricted 会去设置
+            [weakSelf onTapPermissionGate];
         };
         return cell;
     }
@@ -2561,8 +2544,6 @@ didEndDisplayingCell:(UICollectionViewCell *)cell
     }
 
     if (miss.count) {
-        // [优化] 如果需要的话可以在这里用 PHFetchOptions 来只获取 creationDate 等轻量属性，
-        // 但为了兼容后续可能需要的image请求，直接默认 fetch 也可以。
         PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithLocalIdentifiers:miss options:nil];
         [fr enumerateObjectsUsingBlock:^(PHAsset * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
             NSString *lid = obj.localIdentifier;
