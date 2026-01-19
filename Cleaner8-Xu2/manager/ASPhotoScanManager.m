@@ -589,9 +589,25 @@ typedef NS_ENUM(NSUInteger, ASHomeModuleType) {
 static NSString * const kASAllAssetIDsBaselineKey = @"as_all_asset_ids_baseline_v1";
 static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
+static NSSet *ASCacheAllowedClasses(void) {
+    static NSSet *classes;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        classes = [NSSet setWithArray:@[
+            NSArray.class, NSMutableArray.class,
+            NSDictionary.class, NSMutableDictionary.class,
+            NSString.class, NSNumber.class, NSDate.class, NSData.class,
+            ASScanSnapshot.class, ASAssetModel.class, ASAssetGroup.class, ASScanCache.class
+        ]];
+    });
+    return classes;
+}
+
 #pragma mark - Manager
 
 @interface ASPhotoScanManager ()
+@property (atomic, assign) BOOL cacheLoading;
+
 @property (nonatomic, strong) NSCalendar *scanCalendar;
 
 @property (nonatomic, strong) NSMutableSet<NSString *> *pendingUpsertIDsPersist;
@@ -704,40 +720,42 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         _pendingRemovedIDsPersist = [NSMutableSet set];
         _lastCheckpointT = 0;
         _lastCheckpointCount = 0;
-    
-            _progressObservers = [NSMutableDictionary dictionary];
-            _observersQ = dispatch_queue_create("as.photo.scan.observers", DISPATCH_QUEUE_SERIAL);
+        
+        _progressObservers = [NSMutableDictionary dictionary];
+        _observersQ = dispatch_queue_create("as.photo.scan.observers", DISPATCH_QUEUE_SERIAL);
 
-            _pendingInsertedMap = [NSMutableDictionary dictionary];
-            _pendingRemovedIDs = [NSMutableSet set];
+        _pendingInsertedMap = [NSMutableDictionary dictionary];
+        _pendingRemovedIDs = [NSMutableSet set];
 
-            _snapshot = [ASScanSnapshot new];
-            _duplicateGroups = @[];
-            _similarGroups = @[];
-            _screenshots = @[];
-            _screenRecordings = @[];
-            _bigVideos = @[];
-            _blurryPhotos = @[];
-            _otherPhotos = @[];
+        _snapshot = [ASScanSnapshot new];
+        _duplicateGroups = @[];
+        _similarGroups = @[];
+        _screenshots = @[];
+        _screenRecordings = @[];
+        _bigVideos = @[];
+        _blurryPhotos = @[];
+        _otherPhotos = @[];
 
-            _indexImage = [NSMutableDictionary dictionary];
-            _indexVideo = [NSMutableDictionary dictionary];
+        _indexImage = [NSMutableDictionary dictionary];
+        _indexVideo = [NSMutableDictionary dictionary];
 
-            _cache = [ASScanCache new];
+        _cache = [ASScanCache new];
 
-            _visionMemo = [[NSCache alloc] init];
-            _visionMemo.countLimit = 3000;
+        _visionMemo = [[NSCache alloc] init];
+        _visionMemo.countLimit = 3000;
+           
 
-            if ([self as_currentAuthState] != ASPhotoAuthStateNone) {
+        if ([self as_currentAuthState] != ASPhotoAuthStateNone) {
+            dispatch_async(self.workQ, ^{
                 [self refreshAllAssetsFetchResult];
-            }
-            
-            [[PHPhotoLibrary sharedPhotoLibrary] registerChangeObserver:self];
-            [[NSNotificationCenter defaultCenter] addObserver:self
-                                                     selector:@selector(as_appDidEnterBackground)
-                                                         name:UIApplicationDidEnterBackgroundNotification
-                                                       object:nil];
+            });
+        }
 
+        [[PHPhotoLibrary sharedPhotoLibrary] registerChangeObserver:self];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(as_appDidEnterBackground)
+                                                     name:UIApplicationDidEnterBackgroundNotification
+                                                   object:nil];
     }
     return self;
 }
@@ -1025,7 +1043,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
 - (void)as_storeAuthState:(ASPhotoAuthState)st {
     [[NSUserDefaults standardUserDefaults] setInteger:st forKey:kASPhotoAuthStateKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 - (void)as_requestPhotoPermission:(void(^)(ASPhotoAuthState st))done {
@@ -1129,32 +1146,35 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
     [self as_storeAuthState:current];
 
-    if ([self loadCacheIfExists]) {
+    [self loadCacheIfExistsAsync:^(BOOL ok) {
+        if (!ok) {
+            [self startFullScanWithProgress:nil completion:self.completionBlock];
+            return;
+        }
+
         __weak typeof(self) weakSelf = self;
         [self applyCacheToPublicStateWithCompletion:^{
             __strong typeof(weakSelf) self = weakSelf;
             if (!self) return;
+
             ASScanState st = self.cache.snapshot.state;
 
             if (st == ASScanStateFinished) {
-                [self refreshAllAssetsFetchResult];
-                [self emitProgress];
+                // 不要在主线程做 Photos fetch/清理
                 dispatch_async(self.workQ, ^{
+                    [self refreshAllAssetsFetchResult];
+                    [self emitProgress];
                     [self purgeDeletedAssetsAndRecalculate];
                     [self scheduleIncrementalCheck];
                 });
             } else if (st == ASScanStateScanning) {
-                [self emitProgress];
                 dispatch_async(self.workQ, ^{
+                    [self emitProgress];
                     [self resumeFullScanFromCache];
                 });
             }
-
         }];
-        return token;
-    }
-
-    [self startFullScanWithProgress:nil completion:self.completionBlock];
+    }];
     return token;
 }
 
@@ -1405,23 +1425,33 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         return;
     }
 
-    if ([self loadCacheIfExists]) {
-        __weak typeof(self) weakSelf = self;
-        [self applyCacheToPublicStateWithCompletion:^{
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) return;
+    __weak typeof(self) weakSelf = self;
 
-            [self emitProgress];
+    [self loadCacheIfExistsAsync:^(BOOL ok) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
 
+        if (ok) {
+            [self applyCacheToPublicStateWithCompletion:^{
+                __strong typeof(weakSelf) self = weakSelf;
+                if (!self) return;
+
+                [self emitProgress];
+
+                // 这俩放 workQ，别在主线程做
+                dispatch_async(self.workQ, ^{
+                    [self refreshAllAssetsFetchResult];
+                    [self scheduleIncrementalCheck];
+                });
+            }];
+        } else {
+            // 没缓存也别在主线程 fetch（这俩也放 workQ）
             dispatch_async(self.workQ, ^{
                 [self refreshAllAssetsFetchResult];
                 [self scheduleIncrementalCheck];
             });
-        }];
-    } else {
-        [self refreshAllAssetsFetchResult];
-        [self scheduleIncrementalCheck];
-    }
+        }
+    }];
 }
 
 - (NSUUID *)subscribeProgress:(ASScanProgressBlock)progress {
@@ -3907,6 +3937,97 @@ static inline void ASDCT1D_64(const float *in, float *out) {
 
 #pragma mark - Load Cache
 
+- (void)loadCacheIfExistsAsync:(void(^)(BOOL ok))completion {
+    // 已加载过直接回调
+    if (self.didLoadCacheFromDisk && self.cache && self.cache.snapshot) {
+        if (completion) completion(YES);
+        return;
+    }
+    if (self.cacheLoading) {
+        if (completion) completion(NO);
+        return;
+    }
+    self.cacheLoading = YES;
+
+    dispatch_async(self.ioQ, ^{
+        @autoreleasepool {
+            NSString *path = ASCachePath();
+
+            NSError *readErr = nil;
+            // 关键：MappedIfSafe 避免一次性拷贝大块数据，读大文件更稳
+            NSData *data = [NSData dataWithContentsOfFile:path
+                                                 options:NSDataReadingMappedIfSafe
+                                                   error:&readErr];
+            if (data.length == 0 || readErr) {
+                dispatch_async(self.workQ, ^{
+                    self.cacheLoading = NO;
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (completion) completion(NO);
+                    });
+                });
+                return;
+            }
+
+            NSError *unErr = nil;
+            ASScanCache *obj = nil;
+
+            if (@available(iOS 11.0, *)) {
+                obj = [NSKeyedUnarchiver unarchivedObjectOfClasses:ASCacheAllowedClasses()
+                                                         fromData:data
+                                                            error:&unErr];
+            } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                @try { obj = [NSKeyedUnarchiver unarchiveObjectWithData:data]; }
+                @catch (__unused NSException *e) { obj = nil; }
+#pragma clang diagnostic pop
+            }
+
+            // 安装到 manager（统一回 workQ，避免和扫描过程竞态）
+            dispatch_async(self.workQ, ^{
+                self.cacheLoading = NO;
+
+                if (!obj || unErr) {
+                    [self dropCacheFile];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (completion) completion(NO);
+                    });
+                    return;
+                }
+
+                ASScanSnapshot *snap = obj.snapshot;
+                if (![self normalizeSnapshotIfNeeded:snap] || ![self isSnapshotCacheUsableForUI:snap]) {
+                    [self dropCacheFile];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (completion) completion(NO);
+                    });
+                    return;
+                }
+
+                self.cache = obj;
+
+                // 恢复 pending 集合（保持你现有逻辑）
+                [self.pendingUpsertIDsPersist removeAllObjects];
+                [self.pendingRemovedIDsPersist removeAllObjects];
+
+                NSArray<NSString *> *up = self.cache.pendingUpsertIDs ?: @[];
+                NSArray<NSString *> *rm = self.cache.pendingRemovedIDs ?: @[];
+                [self.pendingUpsertIDsPersist addObjectsFromArray:up];
+                [self.pendingRemovedIDsPersist addObjectsFromArray:rm];
+                for (NSString *rid in self.pendingRemovedIDsPersist) {
+                    [self.pendingUpsertIDsPersist removeObject:rid];
+                }
+
+                self.didLoadCacheFromDisk = YES;
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (completion) completion(YES);
+                });
+            });
+        }
+    });
+}
+
 -(BOOL)loadCacheIfExists {
     if (self.didLoadCacheFromDisk && self.snapshot != nil) {
         return YES;
@@ -4001,25 +4122,32 @@ static inline void ASDCT1D_64(const float *in, float *out) {
 }
 
 - (void)applyCacheToPublicStateWithCompletion:(dispatch_block_t)completion {
-    void (^assign)(void) = ^{
-        self.snapshot = [self cloneSnapshot:self.cache.snapshot];
+    dispatch_async(self.workQ, ^{
+        ASScanSnapshot *snap = [self cloneSnapshot:self.cache.snapshot];
 
-        self.duplicateGroups = self.cache.duplicateGroups ?: @[];
+        NSArray<ASAssetGroup *> *dup = self.cache.duplicateGroups ?: @[];
+        NSArray<ASAssetGroup *> *sim = self.cache.similarGroups ?: @[];
+        NSArray<ASAssetGroup *> *mergedSim = [self mergedSimilarGroupsForUIFromDup:dup sim:sim];
 
-        NSArray *sim = self.cache.similarGroups ?: @[];
-        self.similarGroups = [self mergedSimilarGroupsForUIFromDup:self.duplicateGroups sim:sim];
+        NSArray<ASAssetModel *> *shots = self.cache.screenshots ?: @[];
+        NSArray<ASAssetModel *> *recs  = self.cache.screenRecordings ?: @[];
+        NSArray<ASAssetModel *> *bigs  = self.cache.bigVideos ?: @[];
+        NSArray<ASAssetModel *> *blurs = self.cache.blurryPhotos ?: @[];
+        NSArray<ASAssetModel *> *other = self.cache.otherPhotos ?: @[];
 
-        self.screenshots = self.cache.screenshots ?: @[];
-        self.screenRecordings = self.cache.screenRecordings ?: @[];
-        self.bigVideos = self.cache.bigVideos ?: @[];
-        self.blurryPhotos = self.cache.blurryPhotos ?: @[];
-        self.otherPhotos  = self.cache.otherPhotos  ?: @[];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.snapshot = snap;
+            self.duplicateGroups = dup;
+            self.similarGroups = mergedSim;
+            self.screenshots = shots;
+            self.screenRecordings = recs;
+            self.bigVideos = bigs;
+            self.blurryPhotos = blurs;
+            self.otherPhotos = other;
 
-        if (completion) completion();
-    };
-
-    if ([NSThread isMainThread]) assign();
-    else dispatch_async(dispatch_get_main_queue(), assign);
+            if (completion) completion();
+        });
+    });
 }
 
 - (void)applyCacheToPublicState {
