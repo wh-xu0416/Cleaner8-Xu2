@@ -2,7 +2,17 @@ import Foundation
 import StoreKit
 import Network
 import UIKit
-
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
+#if canImport(ThinkingSDK)
+import ThinkingSDK
+#endif
+#if canImport(AppsFlyerLib)
+import AppsFlyerLib
+#endif
+import AdSupport
+import AppTrackingTransparency
 
 extension Notification.Name {
     static let storeSnapshotChanged = Notification.Name("storeSnapshotChanged")
@@ -104,8 +114,165 @@ public final class ASProductIDs: NSObject {
     public static let subYearly: String = "com.demo.pro.yearly"
 }
 
+private enum ASAccountToken {
+    static let tokenKey = "as_app_account_token"
+    static let distinctKey = "as_app_account_token_distinctid"
+
+    static func tokenUUID(distinctId: String?) -> UUID {
+        let defaults = UserDefaults.standard
+
+        // 1) 如果 distinctId 没变，并且之前存过 token，就直接复用
+        if let d = distinctId, !d.isEmpty,
+           defaults.string(forKey: distinctKey) == d,
+           let saved = defaults.string(forKey: tokenKey),
+           let uuid = UUID(uuidString: saved) {
+            return uuid
+        }
+
+        // 2) 没有 distinctId：生成一个随机的并持久化（至少本机稳定）
+        guard let d = distinctId, !d.isEmpty else {
+            let uuid = UUID()
+            defaults.set(uuid.uuidString, forKey: tokenKey)
+            defaults.set("", forKey: distinctKey)
+            return uuid
+        }
+
+        // 3) 用 distinctId 生成“稳定 UUID”
+        let uuid = stableUUID(from: d)
+
+        defaults.set(uuid.uuidString, forKey: tokenKey)
+        defaults.set(d, forKey: distinctKey)
+        return uuid
+    }
+
+    private static func stableUUID(from input: String) -> UUID {
+        #if canImport(CryptoKit)
+        let digest = SHA256.hash(data: Data(input.utf8))
+        let bytes = Array(digest)
+
+        // 取前 16 字节做 UUID，并设置 version/variant
+        var b = Array(bytes[0..<16])
+        b[6] = (b[6] & 0x0F) | 0x50  // version 5-ish
+        b[8] = (b[8] & 0x3F) | 0x80  // RFC4122 variant
+
+        return UUID(uuid: (
+            b[0], b[1], b[2], b[3],
+            b[4], b[5],
+            b[6], b[7],
+            b[8], b[9],
+            b[10], b[11], b[12], b[13], b[14], b[15]
+        ))
+        #else
+        // 没有 CryptoKit 就退化成随机（建议尽量用 CryptoKit）
+        return UUID()
+        #endif
+    }
+}
+
+private enum ASIdentifiers {
+
+    static func bundleId() -> String {
+        Bundle.main.bundleIdentifier ?? ""
+    }
+
+    static func distinctId() -> String {
+        #if canImport(ThinkingSDK)
+        return TDAnalytics.getDistinctId()
+        #else
+        return ""
+        #endif
+    }
+
+    static func appsFlyerId() -> String {
+        #if canImport(AppsFlyerLib)
+        return AppsFlyerLib.shared().getAppsFlyerUID()
+        #else
+        return ""
+        #endif
+    }
+
+    @MainActor static func idfv() -> String {
+        UIDevice.current.identifierForVendor?.uuidString ?? ""
+    }
+
+    static func idfa() -> String {
+        if #available(iOS 14, *) {
+            guard ATTrackingManager.trackingAuthorizationStatus == .authorized else { return "" }
+        }
+        #if canImport(AdSupport)
+        let idfa = ASIdentifierManager.shared().advertisingIdentifier.uuidString
+        // iOS 14+ 未授权时可能是全 0，这里也当作空
+        if idfa == "00000000-0000-0000-0000-000000000000" { return "" }
+        return idfa
+        #else
+        return ""
+        #endif
+    }
+}
+
+private struct ASUploadResp: Decodable {
+    let result: Int
+}
+
 final class StoreKit2Manager: NSObject {
 
+    // TODO: 换成你们自己的域名（只保留 /iap/upload 路径不够）
+    private var iapUploadURL: URL? {
+        let baseURL = "https://YOUR_DOMAIN.com"
+        return URL(string: baseURL + "/iap/upload")
+    }
+
+    @objc func uploadIAPIdentifiersOnEnterPaywall() {
+        Task { await self.uploadIAPIdentifiers(reason: "进入内购页") }
+    }
+
+    @objc func uploadIAPIdentifiersBeforePurchaseTap() {
+        Task { await self.uploadIAPIdentifiers(reason: "点击购买前") }
+    }
+
+    private func logCN(_ msg: String) {
+        print("[内购标识上传] \(msg)")
+    }
+
+    private func uploadIAPIdentifiers(reason: String) async {
+        guard let url = iapUploadURL else {
+            logCN("失败：iapUploadURL 未配置")
+            return
+        }
+
+        let body: [String: Any] = await [
+            "bundleid": ASIdentifiers.bundleId(),
+            "distinctid": ASIdentifiers.distinctId(),
+            "appsflyer_id": ASIdentifiers.appsFlyerId(),
+            "idfa": ASIdentifiers.idfa(),
+            "idfv": ASIdentifiers.idfv()
+        ]
+
+        logCN("开始（\(reason)）：\(body)")
+
+        do {
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+            let (data, resp) = try await URLSession.shared.data(for: req)
+
+            if let http = resp as? HTTPURLResponse {
+                logCN("HTTP 状态码：\(http.statusCode)")
+            }
+
+            let decoded = try JSONDecoder().decode(ASUploadResp.self, from: data)
+            if decoded.result == 0 {
+                logCN("成功（\(reason)），result=0")
+            } else {
+                logCN("失败（\(reason)），result=\(decoded.result)")
+            }
+        } catch {
+            logCN("失败（\(reason)）：\(error.localizedDescription)")
+        }
+    }
+    
     @objc static let shared = StoreKit2Manager()
 
     let productIDs: [String] = [ASProductIDs.subWeekly,ASProductIDs.subYearly]
@@ -247,6 +414,8 @@ final class StoreKit2Manager: NSObject {
 
     @MainActor
     private func purchaseAsync(productID: String) async -> PurchaseFlowState {
+        await uploadIAPIdentifiers(reason: "点击购买前")
+
         if rawProducts.first(where: { $0.id == productID }) == nil, snapshot.networkAvailable {
             await refreshProducts()
         }
@@ -258,7 +427,9 @@ final class StoreKit2Manager: NSObject {
         setPurchaseState(.purchasing, err: nil)
 
         do {
-            let result = try await product.purchase()
+            let distinctId = ASIdentifiers.distinctId()
+            let token = ASAccountToken.tokenUUID(distinctId: distinctId)
+            let result = try await product.purchase(options: [.appAccountToken(token)])
             switch result {
             case .success(let verification):
                 let transaction = try checkVerified(verification)

@@ -81,7 +81,7 @@
          </CommandLineArgument>
       </CommandLineArguments>
       <StoreKitConfigurationFileReference
-         identifier = "../../Cleaner8-Xu2/StoreKitTest.storekit">
+         identifier = "../Cleaner8-Xu2/StoreKitTest.storekit">
       </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction

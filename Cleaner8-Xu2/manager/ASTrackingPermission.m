@@ -27,27 +27,15 @@ static NSString * const kASHasRequestedATTKey = @"hasRequestedATT";
 + (void)requestIfNeededWithDelay:(NSTimeInterval)delay
                       completion:(ASTrackingAuthCompletion)completion {
 
-    if (![self shouldRequest]) {
-        if (completion) completion([self currentStatusValue]);
-        return;
-    }
-
-    static BOOL sRequesting = NO;
-    @synchronized(self) {
-        if (sRequesting) {
-            if (completion) completion([self currentStatusValue]);
+    if (@available(iOS 14, *)) {
+        ATTrackingManagerAuthorizationStatus cur = ATTrackingManager.trackingAuthorizationStatus;
+        if (cur != ATTrackingManagerAuthorizationStatusNotDetermined) {
+            if (completion) completion((NSInteger)cur);
             return;
         }
-        sRequesting = YES;
-    }
 
-    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kASHasRequestedATTKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
-
-    if (@available(iOS 14, *)) {
         void (^doRequest)(void) = ^{
             [ATTrackingManager requestTrackingAuthorizationWithCompletionHandler:^(ATTrackingManagerAuthorizationStatus status) {
-                @synchronized(self) { sRequesting = NO; }
                 if (completion) completion((NSInteger)status);
             }];
         };
@@ -59,8 +47,7 @@ static NSString * const kASHasRequestedATTKey = @"hasRequestedATT";
             dispatch_async(dispatch_get_main_queue(), doRequest);
         }
     } else {
-        @synchronized(self) { sRequesting = NO; }
-        if (completion) completion([self currentStatusValue]);
+        if (completion) completion(0);
     }
 }
 

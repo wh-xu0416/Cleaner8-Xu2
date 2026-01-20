@@ -36,6 +36,7 @@ static inline NSString *LF(NSString *key, ...) {
 
     [self buildUI];
     [self render];
+    [[StoreKit2Manager shared] uploadIAPIdentifiersOnEnterPaywall];
 }
 
 - (void)dealloc {
