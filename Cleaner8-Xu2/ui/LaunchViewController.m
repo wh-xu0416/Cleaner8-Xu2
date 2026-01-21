@@ -205,10 +205,11 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 
     self.nameLab = [UILabel new];
     self.nameLab.translatesAutoresizingMaskIntoConstraints = NO;
-    self.nameLab.text = NSLocalizedString(@"Compressly", nil);
+    self.nameLab.text = NSLocalizedString(@"Cleanio \n AI Storage Cleaner", nil);
     self.nameLab.textColor = UIColor.blackColor;
     self.nameLab.font = ASFont(34, UIFontWeightMedium);
     self.nameLab.textAlignment = NSTextAlignmentCenter;
+    self.nameLab.numberOfLines = 2;
     [self.centerContainer addSubview:self.nameLab];
 
     self.containerCenterYCons =

@@ -520,6 +520,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     CGFloat textMaxW = CGRectGetMinX(_proBtn.frame) - left - SW(10.0);
     _spaceTitleLabel.frame = CGRectMake(left, top, MAX(0, textMaxW), titleH);
 
+    _proBtn.hidden = YES;
     _spaceLabel.frame = CGRectMake(left,
                                    CGRectGetMaxY(_spaceTitleLabel.frame) + SW(5.0),
                                    MAX(0, textMaxW),
