@@ -150,7 +150,7 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 
     UIViewController *target = nil;
     if (done) {
-        target = [OnboardingViewController new];
+        target = [MainTabBarController new];
     } else {
         target = [OnboardingViewController new];
     }
