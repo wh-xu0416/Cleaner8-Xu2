@@ -11,6 +11,8 @@ target 'Cleaner8-Xu2' do
 
   # ThinkingData（数数）用户行为分析
   pod 'ThinkingSDK'
+  
+  pod 'lottie-ios'
 
   target 'Cleaner8-Xu2Tests' do
     inherit! :search_paths

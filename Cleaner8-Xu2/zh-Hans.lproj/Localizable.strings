@@ -273,3 +273,12 @@
 "paywall.see_all_plans" = "查看全部方案";
 "paywall.weekly_fallback" = "周订阅";
 "common.network_tip_to_settings" = "网络不可用或已关闭本应用蜂窝数据，点此前往设置开启";
+/* 价格行：$9.99 / month */
+"subscription.price_per_period" = "%@ / %@";
+
+/* 自动续费：Auto-renewing, $9.99 per month, cancel any time */
+"subscription.autorenewing_format" = "自动续费, %@ 每 %@, 随时取消";
+
+/* 下面这些 key 会在 stringsdict 里定义复数规则 */
+"subscription.period.week" = "周";
+"subscription.period.year" = "年";

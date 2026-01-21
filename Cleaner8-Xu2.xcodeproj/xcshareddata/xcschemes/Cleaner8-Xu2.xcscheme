@@ -58,6 +58,8 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      language = "ja"
+      region = "JP"
       launchStyle = "0"
       useCustomWorkingDirectory = "NO"
       ignoresPersistentStateOnLaunch = "NO"
@@ -80,6 +82,13 @@
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
+      <AdditionalOptions>
+         <AdditionalOption
+            key = "APP_DISTRIBUTOR_ID_OVERRIDE"
+            value = "com.apple.AppStore"
+            isEnabled = "YES">
+         </AdditionalOption>
+      </AdditionalOptions>
       <StoreKitConfigurationFileReference
          identifier = "../Cleaner8-Xu2/StoreKitTest.storekit">
       </StoreKitConfigurationFileReference>

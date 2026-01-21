@@ -59,21 +59,35 @@ final class CompletionBox<T>: @unchecked Sendable {
     case restoring
     case restored
 }
+@objc public enum SK2PeriodUnit: Int { case day, week, month, year, unknown }
 
 @objcMembers
-final class SK2ProductModel: NSObject {
-    let productID: String
-    let displayName: String
-    let displayPrice: String
+public final class SK2ProductModel: NSObject {
+    public let productID: String
+    public let displayPrice: String
+    public let displayName: String
 
-    @nonobjc private let raw: Product
+    public let periodUnit: SK2PeriodUnit
+    public let periodValue: Int
 
-    init(raw: Product) {
-        self.raw = raw
-        self.productID = raw.id
-        self.displayName = raw.displayName
-        self.displayPrice = raw.displayPrice
-        super.init()
+    public init(product: Product) {
+        productID = product.id
+        displayPrice = product.displayPrice
+        displayName = product.displayName
+
+        if let p = product.subscription?.subscriptionPeriod {
+            periodValue = p.value
+            switch p.unit {
+            case .day:  periodUnit = .day
+            case .week: periodUnit = .week
+            case .month:periodUnit = .month
+            case .year: periodUnit = .year
+            @unknown default: periodUnit = .unknown
+            }
+        } else {
+            periodValue = 0
+            periodUnit = .unknown
+        }
     }
 }
 
@@ -163,7 +177,7 @@ private enum ASAccountToken {
             b[10], b[11], b[12], b[13], b[14], b[15]
         ))
         #else
-        // 没有 CryptoKit 就退化成随机（建议尽量用 CryptoKit）
+        // 没有 CryptoKit 就随机
         return UUID()
         #endif
     }
@@ -201,7 +215,6 @@ private enum ASIdentifiers {
         }
         #if canImport(AdSupport)
         let idfa = ASIdentifierManager.shared().advertisingIdentifier.uuidString
-        // iOS 14+ 未授权时可能是全 0，这里也当作空
         if idfa == "00000000-0000-0000-0000-000000000000" { return "" }
         return idfa
         #else
@@ -216,7 +229,7 @@ private struct ASUploadResp: Decodable {
 
 final class StoreKit2Manager: NSObject {
 
-    // TODO: 换成你们自己的域名（只保留 /iap/upload 路径不够）
+    // TODO: 换成你们自己的域名
     private var iapUploadURL: URL? {
         let baseURL = "https://YOUR_DOMAIN.com"
         return URL(string: baseURL + "/iap/upload")
@@ -275,7 +288,7 @@ final class StoreKit2Manager: NSObject {
     
     @objc static let shared = StoreKit2Manager()
 
-    let productIDs: [String] = [ASProductIDs.subWeekly,ASProductIDs.subYearly]
+    let productIDs: [String] = [ASProductIDs.subYearly,ASProductIDs.subWeekly]
 
     @objc private(set) var snapshot: StoreSnapshot = StoreSnapshot(
         networkAvailable: true,
@@ -335,7 +348,7 @@ final class StoreKit2Manager: NSObject {
         do {
             let list = try await Product.products(for: productIDs)
             self.rawProducts = list
-            let models = list.map { SK2ProductModel(raw: $0) }
+            let models = list.map { SK2ProductModel(product: $0) }
 
             updateSnapshot { old in
                 StoreSnapshot(

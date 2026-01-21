@@ -1,7 +1,6 @@
 #import "PaywallPresenter.h"
 #import <UIKit/UIKit.h>
 #import "Cleaner8_Xu2-Swift.h"
-#import "PaywallViewController.h"
 #import "SubscriptionViewController.h"
 #import "LTEventTracker.h"
 
@@ -38,7 +37,7 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-// 栏门页
+// 栏门页 未订阅弹出
 - (void)showPaywallIfNeededWithSource:(NSString * _Nullable)source {
     dispatch_async(dispatch_get_main_queue(), ^{
         [[StoreKit2Manager shared] start];
@@ -63,7 +62,6 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
             return;
         }
 
-        // 已确定是未订阅
         [self showPaywallWithSource:source];
     });
 }
@@ -75,27 +73,22 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
         UIViewController *top = [self topMostViewController];
         if (!top) return;
 
-        // 不重复弹
-        if ([top isKindOfClass:PaywallViewController.class] ||
-            [top isKindOfClass:SubscriptionViewController.class] ||
-            [top.presentedViewController isKindOfClass:PaywallViewController.class] ||
+        if ([top isKindOfClass:SubscriptionViewController.class] ||
             [top.presentedViewController isKindOfClass:SubscriptionViewController.class]) {
             return;
         }
 
-        // 还有别的 modal 正在展示时，不抢
         if (top.presentedViewController) return;
 
         self.isPresenting = YES;
 
-        PaywallViewController *paywall = [PaywallViewController new];
-        paywall.modalPresentationStyle = UIModalPresentationFullScreen;
+        SubscriptionViewController *vc = [[SubscriptionViewController alloc] initWithMode:SubscriptionPaywallModeGateWeekly];
+        vc.modalPresentationStyle = UIModalPresentationFullScreen;
+        vc.source = source;
 
-        paywall.source = source;
+        self.presentedVC = vc;
 
-        self.presentedVC = paywall;
-
-        [top presentViewController:paywall animated:YES completion:^{
+        [top presentViewController:vc animated:YES completion:^{
             self.isPresenting = NO;
         }];
     });
@@ -107,7 +100,6 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
         UIViewController *top = [self topMostViewController];
         if (!top) return;
 
-        // 防重复
         if ([top isKindOfClass:SubscriptionViewController.class] ||
             [top.presentedViewController isKindOfClass:SubscriptionViewController.class]) {
             return;
@@ -115,9 +107,9 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
 
         if (top.presentedViewController) return;
 
-        SubscriptionViewController *vc = [SubscriptionViewController new];
+        // 默认选中年费
+        SubscriptionViewController *vc = [[SubscriptionViewController alloc] initWithMode:SubscriptionPaywallModeYearly];
         vc.modalPresentationStyle = UIModalPresentationFullScreen;
-
         vc.source = source;
 
         self.presentedVC = vc;
@@ -132,15 +124,13 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
         if (!top) return;
 
         UIViewController *presented = top.presentedViewController;
-        if ([presented isKindOfClass:PaywallViewController.class] ||
-            [presented isKindOfClass:SubscriptionViewController.class]) {
+        if ([presented isKindOfClass:SubscriptionViewController.class]) {
 
             [top dismissViewControllerAnimated:YES completion:^{
                 self.presentedVC = nil;
             }];
         } else {
-            if ([top isKindOfClass:PaywallViewController.class] ||
-                [top isKindOfClass:SubscriptionViewController.class]) {
+            if ([top isKindOfClass:SubscriptionViewController.class]) {
                 [top dismissViewControllerAnimated:YES completion:^{
                     self.presentedVC = nil;
                 }];
@@ -182,7 +172,6 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
             for (UIWindow *w in ws.windows) {
                 if (w.isKeyWindow) return w;
             }
-            // 没有 keyWindow 就取第一个
             return ws.windows.firstObject;
         }
         return nil;
@@ -220,8 +209,7 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
         if (!top) { if (completion) completion(); return; }
 
         UIViewController *presented = top.presentedViewController;
-        if ([presented isKindOfClass:PaywallViewController.class] ||
-            [presented isKindOfClass:SubscriptionViewController.class]) {
+        if ([presented isKindOfClass:SubscriptionViewController.class]) {
 
             [top dismissViewControllerAnimated:YES completion:^{
                 self.presentedVC = nil;
@@ -230,8 +218,7 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
             return;
         }
 
-        if ([top isKindOfClass:PaywallViewController.class] ||
-            [top isKindOfClass:SubscriptionViewController.class]) {
+        if ([top isKindOfClass:SubscriptionViewController.class]) {
 
             [top dismissViewControllerAnimated:YES completion:^{
                 self.presentedVC = nil;
