@@ -1,6 +1,7 @@
 #import "SetViewController.h"
 #import "Common.h"
 #import "UIViewController+ASPrivateBackground.h"
+#import "Cleaner8_Xu2-Swift.h"
 
 #pragma mark - UI Helpers
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
@@ -244,11 +245,11 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 }
 
 - (void)tapTerms {
-    [self as_openInBrowser:@"https://www.baidu.com"];
+    [self as_openInBrowser: AppConstants.termsLink];
 }
 
 - (void)tapPrivacy {
-    [self as_openInBrowser:@"https://www.baidu.com"];
+    [self as_openInBrowser:AppConstants.privacyLink];
 }
 
 - (void)as_openInBrowser:(NSString *)urlString {

@@ -12,6 +12,7 @@ target 'Cleaner8-Xu2' do
   # ThinkingData（数数）用户行为分析
   pod 'ThinkingSDK'
   
+  # 启动页动画
   pod 'lottie-ios'
 
   target 'Cleaner8-Xu2Tests' do

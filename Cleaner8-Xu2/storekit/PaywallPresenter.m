@@ -40,8 +40,6 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
 // 栏门页 未订阅弹出
 - (void)showPaywallIfNeededWithSource:(NSString * _Nullable)source {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [[StoreKit2Manager shared] start];
-
         SubscriptionState state = [StoreKit2Manager shared].state;
         if (state == SubscriptionStateActive) return;
 

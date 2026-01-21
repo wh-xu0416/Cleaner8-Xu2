@@ -1,2 +1,4 @@
-"NSPhotoLibraryUsageDescription" = "We need access to your Photos to scan similar/duplicate media and calculate reclaimable space.";
-"NSPhotoLibraryAddUsageDescription" = "We need permission to modify your Photos to delete the items you select.";
+"NSPhotoLibraryUsageDescription" = "Access to your photo library is required to read photos/videos, and to perform image processing and compression. All processing is done on the device itself.";
+"NSPhotoLibraryAddUsageDescription" = "Permission is required to modify your photo library, such as saving or deleting items you choose.";
+"NSContactsUsageDescription" = "We are requesting access to our contacts only to identify and organize them.";
+"NSUserTrackingUsageDescription" = "Tracking enables personalized features in the app. Your data will be kept strictly confidential and will never be shared with third parties. Allow tracking to experience all features?";

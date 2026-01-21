@@ -30,7 +30,7 @@
 
     // 打印
     if (self.enableLog) {
-        NSLog(@"\n🟦 [LTEventTracker] TRACK\n- event: %@\n- properties: %@\n", event, [self prettyJSONString:props]);
+        NSLog(@"\n🟦 [埋点] TRACK\n- event: %@\n- properties: %@\n", event, [self prettyJSONString:props]);
     }
 
     // TODO: 调用 SDK

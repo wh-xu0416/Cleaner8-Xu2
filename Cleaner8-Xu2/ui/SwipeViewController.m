@@ -456,7 +456,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         _bottomBar = [UIView new];
         _bottomBar.translatesAutoresizingMaskIntoConstraints = NO;
         _bottomBar.backgroundColor = UIColor.whiteColor;
-        _bottomBar.layer.cornerRadius = SW(11.5);
+        _bottomBar.layer.cornerRadius = SW(12);
         _bottomBar.layer.masksToBounds = YES;
         if (@available(iOS 11.0, *)) {
             _bottomBar.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
@@ -474,9 +474,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
         barH.priority = UILayoutPriorityRequired;
 
         [NSLayoutConstraint activateConstraints:@[
-            [_bottomBar.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
-            [_bottomBar.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
-            [_bottomBar.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
+            [_bottomBar.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:-SW(1)],
+            [_bottomBar.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:SW(1)],
+            [_bottomBar.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:SW(1)],
             barH,
 
             [_titleLabel.leadingAnchor constraintEqualToAnchor:_bottomBar.leadingAnchor constant:SW(10)],

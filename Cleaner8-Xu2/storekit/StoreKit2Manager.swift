@@ -122,12 +122,6 @@ final class StoreSnapshot: NSObject {
     }
 }
 
-@objcMembers
-public final class ASProductIDs: NSObject {
-    public static let subWeekly: String = "com.demo.pro.weekly"
-    public static let subYearly: String = "com.demo.pro.yearly"
-}
-
 private enum ASAccountToken {
     static let tokenKey = "as_app_account_token"
     static let distinctKey = "as_app_account_token_distinctid"
@@ -135,7 +129,6 @@ private enum ASAccountToken {
     static func tokenUUID(distinctId: String?) -> UUID {
         let defaults = UserDefaults.standard
 
-        // 1) 如果 distinctId 没变，并且之前存过 token，就直接复用
         if let d = distinctId, !d.isEmpty,
            defaults.string(forKey: distinctKey) == d,
            let saved = defaults.string(forKey: tokenKey),
@@ -143,15 +136,18 @@ private enum ASAccountToken {
             return uuid
         }
 
-        // 2) 没有 distinctId：生成一个随机的并持久化（至少本机稳定）
         guard let d = distinctId, !d.isEmpty else {
+            if defaults.string(forKey: distinctKey) == "",
+               let saved = defaults.string(forKey: tokenKey),
+               let uuid = UUID(uuidString: saved) {
+                return uuid
+            }
             let uuid = UUID()
             defaults.set(uuid.uuidString, forKey: tokenKey)
             defaults.set("", forKey: distinctKey)
             return uuid
         }
 
-        // 3) 用 distinctId 生成“稳定 UUID”
         let uuid = stableUUID(from: d)
 
         defaults.set(uuid.uuidString, forKey: tokenKey)
@@ -204,7 +200,7 @@ private enum ASIdentifiers {
         return ""
         #endif
     }
-
+    
     @MainActor static func idfv() -> String {
         UIDevice.current.identifierForVendor?.uuidString ?? ""
     }
@@ -227,9 +223,10 @@ private struct ASUploadResp: Decodable {
     let result: Int
 }
 
+@MainActor
 final class StoreKit2Manager: NSObject {
 
-    // TODO: 换成你们自己的域名
+    // TODO: 换成自己的域名
     private var iapUploadURL: URL? {
         let baseURL = "https://YOUR_DOMAIN.com"
         return URL(string: baseURL + "/iap/upload")
@@ -253,12 +250,14 @@ final class StoreKit2Manager: NSObject {
             return
         }
 
-        let body: [String: Any] = await [
+        let idfv = ASIdentifiers.idfv()
+        
+        let body: [String: Any] = [
             "bundleid": ASIdentifiers.bundleId(),
             "distinctid": ASIdentifiers.distinctId(),
             "appsflyer_id": ASIdentifiers.appsFlyerId(),
             "idfa": ASIdentifiers.idfa(),
-            "idfv": ASIdentifiers.idfv()
+            "idfv": idfv
         ]
 
         logCN("开始（\(reason)）：\(body)")
@@ -288,7 +287,7 @@ final class StoreKit2Manager: NSObject {
     
     @objc static let shared = StoreKit2Manager()
 
-    let productIDs: [String] = [ASProductIDs.subYearly,ASProductIDs.subWeekly]
+    let productIDs: [String] = [AppConstants.productIDYearly,AppConstants.productIDWeekly]
 
     @objc private(set) var snapshot: StoreSnapshot = StoreSnapshot(
         networkAvailable: true,
@@ -309,26 +308,26 @@ final class StoreKit2Manager: NSObject {
     private var updatesTask: Task<Void, Never>?
     private var isRefreshingAfterNetwork = false
 
-    // MARK: - Start
     @objc func start() {
         guard !isStarted else { return }
         isStarted = true
-        
+
         startNetworkMonitor()
         observeAppForeground()
-        
+
+        listenForTransactionUpdates()
+
         Task { @MainActor [weak self] in
             guard let self else { return }
             await self.refreshAll(reason: "start")
-            self.listenForTransactionUpdates()
         }
     }
 
-    // MARK: - Refresh
     @MainActor
     func refreshAll(reason: String) async {
-        await refreshProducts()
-        await refreshSubscriptionState()
+        async let p: () = refreshProducts()
+        async let s: () = refreshSubscriptionState()
+        _ = await (p, s)
     }
 
     @MainActor
@@ -427,8 +426,10 @@ final class StoreKit2Manager: NSObject {
 
     @MainActor
     private func purchaseAsync(productID: String) async -> PurchaseFlowState {
-        await uploadIAPIdentifiers(reason: "点击购买前")
-
+        Task.detached { [weak self] in
+            await self?.uploadIAPIdentifiers(reason: "点击购买前")
+        }
+        
         if rawProducts.first(where: { $0.id == productID }) == nil, snapshot.networkAvailable {
             await refreshProducts()
         }

@@ -1,7 +1,7 @@
-// French
 " Can free up " = " Can free up ";
 " Files " = " Files ";
 "(Unnamed)" = "(Unnamed)";
+"%@ / %@" = "%@ / %@";
 "%@ Contacts" = "%@ Contacts";
 "%@ Free Up" = "%@ Free Up";
 "%@ Free Up |  %@ / %@ %@" = "%@ Free Up |  %@ / %@ %@";
@@ -22,6 +22,8 @@
 "1 Video Selected" = "1 Video Selected";
 "1、Open The “Photos\" APP" = "1、Open The “Photos\" APP";
 "2、Open The “Photos\" APP" = "2、Open The “Photos\" APP";
+"3 - Days Free trial enabled" = "3 - Days Free trial enabled";
+"3-Days Free Trial Enabled" = "3-Days Free Trial Enabled";
 "3、Tap the \"Select\" button in the upper right corner" = "3、Tap the \"Select\" button in the upper right corner";
 "4、Click the \"Delete All\" Button on the Top Right Corner" = "4、Click the \"Delete All\" Button on the Top Right Corner";
 "5、Next, tap the\n\"Delete From All Devices\" Button" = "5、Next, tap the\n\"Delete From All Devices\" Button";
@@ -33,6 +35,8 @@
 "After" = "After";
 "After converting Live Photos, you can save " = "After converting Live Photos, you can save ";
 "After converting Live Photos, you can save --" = "After converting Live Photos, you can save --";
+"AI detect and delete duplicate & similar photos" = "AI detect and delete duplicate & similar photos";
+"AI detect similar and dunplicate photos" = "AI detect similar and dunplicate photos";
 "Album" = "Album";
 "All" = "All";
 "All Contacts" = "All Contacts";
@@ -48,6 +52,7 @@
 "Are you sure you want to delete %lu backups?" = "Are you sure you want to delete %lu backups?";
 "Are you sure?" = "Are you sure?";
 "Aug." = "Aug.";
+"Auto-renewing, %@ / %@, cancel any time" = "Auto-renewing, %@ / %@, cancel any time";
 "Back up" = "Back up";
 "Backup %@" = "Backup %@";
 "Backup %lu Contacts" = "Backup %lu Contacts";
@@ -63,17 +68,19 @@
 "Can't delete" = "Can't delete";
 "Cancel" = "Cancel";
 "Cancel Conversion" = "Cancel Conversion";
+"Cancelled" = "Cancelled";
 "Categorized %ld%%" = "Categorized %ld%%";
 "Categorized 0%" = "Categorized 0%";
 "Changes cannot be reversed if you do not back up your contacts." = "Changes cannot be reversed if you do not back up your contacts.";
 "Cleaner" = "Cleaner";
+"Cleanio \n AI Storage Cleaner" = "Cleanio \n AI Storage Cleaner";
+"Cleanup Phone Storage" = "Cleanup Phone Storage";
 "Clutter" = "Clutter";
 "Compact and shareable" = "Compact and shareable";
 "Compress" = "Compress";
 "Compress Failed" = "Compress Failed";
 "Compression" = "Compression";
 "Compression Video" = "Compression Video";
-"Compressly" = "Compressly";
 "Compressor" = "Compressor";
 "Confirm" = "Confirm";
 "Confirm Password" = "Confirm Password";
@@ -106,20 +113,24 @@
 "Duplicate Videos" = "Duplicate Videos";
 "Duration" = "Duration";
 "Enter Password" = "Enter Password";
+"Failed" = "Failed";
 "Failed to Resotre" = "Failed to Resotre";
 "Feb." = "Feb.";
 "Feedback" = "Feedback";
 "Files: " = "Files: ";
 "Files:%@" = "Files:%@";
 "Files:0MB" = "Files:0MB";
+"Free Up" = "Free Up";
 "Freed up %@ space on your phone." = "Freed up %@ space on your phone.";
 "Full Photo Access Required" = "Full Photo Access Required";
+"Get rid of what you don't need, free up 80% space" = "Get rid of what you don't need, free up 80% space";
 "Go Back And Select Duplicates To See a Preview" = "Go Back And Select Duplicates To See a Preview";
 "Go to Settings" = "Go to Settings";
 "Great!" = "Great!";
 "has" = "has";
 "have" = "have";
 "How to empty\n\"Recently Deleted\" album?" = "How to empty\n\"Recently Deleted\" album?";
+"icloud" = "icloud";
 "image" = "image";
 "Image" = "Image";
 "Image Compressor" = "Image Compressor";
@@ -143,6 +154,7 @@
 "Live" = "Live";
 "Live Photo" = "Live Photo";
 "Live Photo Compressor" = "Live Photo Compressor";
+"Loading..." = "Loading...";
 "Mar." = "Mar.";
 "Maximum quality, larger file" = "Maximum quality, larger file";
 "May." = "May.";
@@ -151,8 +163,11 @@
 "Merge %ld contacts" = "Merge %ld contacts";
 "Merge Contacts" = "Merge Contacts";
 "More" = "More";
+"Most Popular" = "Most Popular";
 "My studio" = "My studio";
 "My Studio" = "My Studio";
+"Network error" = "Network error";
+"Network Error" = "Network Error";
 "Newest" = "Newest";
 "Next" = "Next";
 "Next Album" = "Next Album";
@@ -177,17 +192,26 @@
 "Other photos" = "Other photos";
 "Other Photos" = "Other Photos";
 "Others" = "Others";
+"out of 100%" = "out of 100%";
 "Password" = "Password";
 "Past 6 months" = "Past 6 months";
+"Pending" = "Pending";
+"period" = "period";
 "photo" = "photo";
 "Photo Access Is Required." = "Photo Access Is Required.";
+"Photo Space Manage" = "Photo Space Manage";
 "photos" = "photos";
 "Photos" = "Photos";
 "Photos access is required.\nPlease enable Photos permission in Settings." = "Photos access is required.\nPlease enable Photos permission in Settings.";
+"Plan" = "Plan";
 "Please allow Photos access to delete originals." = "Please allow Photos access to delete originals.";
+"Please try again" = "Please try again";
+"Privacy" = "Privacy";
 "Privacy Policy" = "Privacy Policy";
 "Private" = "Private";
+"Private space to keep your data safe" = "Private space to keep your data safe";
 "Pro" = "Pro";
+"Protect your photos and keep your data safe" = "Protect your photos and keep your data safe";
 "Random" = "Random";
 "Recent" = "Recent";
 "Recently Deleted" = "Recently Deleted";
@@ -197,6 +221,8 @@
 "Restore" = "Restore";
 "Restore Backup" = "Restore Backup";
 "Restore Complete" = "Restore Complete";
+"Restore Failed" = "Restore Failed";
+"Restore Success" = "Restore Success";
 "Save --MB" = "Save --MB";
 "Save %.0fMB" = "Save %.0fMB";
 "Screen Recoeding" = "Screen Recoeding";
@@ -205,6 +231,7 @@
 "Secret" = "Secret";
 "Secret Photos" = "Secret Photos";
 "Secret Videos" = "Secret Videos";
+"Security Center" = "Security Center";
 "See Merge Preview" = "See Merge Preview";
 "Select All" = "Select All";
 "Select size" = "Select size";
@@ -224,7 +251,10 @@
 "Space Saved" = "Space Saved";
 "Space To Clean" = "Space To Clean";
 "Start Now" = "Start Now";
+"Storage Now" = "Storage Now";
+"Success" = "Success";
 "Swipe" = "Swipe";
+"Terms" = "Terms";
 "Terms of User" = "Terms of User";
 "These photos are no longer available." = "These photos are no longer available.";
 "These photos can't be deleted (shared/synced or restricted)." = "These photos can't be deleted (shared/synced or restricted).";
@@ -242,6 +272,10 @@
 "Total storage space saved by compressed videos --" = "Total storage space saved by compressed videos --";
 "Unable to access the address book." = "Unable to access the address book.";
 "Unknown error" = "Unknown error";
+"Unlimited access to free up iphone space" = "Unlimited access to free up iphone space";
+"Unlock all Features" = "Unlock all Features";
+"Unlock Unlimited Access" = "Unlock Unlimited Access";
+"Used" = "Used";
 "Version" = "Version";
 "video" = "video";
 "Video" = "Video";
@@ -251,34 +285,15 @@
 "Videos" = "Videos";
 "View Archived Files" = "View Archived Files";
 "View Archived Files(%@)" = "View Archived Files(%@)";
+"week" = "week";
+"Weekly" = "Weekly";
 "Would you like to back up your contacts before making any changes?" = "Would you like to back up your contacts before making any changes?";
 "Wrong PIN. Please retry." = "Wrong PIN. Please retry.";
+"year" = "year";
+"Yearly" = "Yearly";
 "Yes" = "Yes";
 "YES" = "YES";
 "Yesterday" = "Yesterday";
 "You can perform this action now to free up space, or do it at any convenient time" = "You can perform this action now to free up space, or do it at any convenient time";
 "You deleted %@ photos today." = "You deleted %@ photos today.";
 "You will save about " = "You will save about ";
-"common.back" = "Back";
-"common.loading" = "Loading…";
-"common.waiting_connection" = "Waiting for connection…";
-"common.restore_purchase" = "Restore Purchase";
-
-"subscription.choose_plan" = "Choose a Plan";
-"subscription.plan_item_format" = "%@   %@";
-
-"paywall.unlock_pro" = "Unlock Pro";
-"paywall.subscribe_weekly" = "Subscribe Weekly";
-"paywall.subscribe_weekly_with_price" = "Subscribe Weekly  %@";
-"paywall.see_all_plans" = "See all plans";
-"paywall.weekly_fallback" = "Weekly";
-"common.network_tip_to_settings" = "No network or Cellular is disabled for this app. Tap to open Settings.";
-/* 价格行：$9.99 / month */
-"subscription.price_per_period" = "%@ / %@";
-
-/* 自动续费：Auto-renewing, $9.99 per month, cancel any time */
-"subscription.autorenewing_format" = "Auto-renewing, %@ per %@, cancel any time";
-
-/* 下面这些 key 会在 stringsdict 里定义复数规则 */
-"subscription.period.week" = "week";
-"subscription.period.year" = "year";

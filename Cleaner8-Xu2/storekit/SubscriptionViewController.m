@@ -2,15 +2,29 @@
 #import "Cleaner8_Xu2-Swift.h"
 #import "LTEventTracker.h"
 
-static inline NSString *L(NSString *key) { return NSLocalizedString(key, nil); }
-static inline NSString *LF(NSString *key, ...) {
-    va_list args; va_start(args, key);
-    NSString *format = NSLocalizedString(key, nil);
-    NSString *str = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args); return str;
+#pragma mark - Helpers
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return w / SWDesignWidth();
 }
 
-#pragma mark - Helpers
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
+
+static inline CGFloat ASScale(void) {
+    return MIN(SWScaleX(), SWScaleY());
+}
+static inline CGFloat AS(CGFloat v) { return round(v * ASScale()); }
+static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) { return [UIFont systemFontOfSize:round(s * ASScale()) weight:w]; }
+static inline UIEdgeInsets ASEdgeInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) { return UIEdgeInsetsMake(AS(t), AS(l), AS(b), AS(r)); }
+
+static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
+    return ASFontS(size, weight);
+}
 
 static inline UIColor *HexColor(NSString *hex) {
     NSString *s = [[hex stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] uppercaseString];
@@ -75,7 +89,7 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.badge = [[UIView alloc] init];
     self.badge.translatesAutoresizingMaskIntoConstraints = NO;
     self.badge.backgroundColor = HexColor(@"#FFFF2E2E");
-    self.badge.layer.cornerRadius = 43/2.0;
+    self.badge.layer.cornerRadius = AS(43/2.0);
     self.badge.clipsToBounds = YES;
     [self addSubview:self.badge];
 
@@ -83,27 +97,27 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.badgeLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.badgeLab.textAlignment = NSTextAlignmentCenter;
     self.badgeLab.textColor = UIColor.whiteColor;
-    self.badgeLab.font = PoppinsFont(@"Poppins-Regular", 18, UIFontWeightRegular);
+    self.badgeLab.font = PoppinsFont(@"Poppins-Regular", AS(18), UIFontWeightRegular);
     [self.badge addSubview:self.badgeLab];
 
     self.titleLab = [[UILabel alloc] init];
     self.titleLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLab.textAlignment = NSTextAlignmentCenter;
     self.titleLab.textColor = HexColor(@"#FF1F1434");
-    self.titleLab.font = PoppinsFont(@"Poppins-SemiBold", 14, UIFontWeightSemibold);
+    self.titleLab.font = PoppinsFont(@"Poppins-SemiBold", AS(14), UIFontWeightSemibold);
     self.titleLab.text = title ?: @"";
     [self addSubview:self.titleLab];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.iconView.topAnchor constraintEqualToAnchor:self.topAnchor],
         [self.iconView.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-        [self.iconView.widthAnchor constraintEqualToConstant:85],
-        [self.iconView.heightAnchor constraintEqualToConstant:85],
+        [self.iconView.widthAnchor constraintEqualToConstant:AS(85)],
+        [self.iconView.heightAnchor constraintEqualToConstant:AS(85)],
 
-        [self.badge.widthAnchor constraintEqualToConstant:43],
-        [self.badge.heightAnchor constraintEqualToConstant:43],
-        [self.badge.centerXAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:-6],
-        [self.badge.centerYAnchor constraintEqualToAnchor:self.iconView.topAnchor constant:4],
+        [self.badge.widthAnchor constraintEqualToConstant:AS(43)],
+        [self.badge.heightAnchor constraintEqualToConstant:AS(43)],
+        [self.badge.centerXAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:-AS(6)],
+        [self.badge.centerYAnchor constraintEqualToAnchor:self.iconView.topAnchor constant:AS(4)],
 
         [self.badgeLab.centerXAnchor constraintEqualToAnchor:self.badge.centerXAnchor],
         [self.badgeLab.centerYAnchor constraintEqualToAnchor:self.badge.centerYAnchor],
@@ -151,9 +165,9 @@ static inline id SafeKVC(id obj, NSString *key) {
 
     self.card = [[UIView alloc] init];
     self.card.translatesAutoresizingMaskIntoConstraints = NO;
-    self.card.layer.cornerRadius = 12;
+    self.card.layer.cornerRadius = AS(12);
     self.card.layer.borderColor = HexColor(@"#FFACC5FF").CGColor;
-    self.card.layer.borderWidth = 1;
+    self.card.layer.borderWidth = AS(1);
     self.card.backgroundColor = UIColor.whiteColor;
     self.card.userInteractionEnabled = NO;
     [self addSubview:self.card];
@@ -161,14 +175,14 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.nameLab = [[UILabel alloc] init];
     self.nameLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.nameLab.textColor = HexColor(@"#FF1F1434");
-    self.nameLab.font = PoppinsFont(@"Poppins-Bold", 16, UIFontWeightBold);
+    self.nameLab.font = PoppinsFont(@"Poppins-Bold", AS(16), UIFontWeightBold);
     self.nameLab.userInteractionEnabled = NO;
     [self.card addSubview:self.nameLab];
 
     self.priceLab = [[UILabel alloc] init];
     self.priceLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.priceLab.textColor = HexColor(@"#FF999999");
-    self.priceLab.font = PoppinsFont(@"Poppins-Regular", 12, UIFontWeightRegular);
+    self.priceLab.font = PoppinsFont(@"Poppins-Regular", AS(12), UIFontWeightRegular);
     self.priceLab.userInteractionEnabled = NO;
     [self.card addSubview:self.priceLab];
 
@@ -194,12 +208,11 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.popularTipLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.popularTipLab.textAlignment = NSTextAlignmentCenter;
     self.popularTipLab.textColor = UIColor.whiteColor;
-    self.popularTipLab.font = PoppinsFont(@"Poppins-Bold", 12, UIFontWeightBold);
+    self.popularTipLab.font = PoppinsFont(@"Poppins-Bold", AS(12), UIFontWeightBold);
     self.popularTipLab.adjustsFontSizeToFitWidth = YES;
     self.popularTipLab.minimumScaleFactor = 0.7;
     self.popularTipLab.userInteractionEnabled = NO;
-    self.popularTipLab.text = L(@"subscription.most_popular");
-    if ([self.popularTipLab.text isEqualToString:@"subscription.most_popular"]) self.popularTipLab.text = @"Most Popular";
+    self.popularTipLab.text = NSLocalizedString(@"Most Popular",nil);
     [self.popularTip addSubview:self.popularTipLab];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -208,36 +221,36 @@ static inline id SafeKVC(id obj, NSString *key) {
         [self.card.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.card.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
 
-        [self.heightAnchor constraintEqualToConstant:70],
+        [self.heightAnchor constraintEqualToConstant:AS(70)],
 
-        [self.nameLab.topAnchor constraintEqualToAnchor:self.card.topAnchor constant:15],
-        [self.nameLab.leadingAnchor constraintEqualToAnchor:self.card.leadingAnchor constant:15],
-        [self.nameLab.trailingAnchor constraintLessThanOrEqualToAnchor:self.radioImg.leadingAnchor constant:-12],
+        [self.nameLab.topAnchor constraintEqualToAnchor:self.card.topAnchor constant:AS(15)],
+        [self.nameLab.leadingAnchor constraintEqualToAnchor:self.card.leadingAnchor constant:AS(15)],
+        [self.nameLab.trailingAnchor constraintLessThanOrEqualToAnchor:self.radioImg.leadingAnchor constant:-AS(12)],
 
-        [self.priceLab.topAnchor constraintEqualToAnchor:self.nameLab.bottomAnchor constant:5],
+        [self.priceLab.topAnchor constraintEqualToAnchor:self.nameLab.bottomAnchor constant:AS(5)],
         [self.priceLab.leadingAnchor constraintEqualToAnchor:self.nameLab.leadingAnchor],
-        [self.priceLab.trailingAnchor constraintLessThanOrEqualToAnchor:self.radioImg.leadingAnchor constant:-12],
-        [self.priceLab.bottomAnchor constraintLessThanOrEqualToAnchor:self.card.bottomAnchor constant:-15],
+        [self.priceLab.trailingAnchor constraintLessThanOrEqualToAnchor:self.radioImg.leadingAnchor constant:-AS(12)],
+        [self.priceLab.bottomAnchor constraintLessThanOrEqualToAnchor:self.card.bottomAnchor constant:-AS(15)],
 
         [self.radioImg.centerYAnchor constraintEqualToAnchor:self.card.centerYAnchor],
-        [self.radioImg.trailingAnchor constraintEqualToAnchor:self.card.trailingAnchor constant:-22],
-        [self.radioImg.widthAnchor constraintEqualToConstant:22],
-        [self.radioImg.heightAnchor constraintEqualToConstant:22],
+        [self.radioImg.trailingAnchor constraintEqualToAnchor:self.card.trailingAnchor constant:-AS(22)],
+        [self.radioImg.widthAnchor constraintEqualToConstant:AS(22)],
+        [self.radioImg.heightAnchor constraintEqualToConstant:AS(22)],
 
         [self.popularTip.centerXAnchor constraintEqualToAnchor:self.card.centerXAnchor],
-        [self.popularTip.topAnchor constraintEqualToAnchor:self.card.topAnchor constant:-8],
-        [self.popularTip.widthAnchor constraintEqualToConstant:116],
-        [self.popularTip.heightAnchor constraintEqualToConstant:24],
+        [self.popularTip.topAnchor constraintEqualToAnchor:self.card.topAnchor constant:-AS(8)],
+        [self.popularTip.widthAnchor constraintEqualToConstant:AS(116)],
+        [self.popularTip.heightAnchor constraintEqualToConstant:AS(24)],
 
         [self.popularTipImg.topAnchor constraintEqualToAnchor:self.popularTip.topAnchor],
         [self.popularTipImg.leadingAnchor constraintEqualToAnchor:self.popularTip.leadingAnchor],
         [self.popularTipImg.trailingAnchor constraintEqualToAnchor:self.popularTip.trailingAnchor],
         [self.popularTipImg.bottomAnchor constraintEqualToAnchor:self.popularTip.bottomAnchor],
 
-        [self.popularTipLab.topAnchor constraintEqualToAnchor:self.popularTip.topAnchor constant:2],
-        [self.popularTipLab.bottomAnchor constraintEqualToAnchor:self.popularTip.bottomAnchor constant:-4],
-        [self.popularTipLab.leadingAnchor constraintEqualToAnchor:self.popularTip.leadingAnchor constant:17],
-        [self.popularTipLab.trailingAnchor constraintEqualToAnchor:self.popularTip.trailingAnchor constant:-17],
+        [self.popularTipLab.topAnchor constraintEqualToAnchor:self.popularTip.topAnchor constant:AS(2)],
+        [self.popularTipLab.bottomAnchor constraintEqualToAnchor:self.popularTip.bottomAnchor constant:-AS(4)],
+        [self.popularTipLab.leadingAnchor constraintEqualToAnchor:self.popularTip.leadingAnchor constant:AS(17)],
+        [self.popularTipLab.trailingAnchor constraintEqualToAnchor:self.popularTip.trailingAnchor constant:-AS(17)],
     ]];
 
     return self;
@@ -251,11 +264,11 @@ static inline id SafeKVC(id obj, NSString *key) {
 - (void)applySelectedStyle:(BOOL)selected {
     if (selected) {
         self.card.layer.borderColor = HexColor(@"#FF014EFE").CGColor;
-        self.card.layer.borderWidth = 2;
+        self.card.layer.borderWidth = AS(2);
         self.radioImg.image = [UIImage imageNamed:@"ic_sub_selected"];
     } else {
         self.card.layer.borderColor = HexColor(@"#FFACC5FF").CGColor;
-        self.card.layer.borderWidth = 1;
+        self.card.layer.borderWidth = AS(1);
         self.radioImg.image = [UIImage imageNamed:@"ic_sub_select"];
     }
 
@@ -271,6 +284,10 @@ static inline id SafeKVC(id obj, NSString *key) {
 #pragma mark - SubscriptionViewController
 
 @interface SubscriptionViewController ()
+@property(nonatomic,strong) UIView *loadingMask;
+@property(nonatomic,strong) UIActivityIndicatorView *loadingSpinner;
+@property(nonatomic,assign) NSInteger loadingCount;
+
 @property(nonatomic,strong) UILabel *trialHintLab;
 @property(nonatomic,strong) NSLayoutConstraint *continueTopToPlansStack;
 @property(nonatomic,strong) NSLayoutConstraint *continueTopToTrialHint;
@@ -349,9 +366,6 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.allowDismiss = YES;
     self.selectedIndex = 0;
     self.popularIndex = 0;
-
-    [[StoreKit2Manager shared] start];
-
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(onStoreSnapshotChanged:)
                                                  name:@"storeSnapshotChanged"
@@ -391,6 +405,8 @@ static inline id SafeKVC(id obj, NSString *key) {
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
     [self stopLoopAnimation];
+    [self hideLoading];
+    self.loadingCount = 0;
 }
 
 - (void)onStoreSnapshotChanged:(NSNotification *)note {
@@ -409,7 +425,7 @@ static inline id SafeKVC(id obj, NSString *key) {
     UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
     b.translatesAutoresizingMaskIntoConstraints = NO;
     UIColor *c = HexColor(@"#FFBFC2CD");
-    UIFont *f = PoppinsFont(@"Poppins-Regular", 12, UIFontWeightRegular);
+    UIFont *f = PoppinsFont(@"Poppins-Regular", AS(12), UIFontWeightRegular);
     [b setAttributedTitle:UnderlinedText(t, c, f) forState:UIControlStateNormal];
     return b;
 }
@@ -423,13 +439,13 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.backBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
     self.backBtn.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
     self.backBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
-    self.backBtn.imageEdgeInsets = UIEdgeInsetsMake(16, 0, 16, 32);
+    self.backBtn.imageEdgeInsets = ASEdgeInsets(16, 0, 16, 32);
     [self.backBtn addTarget:self action:@selector(tapBack) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.backBtn];
 
     self.gateBadgeView = [[UIView alloc] init];
     self.gateBadgeView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.gateBadgeView.layer.cornerRadius = 20;
+    self.gateBadgeView.layer.cornerRadius = AS(20);
     self.gateBadgeView.clipsToBounds = YES;
     self.gateBadgeView.hidden = YES;
     [self.view addSubview:self.gateBadgeView];
@@ -447,17 +463,17 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.gateBadgeLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.gateBadgeLab.textColor = UIColor.whiteColor;
     self.gateBadgeLab.font = PoppinsFont(@"Poppins-Bold", 26, UIFontWeightBold);
-    self.gateBadgeLab.text = @"Free Up";
+    self.gateBadgeLab.text = NSLocalizedString(@"Free Up",nil);
     [self.gateBadgeView addSubview:self.gateBadgeLab];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.gateBadgeView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:42],
+        [self.gateBadgeView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:AS(42)],
         [self.gateBadgeView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
 
-        [self.gateBadgeLab.leadingAnchor constraintEqualToAnchor:self.gateBadgeView.leadingAnchor constant:20],
-        [self.gateBadgeLab.trailingAnchor constraintEqualToAnchor:self.gateBadgeView.trailingAnchor constant:-20],
-        [self.gateBadgeLab.topAnchor constraintEqualToAnchor:self.gateBadgeView.topAnchor constant:10],
-        [self.gateBadgeLab.bottomAnchor constraintEqualToAnchor:self.gateBadgeView.bottomAnchor constant:-10],
+        [self.gateBadgeLab.leadingAnchor constraintEqualToAnchor:self.gateBadgeView.leadingAnchor constant:AS(20)],
+        [self.gateBadgeLab.trailingAnchor constraintEqualToAnchor:self.gateBadgeView.trailingAnchor constant:-AS(20)],
+        [self.gateBadgeLab.topAnchor constraintEqualToAnchor:self.gateBadgeView.topAnchor constant:AS(10)],
+        [self.gateBadgeLab.bottomAnchor constraintEqualToAnchor:self.gateBadgeView.bottomAnchor constant:-AS(10)],
     ]];
 
     self.titleLab = [[UILabel alloc] init];
@@ -473,18 +489,17 @@ static inline id SafeKVC(id obj, NSString *key) {
                                      forAxis:UILayoutConstraintAxisVertical];
 
     self.titleLab.textColor = HexColor(@"#FF1F1434");
-    self.titleLab.font = PoppinsFont(@"Poppins-Bold", 36, UIFontWeightBold);
-    self.titleLab.text = L(@"subscription.unlock_unlimited_access");
-    if ([self.titleLab.text isEqualToString:@"subscription.unlock_unlimited_access"]) self.titleLab.text = @"Unlock Unlimited Access";
+    self.titleLab.font = PoppinsFont(@"Poppins-Bold", AS(36), UIFontWeightBold);
+    self.titleLab.text = NSLocalizedString(@"Unlock Unlimited Access",nil);
     
     NSString *text = self.titleLab.text ?: @"";
-    UIFont *font = self.titleLab.font ?: [UIFont systemFontOfSize:36 weight:UIFontWeightBold];
+    UIFont *font = self.titleLab.font ?: [UIFont systemFontOfSize:AS(36) weight:UIFontWeightBold];
     NSMutableParagraphStyle *ps = [[NSMutableParagraphStyle alloc] init];
     ps.alignment = self.titleLab.textAlignment;
-    ps.minimumLineHeight = 40;
-    ps.maximumLineHeight = 40;
+    ps.minimumLineHeight = AS(40);
+    ps.maximumLineHeight = AS(40);
 
-    CGFloat baselineOffset = (40.0 - font.lineHeight) / 4.0;
+    CGFloat baselineOffset = AS((40.0 - font.lineHeight) / 4.0);
 
     NSDictionary *attrs = @{
         NSFontAttributeName: font,
@@ -501,13 +516,11 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.featureRow.axis = UILayoutConstraintAxisHorizontal;
     self.featureRow.alignment = UIStackViewAlignmentTop;
     self.featureRow.distribution = UIStackViewDistributionFill;
-    self.featureRow.spacing = 65;
+    self.featureRow.spacing = AS(65);
     [self.view addSubview:self.featureRow];
 
-    NSString *photosTitle = L(@"subscription.photos");
-    if ([photosTitle isEqualToString:@"subscription.photos"]) photosTitle = @"photos";
-    NSString *icloudTitle = L(@"subscription.icloud");
-    if ([icloudTitle isEqualToString:@"subscription.icloud"]) icloudTitle = @"icloud";
+    NSString *photosTitle = NSLocalizedString(@"photos",nil);
+    NSString *icloudTitle = NSLocalizedString(@"icloud",nil);
 
     self.photosFeature = [[SubFeatureView alloc] initWithIcon:@"ic_sub_photos" title:photosTitle];
     self.icloudFeature  = [[SubFeatureView alloc] initWithIcon:@"ic_sub_icloud" title:icloudTitle];
@@ -515,19 +528,19 @@ static inline id SafeKVC(id obj, NSString *key) {
     [self.featureRow addArrangedSubview:self.photosFeature];
     [self.featureRow addArrangedSubview:self.icloudFeature];
 
-    [self.photosFeature.widthAnchor constraintEqualToConstant:85].active = YES;
-    [self.icloudFeature.widthAnchor constraintEqualToConstant:85].active = YES;
+    [self.photosFeature.widthAnchor constraintEqualToConstant:AS(85)].active = YES;
+    [self.icloudFeature.widthAnchor constraintEqualToConstant:AS(85)].active = YES;
 
     self.progressTrack = [[UIView alloc] init];
     self.progressTrack.translatesAutoresizingMaskIntoConstraints = NO;
     self.progressTrack.backgroundColor = HexColor(@"#FFE2E2E4");
-    self.progressTrack.layer.cornerRadius = 13.5;
+    self.progressTrack.layer.cornerRadius = AS(13.5);
     self.progressTrack.clipsToBounds = YES;
     [self.view addSubview:self.progressTrack];
 
     self.progressFill = [[UIView alloc] init];
     self.progressFill.translatesAutoresizingMaskIntoConstraints = NO;
-    self.progressFill.layer.cornerRadius = 13.5;
+    self.progressFill.layer.cornerRadius = AS(13.5);
     self.progressFill.clipsToBounds = YES;
     [self.progressTrack addSubview:self.progressFill];
 
@@ -536,22 +549,22 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.usedRow.axis = UILayoutConstraintAxisHorizontal;
     self.usedRow.alignment = UIStackViewAlignmentCenter;
     self.usedRow.distribution = UIStackViewDistributionFill;
-    self.usedRow.spacing = 6;
+    self.usedRow.spacing = AS(6);
     [self.view addSubview:self.usedRow];
 
     self.usedPercentLab = [[UILabel alloc] init];
     self.usedPercentLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.usedPercentLab.textAlignment = NSTextAlignmentRight;
-    self.usedPercentLab.font = PoppinsFont(@"Poppins-SemiBold", 20, UIFontWeightSemibold);
+    self.usedPercentLab.font = PoppinsFont(@"Poppins-SemiBold", AS(20), UIFontWeightSemibold);
 
     self.usedOutOfLab = [[UILabel alloc] init];
     self.usedOutOfLab.translatesAutoresizingMaskIntoConstraints = NO;
-    self.usedOutOfLab.font = PoppinsFont(@"Poppins-SemiBold", 16, UIFontWeightSemibold);
+    self.usedOutOfLab.font = PoppinsFont(@"Poppins-SemiBold", AS(16), UIFontWeightSemibold);
     self.usedOutOfLab.textColor = HexColor(@"#FF606060");
 
     self.usedWordLab = [[UILabel alloc] init];
     self.usedWordLab.translatesAutoresizingMaskIntoConstraints = NO;
-    self.usedWordLab.font = PoppinsFont(@"Poppins-SemiBold", 16, UIFontWeightSemibold);
+    self.usedWordLab.font = PoppinsFont(@"Poppins-SemiBold", AS(16), UIFontWeightSemibold);
 
     [self.usedRow addArrangedSubview:self.usedPercentLab];
     [self.usedRow addArrangedSubview:self.usedOutOfLab];
@@ -564,7 +577,7 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.plansStack = [[UIStackView alloc] init];
     self.plansStack.translatesAutoresizingMaskIntoConstraints = NO;
     self.plansStack.axis = UILayoutConstraintAxisVertical;
-    self.plansStack.spacing = 20;
+    self.plansStack.spacing = AS(20);
     [self.view addSubview:self.plansStack];
 
     self.trialHintLab = [[UILabel alloc] init];
@@ -572,13 +585,13 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.trialHintLab.textAlignment = NSTextAlignmentLeft;
     self.trialHintLab.numberOfLines = 1;
     self.trialHintLab.textColor = HexColor(@"#FF8F8A98");
-    self.trialHintLab.font = PoppinsFont(@"Poppins-Medium", 14, UIFontWeightMedium);
-    self.trialHintLab.text = @"3 - Days Free trial enabled";
+    self.trialHintLab.font = PoppinsFont(@"Poppins-Medium", AS(14), UIFontWeightMedium);
+    self.trialHintLab.text = NSLocalizedString(@"3 - Days Free trial enabled",nil);
     self.trialHintLab.hidden = YES;
     [self.view addSubview:self.trialHintLab];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.trialHintLab.topAnchor constraintEqualToAnchor:self.plansStack.bottomAnchor constant:12],
+        [self.trialHintLab.topAnchor constraintEqualToAnchor:self.plansStack.bottomAnchor constant:AS(12)],
         [self.trialHintLab.leadingAnchor constraintEqualToAnchor:self.plansStack.leadingAnchor],
         [self.trialHintLab.trailingAnchor constraintLessThanOrEqualToAnchor:self.plansStack.trailingAnchor],
     ]];
@@ -586,13 +599,10 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.continueBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.continueBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.continueBtn.backgroundColor = HexColor(@"#FF014EFE");
-    self.continueBtn.layer.cornerRadius = 34;
-    [self.continueBtn setTitle:L(@"subscription.continue") forState:UIControlStateNormal];
-    if ([[self.continueBtn titleForState:UIControlStateNormal] isEqualToString:@"subscription.continue"]) {
-        [self.continueBtn setTitle:@"Continue" forState:UIControlStateNormal];
-    }
+    self.continueBtn.layer.cornerRadius = AS(34);
+    [self.continueBtn setTitle:NSLocalizedString(@"Continue",nil) forState:UIControlStateNormal];
     [self.continueBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    self.continueBtn.titleLabel.font = PoppinsFont(@"Poppins-Bold", 22, UIFontWeightBold);
+    self.continueBtn.titleLabel.font = PoppinsFont(@"Poppins-Bold", AS(22), UIFontWeightBold);
     [self.continueBtn addTarget:self action:@selector(tapContinue) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.continueBtn];
 
@@ -601,7 +611,7 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.autoRenewLab.textAlignment = NSTextAlignmentCenter;
     self.autoRenewLab.numberOfLines = 1;
     self.autoRenewLab.textColor = HexColor(@"#FF606060");
-    self.autoRenewLab.font = PoppinsFont(@"Poppins-Regular", 12, UIFontWeightRegular);
+    self.autoRenewLab.font = PoppinsFont(@"Poppins-Regular", AS(12), UIFontWeightRegular);
     [self.view addSubview:self.autoRenewLab];
 
     self.bottomLinks = [[UIStackView alloc] init];
@@ -611,78 +621,72 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.bottomLinks.alignment = UIStackViewAlignmentCenter;
     [self.view addSubview:self.bottomLinks];
 
-    self.termsBtn = [self linkButtonWithTitle:@"Terms"];
+    self.termsBtn = [self linkButtonWithTitle:NSLocalizedString(@"Terms",nil)];
     [self.termsBtn addTarget:self action:@selector(tapTerms) forControlEvents:UIControlEventTouchUpInside];
 
-    self.privacyBtn = [self linkButtonWithTitle:@"Privacy"];
+    self.privacyBtn = [self linkButtonWithTitle:NSLocalizedString(@"Privacy",nil)];
     [self.privacyBtn addTarget:self action:@selector(tapPrivacy) forControlEvents:UIControlEventTouchUpInside];
 
-    self.restoreBtn = [self linkButtonWithTitle:@"Restore"];
+    self.restoreBtn = [self linkButtonWithTitle:NSLocalizedString(@"Restore",nil)];
     [self.restoreBtn addTarget:self action:@selector(tapRestore) forControlEvents:UIControlEventTouchUpInside];
 
     [self.bottomLinks addArrangedSubview:self.termsBtn];
     [self.bottomLinks addArrangedSubview:self.privacyBtn];
     [self.bottomLinks addArrangedSubview:self.restoreBtn];
     
-    CGFloat rowW = 85 + 65 + 85;
-    self.titleTopToSafe = [self.titleLab.topAnchor constraintEqualToAnchor:safe.topAnchor constant:60];
-    self.titleTopToGateBadge = [self.titleLab.topAnchor constraintEqualToAnchor:self.gateBadgeView.bottomAnchor constant:18];
+    CGFloat rowW = AS(85 + 65 + 85);
+    self.titleTopToSafe = [self.titleLab.topAnchor constraintEqualToAnchor:safe.topAnchor constant:AS(60)];
+    self.titleTopToGateBadge = [self.titleLab.topAnchor constraintEqualToAnchor:self.gateBadgeView.bottomAnchor constant:AS(18)];
 
     self.titleTopToSafe.active = YES;
     self.titleTopToGateBadge.active = NO;
 
-    self.continueTopToPlansStack = [self.continueBtn.topAnchor constraintEqualToAnchor:self.plansStack.bottomAnchor constant:47];
-    self.continueTopToTrialHint  = [self.continueBtn.topAnchor constraintEqualToAnchor:self.trialHintLab.bottomAnchor constant:15];
-
-    self.continueTopToPlansStack.active = YES;
-    self.continueTopToTrialHint.active  = NO;
-
     [NSLayoutConstraint activateConstraints:@[
-        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
+        [self.backBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(20)],
         [self.backBtn.topAnchor constraintEqualToAnchor:safe.topAnchor constant:0],
-        [self.backBtn.widthAnchor constraintEqualToConstant:44],
-        [self.backBtn.heightAnchor constraintEqualToConstant:44],
+        [self.backBtn.widthAnchor constraintEqualToConstant:AS(44)],
+        [self.backBtn.heightAnchor constraintEqualToConstant:AS(44)],
 
-        [self.titleLab.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.titleLab.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.titleLab.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(20)],
+        [self.titleLab.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(20)],
 
-        [self.featureRow.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:50],
+        [self.featureRow.topAnchor constraintEqualToAnchor:self.titleLab.bottomAnchor constant:AS(50)],
         [self.featureRow.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.featureRow.widthAnchor constraintEqualToConstant:rowW],
 
-        [self.featureRow.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.featureRow.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.featureRow.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:AS(20)],
+        [self.featureRow.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-AS(20)],
         
-        [self.progressTrack.topAnchor constraintEqualToAnchor:self.featureRow.bottomAnchor constant:22],
-        [self.progressTrack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:40],
-        [self.progressTrack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-40],
-        [self.progressTrack.heightAnchor constraintEqualToConstant:27],
+        [self.progressTrack.topAnchor constraintEqualToAnchor:self.featureRow.bottomAnchor constant:AS(22)],
+        [self.progressTrack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(40)],
+        [self.progressTrack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(40)],
+        [self.progressTrack.heightAnchor constraintEqualToConstant:AS(27)],
 
         [self.progressFill.topAnchor constraintEqualToAnchor:self.progressTrack.topAnchor],
         [self.progressFill.bottomAnchor constraintEqualToAnchor:self.progressTrack.bottomAnchor],
         [self.progressFill.leadingAnchor constraintEqualToAnchor:self.progressTrack.leadingAnchor],
 
-        [self.usedRow.topAnchor constraintEqualToAnchor:self.progressTrack.bottomAnchor constant:12],
+        [self.usedRow.topAnchor constraintEqualToAnchor:self.progressTrack.bottomAnchor constant:AS(12)],
         [self.usedRow.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.usedRow.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.usedRow.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.usedRow.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:AS(20)],
+        [self.usedRow.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-AS(20)],
         
-        [self.plansStack.topAnchor constraintEqualToAnchor:self.usedRow.bottomAnchor constant:50],
-        [self.plansStack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:30],
-        [self.plansStack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-30],
+        [self.plansStack.topAnchor constraintEqualToAnchor:self.usedRow.bottomAnchor constant:AS(64)],
+        [self.plansStack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(30)],
+        [self.plansStack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(30)],
 
-        [self.continueBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:35],
-        [self.continueBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-35],
-        [self.continueBtn.heightAnchor constraintEqualToConstant:68],
+        [self.continueBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(35)],
+        [self.continueBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(35)],
+        [self.continueBtn.heightAnchor constraintEqualToConstant:AS(68)],
 
-        [self.autoRenewLab.topAnchor constraintEqualToAnchor:self.continueBtn.bottomAnchor constant:10],
-        [self.autoRenewLab.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.autoRenewLab.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [self.autoRenewLab.topAnchor constraintEqualToAnchor:self.continueBtn.bottomAnchor constant:AS(10)],
+        [self.autoRenewLab.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(20)],
+        [self.autoRenewLab.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(20)],
 
-        [self.bottomLinks.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:50],
-        [self.bottomLinks.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-50],
+        [self.bottomLinks.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(50)],
+        [self.bottomLinks.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(50)],
         [self.bottomLinks.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:0],
-        [self.bottomLinks.heightAnchor constraintGreaterThanOrEqualToConstant:20],
+        [self.bottomLinks.heightAnchor constraintGreaterThanOrEqualToConstant:AS(20)],
 
         [self.autoRenewLab.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomLinks.topAnchor constant:0],
     ]];
@@ -700,15 +704,15 @@ static inline id SafeKVC(id obj, NSString *key) {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    self.titleLab.preferredMaxLayoutWidth = CGRectGetWidth(self.view.bounds) - 40;
+    self.titleLab.preferredMaxLayoutWidth = CGRectGetWidth(self.view.bounds) - AS(40);
 
     if (self.gateBadgeView && self.gateBadgeGradient) {
         self.gateBadgeGradient.frame = self.gateBadgeView.bounds;
-        self.gateBadgeGradient.cornerRadius = 20;
+        self.gateBadgeGradient.cornerRadius = AS(20);
     }
 }
 
-#pragma mark - Render (Store)
+#pragma mark - Render
 
 - (void)render {
     StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;
@@ -724,12 +728,11 @@ static inline id SafeKVC(id obj, NSString *key) {
 
     if (!ready) {
         BOOL hasCached = (self.products.count > 0);
-        self.continueBtn.enabled = hasNet && hasCached && !busy;
+        self.continueBtn.enabled = hasCached && !busy;
         if (!hasCached) self.autoRenewLab.text = @"";
         return;
     }
 
-    // 1) 先规范化 products
     self.products = [self normalizedProducts:snap.products];
 
     NSInteger weekIdx = [self indexForUnit:SK2PeriodUnitWeek];
@@ -737,7 +740,6 @@ static inline id SafeKVC(id obj, NSString *key) {
     if (weekIdx == NSNotFound) weekIdx = 0;
     if (yearIdx == NSNotFound) yearIdx = 0;
 
-    // 2) Gate or not
     BOOL isGate = (self.paywallMode == SubscriptionPaywallModeGateWeekly ||
                    self.paywallMode == SubscriptionPaywallModeGateYearly);
 
@@ -760,7 +762,6 @@ static inline id SafeKVC(id obj, NSString *key) {
         }
     }
 
-    // 5) signature 只用于非 Gate 的列表是否重建
     NSString *sig = [self signatureForProducts:self.products];
     BOOL productsChanged = ![sig isEqualToString:self.productsSignature];
     self.productsSignature = sig;
@@ -776,15 +777,19 @@ static inline id SafeKVC(id obj, NSString *key) {
         else [self refreshPlanSelectionOnly];
     }
 
-    // 6) 自动续订文案 & 按钮 enable
     [self updateAutoRenewLine];
     [self updateTrialHintUI];
-    self.continueBtn.enabled = hasNet && !busy && ([self currentProductForPurchase] != nil);
+    self.continueBtn.enabled = !busy && ([self currentProductForPurchase] != nil);
 
     if (snap.subscriptionState == SubscriptionStateActive) {
         if (self.presentingViewController) {
             [self dismissViewControllerAnimated:YES completion:nil];
         }
+    }
+
+    if (!busy) {
+        [self hideLoading];
+        self.loadingCount = 0;
     }
 }
 
@@ -819,8 +824,7 @@ static inline id SafeKVC(id obj, NSString *key) {
             it.nameLab.text = [self localizedPlanNameForModel:m];
 
             NSString *unit = [self localizedPeriodUnitForModel:m];
-            NSString *fmt = L(@"subscription.price_per_period");
-            if ([fmt isEqualToString:@"subscription.price_per_period"]) fmt = @"%@ / %@";
+            NSString *fmt = NSLocalizedString(@"%@ / %@",nil);
             it.priceLab.text = [NSString stringWithFormat:fmt, (m.displayPrice ?: @""), unit];
         }
     }
@@ -842,7 +846,7 @@ static inline id SafeKVC(id obj, NSString *key) {
         return;
     }
 
-    self.plansStack.spacing = 20;
+    self.plansStack.spacing = AS(20);
     
     for (NSInteger i = 0; i < self.products.count; i++) {
         SK2ProductModel *m = self.products[i];
@@ -856,8 +860,7 @@ static inline id SafeKVC(id obj, NSString *key) {
 
         NSString *unit = [self localizedPeriodUnitForModel:m];
 
-        NSString *fmt = L(@"subscription.price_per_period");
-        if ([fmt isEqualToString:@"subscription.price_per_period"]) fmt = @"%@ / %@";
+        NSString *fmt = NSLocalizedString(@"%@ / %@",nil);
 
         item.priceLab.text = [NSString stringWithFormat:fmt, (m.displayPrice ?: @""), unit];
 
@@ -895,37 +898,22 @@ static inline id SafeKVC(id obj, NSString *key) {
 
     NSString *key = nil;
     switch (m.periodUnit) {
-        case SK2PeriodUnitWeek:  key = @"subscription.week"; break;
-        case SK2PeriodUnitYear:  key = @"subscription.year"; break;
-        default:                 key = @"subscription.plan"; break;
+        case SK2PeriodUnitWeek:  key = NSLocalizedString(@"Weekly",nil); break;
+        case SK2PeriodUnitYear:  key = NSLocalizedString(@"Yearly",nil); break;
+        default:                 key = NSLocalizedString(@"Plan",nil); break;
     }
-
-    NSString *s = L(key);
-
-    if ([s isEqualToString:key]) {
-        if ([key isEqualToString:@"subscription.week"])  return @"Weekly";
-        if ([key isEqualToString:@"subscription.year"])  return @"Yearly";
-        return @"Plan";
-    }
-    return s;
+    return key;
 }
 
 - (NSString *)localizedPeriodUnitForModel:(SK2ProductModel *)m {
     NSString *key = nil;
     switch (m.periodUnit) {
-        case SK2PeriodUnitWeek:  key = @"subscription.period.week"; break;
-        case SK2PeriodUnitYear:  key = @"subscription.period.year"; break;
-        default:                 key = @"subscription.unit_period"; break;
+        case SK2PeriodUnitWeek:  key = NSLocalizedString(@"week",nil); break;
+        case SK2PeriodUnitYear:  key = NSLocalizedString(@"year",nil); break;
+        default:                 key = NSLocalizedString(@"period",nil); break;
     }
-
-    NSString *s = L(key);
-
-    if ([s isEqualToString:key]) {
-        if ([key isEqualToString:@"subscription.period.week"])  return @"week";
-        if ([key isEqualToString:@"subscription.period.year"])  return @"year";
-        return @"period";
-    }
-    return s;
+    
+    return key;
 }
 
 - (SK2ProductModel *)currentProductForPurchase {
@@ -951,10 +939,7 @@ static inline id SafeKVC(id obj, NSString *key) {
 
     NSString *unit = [self localizedPeriodUnitForModel:m];
 
-    NSString *fmt = L(@"subscription.autorenewing_format");
-    if ([fmt isEqualToString:@"subscription.autorenewing_format"]) {
-        fmt = @"Auto-renewing, %@ / %@, cancel any time";
-    }
+    NSString *fmt = NSLocalizedString(@"Auto-renewing, %@ / %@, cancel any time",nil);
     self.autoRenewLab.text = [NSString stringWithFormat:fmt, (m.displayPrice ?: @""), unit];
 }
 
@@ -978,20 +963,19 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.gateBadgeView.hidden = !isGate;
 
     if (isGate) {
-        self.titleLab.text = @"Storage Now";
+        self.titleLab.text = NSLocalizedString(@"Storage Now",nil);
     } else {
-        NSString *t = L(@"subscription.unlock_unlimited_access");
-        if ([t isEqualToString:@"subscription.unlock_unlimited_access"]) t = @"Unlock Unlimited Access";
+        NSString *t = NSLocalizedString(@"Unlock Unlimited Access",nil);
         self.titleLab.text = t;
     }
 
     NSString *text = self.titleLab.text ?: @"";
-    UIFont *font = self.titleLab.font ?: [UIFont systemFontOfSize:36 weight:UIFontWeightBold];
+    UIFont *font = self.titleLab.font ?: [UIFont systemFontOfSize:AS(36) weight:UIFontWeightBold];
     NSMutableParagraphStyle *ps = [[NSMutableParagraphStyle alloc] init];
     ps.alignment = self.titleLab.textAlignment;
-    ps.minimumLineHeight = 40;
-    ps.maximumLineHeight = 40;
-    CGFloat baselineOffset = (40.0 - font.lineHeight) / 4.0;
+    ps.minimumLineHeight = AS(40);
+    ps.maximumLineHeight = AS(40);
+    CGFloat baselineOffset = AS((40.0 - font.lineHeight) / 4.0);
 
     self.titleLab.attributedText = [[NSAttributedString alloc] initWithString:text attributes:@{
         NSFontAttributeName: font,
@@ -1012,15 +996,20 @@ static inline id SafeKVC(id obj, NSString *key) {
     row.translatesAutoresizingMaskIntoConstraints = NO;
     row.axis = UILayoutConstraintAxisHorizontal;
     row.alignment = UIStackViewAlignmentTop;
-    row.spacing = 15;
+    row.spacing = AS(15);
 
     UILabel *lab = [[UILabel alloc] init];
     lab.translatesAutoresizingMaskIntoConstraints = NO;
     lab.numberOfLines = 0;
     lab.textAlignment = NSTextAlignmentLeft;
     lab.textColor = HexColor(@"#FF666666");
-    lab.font = PoppinsFont(@"Poppins-Regular", 14, UIFontWeightRegular);
+    lab.font = PoppinsFont(@"Poppins-Regular", AS(14), UIFontWeightRegular);
     lab.text = text ?: @"";
+
+    [lab setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                         forAxis:UILayoutConstraintAxisHorizontal];
+    [lab setContentHuggingPriority:UILayoutPriorityDefaultHigh
+                           forAxis:UILayoutConstraintAxisHorizontal];
 
     UIImageView *iv = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ic_sub_tip"]];
     iv.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1034,11 +1023,11 @@ static inline id SafeKVC(id obj, NSString *key) {
     CGFloat wrapH = MAX(10.0, lineH);
 
     [NSLayoutConstraint activateConstraints:@[
-        [iconWrap.widthAnchor constraintEqualToConstant:14],
+        [iconWrap.widthAnchor constraintEqualToConstant:AS(14)],
         [iconWrap.heightAnchor constraintEqualToConstant:wrapH],
 
-        [iv.widthAnchor constraintEqualToConstant:14],
-        [iv.heightAnchor constraintEqualToConstant:10],
+        [iv.widthAnchor constraintEqualToConstant:AS(14)],
+        [iv.heightAnchor constraintEqualToConstant:AS(10)],
         [iv.centerXAnchor constraintEqualToAnchor:iconWrap.centerXAnchor],
         [iv.centerYAnchor constraintEqualToAnchor:iconWrap.centerYAnchor],
     ]];
@@ -1058,31 +1047,47 @@ static inline id SafeKVC(id obj, NSString *key) {
     trial.translatesAutoresizingMaskIntoConstraints = NO;
     trial.textAlignment = NSTextAlignmentCenter;
     trial.textColor = HexColor(@"#FF15172C");
-    trial.font = PoppinsFont(@"Poppins-Medium", 16, UIFontWeightMedium);
+    trial.font = PoppinsFont(@"Poppins-Medium", AS(16), UIFontWeightMedium);
     trial.text = (self.paywallMode == SubscriptionPaywallModeGateYearly)
                ? @""
-               : @"3-Days Free Trial Enabled";
+               : NSLocalizedString(@"3-Days Free Trial Enabled",nil);
 
-    UIStackView *tips = [[UIStackView alloc] init];
-    tips.translatesAutoresizingMaskIntoConstraints = NO;
-    tips.axis = UILayoutConstraintAxisVertical;
-    tips.alignment = UIStackViewAlignmentFill;
-    tips.distribution = UIStackViewDistributionFill;
-    tips.spacing = 12;
+    UIView *tipsHost = [UIView new];
+    tipsHost.translatesAutoresizingMaskIntoConstraints = NO;
 
-    [tips addArrangedSubview:[self gateTipRow:@"Unlimited access to free up iphone space"]];
-    [tips addArrangedSubview:[self gateTipRow:@"AI detect similar and dunplicate photos"]];
-    [tips addArrangedSubview:[self gateTipRow:@"Private space to keep your data safe"]];
+    UIView *row1 = [self gateTipRow:NSLocalizedString(@"Unlimited access to free up iphone space",nil)];
+    UIView *row2 = [self gateTipRow:NSLocalizedString(@"AI detect similar and dunplicate photos",nil)];
+    UIView *row3 = [self gateTipRow:NSLocalizedString(@"Private space to keep your data safe",nil)];
+
+    [tipsHost addSubview:row1];
+    [tipsHost addSubview:row2];
+    [tipsHost addSubview:row3];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [row1.topAnchor constraintEqualToAnchor:tipsHost.topAnchor],
+        [row1.centerXAnchor constraintEqualToAnchor:tipsHost.centerXAnchor],
+        [row1.leadingAnchor constraintGreaterThanOrEqualToAnchor:tipsHost.leadingAnchor],
+        [row1.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor],
+
+        [row2.topAnchor constraintEqualToAnchor:row1.bottomAnchor constant:AS(12)],
+        [row2.leadingAnchor constraintEqualToAnchor:row1.leadingAnchor],
+        [row2.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor],
+
+        [row3.topAnchor constraintEqualToAnchor:row2.bottomAnchor constant:AS(12)],
+        [row3.leadingAnchor constraintEqualToAnchor:row1.leadingAnchor],
+        [row3.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor],
+        [row3.bottomAnchor constraintEqualToAnchor:tipsHost.bottomAnchor],
+    ]];
 
     [self.plansStack addArrangedSubview:trial];
-    [self.plansStack addArrangedSubview:tips];
+    [self.plansStack addArrangedSubview:tipsHost];
 
     if (@available(iOS 11.0, *)) {
-        [self.plansStack setCustomSpacing:24 afterView:trial];
+        [self.plansStack setCustomSpacing:AS(24) afterView:trial];
     } else {
         UIView *spacer = [[UIView alloc] init];
         spacer.translatesAutoresizingMaskIntoConstraints = NO;
-        [spacer.heightAnchor constraintEqualToConstant:24].active = YES;
+        [spacer.heightAnchor constraintEqualToConstant:AS(24)].active = YES;
         [self.plansStack insertArrangedSubview:spacer atIndex:1];
     }
 }
@@ -1102,11 +1107,9 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.progressPhase = SubProgressPhaseMove;
     self.phaseStartTime = CACurrentMediaTime();
 
-    // 每轮开始都确保可见
     self.progressTrack.alpha = 1.0;
     self.usedRow.alpha = 1.0;
 
-    // 进度/数字回到起点
     [self.photosFeature setBadgeNumber:822];
     [self.icloudFeature setBadgeNumber:768];
     [self applyProgressUI];
@@ -1196,11 +1199,9 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.usedPercentLab.text = [NSString stringWithFormat:@"%ld %%", (long)percent];
     self.usedPercentLab.textColor = fillColor;
 
-    NSString *outOf = L(@"subscription.used_out_of_100");
-    if ([outOf isEqualToString:@"subscription.used_out_of_100"]) outOf = @"out of 100%";
+    NSString *outOf = NSLocalizedString(@"out of 100%",nil);
 
-    NSString *used = L(@"subscription.used");
-    if ([used isEqualToString:@"subscription.used"]) used = @"Used";
+    NSString *used = NSLocalizedString(@"Used",nil);
 
     UIColor *outColor = HexColor(@"#FF606060");
     UIColor *usedColor = (self.progress < 0.8) ? outColor : HexColor(@"#FFFF0000");
@@ -1241,32 +1242,47 @@ static inline id SafeKVC(id obj, NSString *key) {
 
 - (void)tapContinue {
     StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;
-    if (!snap.networkAvailable) return;
-    if (snap.productsState != ProductsLoadStateReady) return;
 
-    if (self.selectedIndex < 0 || self.selectedIndex >= self.products.count) return;
+    if (!snap.networkAvailable) {
+        [self showToastText:NSLocalizedString(@"Network Error", nil)];
+        return;
+    }
+    if (snap.productsState != ProductsLoadStateReady) {
+        [self showToastText:NSLocalizedString(@"Loading...", nil)];
+        return;
+    }
+
     SK2ProductModel *m = [self currentProductForPurchase];
-    if (!m) return;
-    
-    self.continueBtn.enabled = NO;
+    if (!m) {
+        [self showToastText:NSLocalizedString(@"Please try again", nil)];
+        return;
+    }
 
+    self.continueBtn.enabled = NO;
+    [self showLoading];
+
+    __weak typeof(self) weakSelf = self;
     [[StoreKit2Manager shared] purchaseWithProductID:m.productID completion:^(PurchaseFlowState st) {
         dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+
+            [self hideLoading];
             [self render];
 
             switch (st) {
                 case PurchaseFlowStatePending:
-                    [self showToast:L(@"paywall.purchase_pending")];
+                    [self showToastText:NSLocalizedString(@"Pending",nil)];
                     break;
                 case PurchaseFlowStateCancelled:
-                    [self showToast:L(@"paywall.purchase_cancelled")];
+                    [self showToastText:NSLocalizedString(@"Cancelled",nil)];
                     break;
                 case PurchaseFlowStateSucceeded:
-                    [self showToast:L(@"paywall.purchase_success")];
+                    [self showToastText:NSLocalizedString(@"Success",nil)];
                     break;
                 case PurchaseFlowStateFailed: {
                     NSString *msg = [StoreKit2Manager shared].snapshot.lastErrorMessage;
-                    [self showToast:(msg.length ? msg : L(@"paywall.purchase_failed"))];
+                    [self showToastText:(msg.length ? msg : NSLocalizedString(@"Failed",nil))];
                     break;
                 }
                 default:
@@ -1278,21 +1294,31 @@ static inline id SafeKVC(id obj, NSString *key) {
 
 - (void)tapRestore {
     StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;
-    if (!snap.networkAvailable) return;
+
+    if (!snap.networkAvailable) {
+        [self showToastText:NSLocalizedString(@"Network error", nil)];
+        return;
+    }
 
     self.restoreBtn.enabled = NO;
+    [self showLoading];
 
+    __weak typeof(self) weakSelf = self;
     [[StoreKit2Manager shared] restoreWithCompletion:^(PurchaseFlowState st) {
         dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+
+            [self hideLoading];
             [self render];
 
             switch (st) {
                 case PurchaseFlowStateRestored:
-                    [self showToast:L(@"paywall.restore_success")];
+                    [self showToastText:NSLocalizedString(@"Restore Success",nil)];
                     break;
                 case PurchaseFlowStateFailed: {
                     NSString *msg = [StoreKit2Manager shared].snapshot.lastErrorMessage;
-                    [self showToast:(msg.length ? msg : L(@"paywall.restore_failed"))];
+                    [self showToastText:(msg.length ? msg : NSLocalizedString(@"Restore Failed",nil))];
                     break;
                 }
                 default:
@@ -1302,15 +1328,127 @@ static inline id SafeKVC(id obj, NSString *key) {
     }];
 }
 
-- (void)tapTerms { /* 留空 */ }
-- (void)tapPrivacy { /* 留空 */ }
+- (void)tapTerms { [self as_openInBrowser: AppConstants.termsLink]; }
+- (void)tapPrivacy { [self as_openInBrowser:AppConstants.privacyLink]; }
 
-- (void)showToast:(NSString *)msg {
-    if (msg.length == 0) return;
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:nil message:msg preferredStyle:UIAlertControllerStyleAlert];
-    [self presentViewController:ac animated:YES completion:nil];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [ac dismissViewControllerAnimated:YES completion:nil];
+- (void)as_openInBrowser:(NSString *)urlString {
+    NSURL *url = [NSURL URLWithString:urlString ?: @""];
+    if (!url) return;
+
+    if (!url.scheme.length) {
+        url = [NSURL URLWithString:[@"https://" stringByAppendingString:urlString]];
+        if (!url) return;
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIApplication *app = UIApplication.sharedApplication;
+        if ([app canOpenURL:url]) {
+            [app openURL:url options:@{} completionHandler:nil];
+        }
+    });
+}
+
+- (void)showToastText:(NSString *)text {
+    UIView *host = self.view.window ?: self.view;
+    if (!host) return;
+
+    NSInteger tag = 909090;
+    UIView *old = [host viewWithTag:tag];
+    if (old) [old removeFromSuperview];
+
+    UILabel *lab = [UILabel new];
+    lab.text = text ?: @"";
+    lab.textColor = UIColor.whiteColor;
+    lab.font = ASACFont(16, UIFontWeightMedium);
+    lab.textAlignment = NSTextAlignmentCenter;
+    lab.numberOfLines = 1;
+
+    UIView *toast = [UIView new];
+    toast.tag = tag;
+    toast.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.78];
+    toast.layer.cornerRadius = AS(12);
+    toast.layer.masksToBounds = YES;
+
+    [toast addSubview:lab];
+    [host addSubview:toast];
+
+    CGFloat maxW = host.bounds.size.width - AS(80);
+    CGSize textSize = [lab sizeThatFits:CGSizeMake(maxW, 999)];
+    CGFloat padX = AS(22), padY = AS(12);
+
+    CGFloat w = MIN(maxW, textSize.width) + padX * 2;
+    CGFloat h = textSize.height + padY * 2;
+
+    CGFloat safeBottom = 0;
+    if (@available(iOS 11.0, *)) safeBottom = host.safeAreaInsets.bottom;
+
+    CGFloat x = (host.bounds.size.width - w) * 0.5;
+    CGFloat y = host.bounds.size.height - safeBottom - h - AS(110);
+    toast.frame = CGRectMake(x, y, w, h);
+    lab.frame = CGRectMake(padX, padY, w - padX * 2, h - padY * 2);
+
+    toast.alpha = 0.0;
+    toast.transform = CGAffineTransformMakeScale(0.98, 0.98);
+
+    [UIView animateWithDuration:0.18 animations:^{
+        toast.alpha = 1.0;
+        toast.transform = CGAffineTransformIdentity;
+    } completion:^(__unused BOOL finished) {
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [UIView animateWithDuration:0.18 animations:^{
+                toast.alpha = 0.0;
+            } completion:^(__unused BOOL finished2) {
+                [toast removeFromSuperview];
+            }];
+        });
+    }];
+}
+
+#pragma mark - Loading
+
+- (void)showLoading {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.loadingCount += 1;
+        if (self.loadingMask.superview) return;
+
+        UIView *host = self.view.window ?: self.view;
+        if (!host) return;
+
+        UIView *mask = [[UIView alloc] initWithFrame:host.bounds];
+        mask.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        mask.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.18];
+        mask.userInteractionEnabled = YES;
+        self.loadingMask = mask;
+
+        UIActivityIndicatorView *sp = nil;
+        if (@available(iOS 13.0, *)) {
+            sp = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+        } else {
+            sp = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+        }
+        sp.translatesAutoresizingMaskIntoConstraints = NO;
+        [mask addSubview:sp];
+        [NSLayoutConstraint activateConstraints:@[
+            [sp.centerXAnchor constraintEqualToAnchor:mask.centerXAnchor],
+            [sp.centerYAnchor constraintEqualToAnchor:mask.centerYAnchor],
+        ]];
+        self.loadingSpinner = sp;
+
+        [host addSubview:mask];
+        [sp startAnimating];
+    });
+}
+
+- (void)hideLoading {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.loadingCount = MAX(0, self.loadingCount - 1);
+        if (self.loadingCount > 0) return;
+
+        [self.loadingSpinner stopAnimating];
+        [self.loadingMask removeFromSuperview];
+        self.loadingSpinner = nil;
+        self.loadingMask = nil;
     });
 }
 

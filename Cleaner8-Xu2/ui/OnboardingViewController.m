@@ -1,47 +1,48 @@
 #import "OnboardingViewController.h"
 #import "MainTabBarController.h"
 #import "Common.h"
-#import <AppTrackingTransparency/AppTrackingTransparency.h>
 #import <AdSupport/AdSupport.h>
 
+@import Lottie;
+
 static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
-static NSString * const kHasRequestedATTKey = @"hasRequestedATT";
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
-static inline CGFloat SWScaleX(void) {
-    CGFloat w = UIScreen.mainScreen.bounds.size.width;
-    return w / SWDesignWidth();
+static inline CGFloat SWScaleX(void) { return UIScreen.mainScreen.bounds.size.width / SWDesignWidth(); }
+static inline CGFloat SWScaleY(void) { return UIScreen.mainScreen.bounds.size.height / SWDesignHeight(); }
+static inline CGFloat SWScale(void)  { return MIN(SWScaleX(), SWScaleY()); }
+static inline CGFloat SW(CGFloat v)  { return round(v * SWScale()); }
+
+static inline UIColor *ASRGBA(uint32_t argb) {
+    CGFloat a = ((argb >> 24) & 0xFF) / 255.0;
+    CGFloat r = ((argb >> 16) & 0xFF) / 255.0;
+    CGFloat g = ((argb >> 8)  & 0xFF) / 255.0;
+    CGFloat b = ( argb        & 0xFF) / 255.0;
+    return [UIColor colorWithRed:r green:g blue:b alpha:a];
 }
 
-static inline CGFloat SWScaleY(void) {
-    CGFloat h = UIScreen.mainScreen.bounds.size.height;
-    return h / SWDesignHeight();
-}
-
-static inline CGFloat SWScale(void) {
-    return MIN(SWScaleX(), SWScaleY());
-}
-static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
-static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
-    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
-}
-static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
-    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
-}
-#pragma mark - UI Helpers
-static inline UIColor *ASRGB(CGFloat r, CGFloat g, CGFloat b) {
-    return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
-}
-static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
-    return SWFontS(size, weight);
+static inline UIFont *ASFont(NSString *name, CGFloat size) {
+    UIFont *f = [UIFont fontWithName:name size:SW(size)];
+    if (!f) f = [UIFont systemFontOfSize:SW(size) weight:UIFontWeightRegular];
+    return f;
 }
 
 @interface OnboardingViewController ()
-@property(nonatomic,strong) UIImageView *bgImageView;
+@property(nonatomic,strong) CompatibleAnimationView *lottieView;
+
+@property(nonatomic,strong) UILabel *titleLabel;
+@property(nonatomic,strong) UILabel *descLabel;
+
+@property(nonatomic,strong) UIStackView *dotsStack;
+@property(nonatomic,strong) NSMutableArray<UIView *> *dots;
+
 @property(nonatomic,strong) UIButton *continueBtn;
 
-@property(nonatomic,strong) NSArray<NSString *> *images;
+@property(nonatomic,strong) NSArray<NSString *> *jsonPaths;
+@property(nonatomic,strong) NSArray<NSString *> *titles;
+@property(nonatomic,strong) NSArray<NSString *> *descs;
+
 @property(nonatomic,assign) NSInteger index;
 @end
 
@@ -52,140 +53,194 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     self.navigationController.navigationBarHidden = YES;
 }
 
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    
-}
-
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = UIColor.blackColor;
+    self.view.backgroundColor = ASRGBA(0xFFF7F7F9);
 
-    self.images = @[@"sp_1", @"sp_2", @"sp_3"];
+    self.jsonPaths = @[@"data1", @"data2", @"data3"];
+    
+    self.titles = @[NSLocalizedString(@"Cleanup Phone Storage",nil), NSLocalizedString(@"Photo Space Manage",nil), NSLocalizedString(@"Security Center",nil)];
+    self.descs = @[
+        NSLocalizedString(@"Get rid of what you don't need, free up 80% space",nil),
+        NSLocalizedString(@"AI detect and delete duplicate & similar photos",nil),
+        NSLocalizedString(@"Protect your photos and keep your data safe",nil)
+    ];
     self.index = 0;
 
     [self buildUI];
-    [self applyImageAtIndex:self.index animated:NO];
+    [self applyPageAtIndex:self.index animated:NO];
 }
 
-#pragma mark - UI
+#pragma mark - UI Construction
 
 - (void)buildUI {
+    self.lottieView = [[CompatibleAnimationView alloc] initWithFrame:CGRectZero];
+    self.lottieView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.lottieView.contentMode = UIViewContentModeScaleAspectFit;
+    self.lottieView.clipsToBounds = YES;
+    self.lottieView.loopAnimationCount = -1;
+    [self.view addSubview:self.lottieView];
 
-    self.bgImageView = [UIImageView new];
-    self.bgImageView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.bgImageView.contentMode = UIViewContentModeScaleAspectFill;
-    self.bgImageView.clipsToBounds = YES;
-    self.bgImageView.userInteractionEnabled = YES;
-    [self.view addSubview:self.bgImageView];
+    self.titleLabel = [UILabel new];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.textAlignment = NSTextAlignmentCenter;
+    self.titleLabel.numberOfLines = 1;
+    self.titleLabel.textColor = ASRGBA(0xFF1F1434);
+    self.titleLabel.font = ASFont(@"Poppins-Bold", 28);
+    [self.view addSubview:self.titleLabel];
 
-    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(tapToNext)];
-    [self.bgImageView addGestureRecognizer:tap];
+    self.descLabel = [UILabel new];
+    self.descLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descLabel.textAlignment = NSTextAlignmentCenter;
+    self.descLabel.numberOfLines = 0;
+    self.descLabel.textColor = ASRGBA(0xFF8F8A98);
+    self.descLabel.font = ASFont(@"Poppins-Regular", 20);
+    [self.view addSubview:self.descLabel];
 
+    self.dots = [NSMutableArray array];
+    self.dotsStack = [[UIStackView alloc] initWithFrame:CGRectZero];
+    self.dotsStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.dotsStack.axis = UILayoutConstraintAxisHorizontal;
+    self.dotsStack.alignment = UIStackViewAlignmentCenter;
+    self.dotsStack.distribution = UIStackViewDistributionEqualSpacing;
+    self.dotsStack.spacing = SW(12);
+    [self.view addSubview:self.dotsStack];
+
+    for (NSInteger i = 0; i < 3; i++) {
+        UIView *dot = [UIView new];
+        dot.translatesAutoresizingMaskIntoConstraints = NO;
+        dot.layer.cornerRadius = SW(4);
+        dot.layer.masksToBounds = YES;
+        [NSLayoutConstraint activateConstraints:@[
+            [dot.widthAnchor constraintEqualToConstant:SW(8)],
+            [dot.heightAnchor constraintEqualToConstant:SW(8)],
+        ]];
+        [self.dotsStack addArrangedSubview:dot];
+        [self.dots addObject:dot];
+    }
+
+    // Continue Button
     self.continueBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.continueBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    self.continueBtn.backgroundColor = ASRGB(43, 127, 255); // #2B7FFF
-    self.continueBtn.layer.cornerRadius = SW(20);
+    self.continueBtn.backgroundColor = ASRGBA(0xFF014EFE);
+    self.continueBtn.layer.cornerRadius = SW(34);
     self.continueBtn.layer.masksToBounds = YES;
-
-    [self.continueBtn setTitle:NSLocalizedString(@"Continue", nil) forState:UIControlStateNormal];
+    [self.continueBtn setTitle:NSLocalizedString(@"Continue",nil) forState:UIControlStateNormal];
     [self.continueBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    self.continueBtn.titleLabel.font = ASFont(18, UIFontWeightSemibold);
-
+    self.continueBtn.titleLabel.font = ASFont(@"Poppins-Bold", 22);
     [self.continueBtn addTarget:self action:@selector(tapContinue) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.continueBtn];
 
+    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        // bg full screen
-        [self.bgImageView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.bgImageView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.bgImageView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.bgImageView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [self.lottieView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.lottieView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.lottieView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.lottieView.heightAnchor constraintEqualToAnchor:self.view.heightAnchor multiplier:0.55],
 
-        // button
-        [self.continueBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(45)],
-        [self.continueBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(45)],
-        [self.continueBtn.heightAnchor constraintEqualToConstant:SW(56)],
-        [self.continueBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-SW(56)],
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.lottieView.bottomAnchor constant:SW(30)],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(30)],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(30)],
+
+        [self.descLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:SW(30)],
+        [self.descLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(44)],
+        [self.descLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(44)],
+
+        [self.dotsStack.topAnchor constraintEqualToAnchor:self.descLabel.bottomAnchor constant:SW(35)],
+        [self.dotsStack.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+
+        [self.continueBtn.topAnchor constraintEqualToAnchor:self.dotsStack.bottomAnchor constant:SW(35)],
+        [self.continueBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(38)],
+        [self.continueBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(38)],
+        [self.continueBtn.heightAnchor constraintEqualToConstant:SW(68)],
+        
+        [self.continueBtn.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:0],
     ]];
 }
 
 #pragma mark - Actions
 
-- (void)tapToNext {
-    if (self.index < self.images.count - 1) {
-        self.index += 1;
-        [self applyImageAtIndex:self.index animated:YES];
-    }
-}
-
 - (void)tapContinue {
-    if (self.index < self.images.count - 1) {
+    if (self.index < self.jsonPaths.count - 1) {
         self.index += 1;
-        [self applyImageAtIndex:self.index animated:YES];
+        [self applyPageAtIndex:self.index animated:YES];
     } else {
         [self startExperience];
     }
 }
 
-- (void)applyImageAtIndex:(NSInteger)idx animated:(BOOL)animated {
-    if (idx < 0 || idx >= self.images.count) return;
 
-    UIImage *img = [UIImage imageNamed:self.images[idx]];
-    if (!animated) {
-        self.bgImageView.image = img;
+- (void)applyPageAtIndex:(NSInteger)idx animated:(BOOL)animated {
+    if (idx < 0 || idx >= self.jsonPaths.count) return;
+
+    self.titleLabel.text = self.titles[idx];
+    self.descLabel.text  = self.descs[idx];
+    [self updateDotsForIndex:idx];
+
+    CompatibleAnimation *anim = [self loadCompatibleAnimationFromBundlePath:self.jsonPaths[idx]];
+    
+    if (!anim) {
+        [self.lottieView stop];
         return;
     }
 
-    [UIView transitionWithView:self.bgImageView
-                      duration:0.25
-                       options:UIViewAnimationOptionTransitionCrossDissolve
-                    animations:^{
-        self.bgImageView.image = img;
-    } completion:nil];
-}
+    void (^startAnim)(void) = ^{
+        self.lottieView.compatibleAnimation = anim;
+        [self.lottieView play];
+    };
 
-- (void)requestATTIfNeededOnFirstPage {
-    if (self.index != 0) return;
-
-    if (@available(iOS 14, *)) {
-        if ([[NSUserDefaults standardUserDefaults] boolForKey:kHasRequestedATTKey]) return;
-
-        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kHasRequestedATTKey];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-
-        ATTrackingManagerAuthorizationStatus status = ATTrackingManager.trackingAuthorizationStatus;
-        if (status != ATTrackingManagerAuthorizationStatusNotDetermined) return;
-
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [ATTrackingManager requestTrackingAuthorizationWithCompletionHandler:^(ATTrackingManagerAuthorizationStatus status) {
-                // status: Authorized / Denied / Restricted / NotDetermined
+    if (animated) {
+        [UIView animateWithDuration:0.15 animations:^{
+            self.lottieView.alpha = 0.0;
+        } completion:^(BOOL finished) {
+            startAnim();
+            [UIView animateWithDuration:0.15 animations:^{
+                self.lottieView.alpha = 1.0;
             }];
-        });
+        }];
+    } else {
+        startAnim();
     }
 }
 
-#pragma mark - Enter Main
+- (void)updateDotsForIndex:(NSInteger)idx {
+    for (NSInteger i = 0; i < self.dots.count; i++) {
+        UIView *dot = self.dots[i];
+        if (i == idx) {
+            dot.backgroundColor = ASRGBA(0xFF014EFE);
+            dot.alpha = 1.0;
+        } else {
+            dot.backgroundColor = ASRGBA(0xFF8F8A98);
+            dot.alpha = 0.2454;
+        }
+    }
+}
+
+- (CompatibleAnimation *)loadCompatibleAnimationFromBundlePath:(NSString *)fileName {
+    CompatibleAnimation *anim = [[CompatibleAnimation alloc] initWithName:fileName
+                                                             subdirectory:nil
+                                                                   bundle:[NSBundle mainBundle]];
+    return anim;
+}
+
 
 - (void)startExperience {
     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kHasCompletedOnboardingKey];
     [[NSUserDefaults standardUserDefaults] synchronize];
-
+    
     MainTabBarController *main = [MainTabBarController new];
-
-    UINavigationController *nav = self.navigationController;
-    if (!nav) {
-        UIViewController *root = self.view.window.rootViewController;
-        if ([root isKindOfClass:[UINavigationController class]]) {
-            nav = (UINavigationController *)root;
-        }
-    }
-
-    if (nav) {
-        [nav setViewControllers:@[main] animated:YES];
+    
+    UIWindow *window = self.view.window;
+    if (self.navigationController) {
+        [self.navigationController setViewControllers:@[main] animated:YES];
     } else {
-        self.view.window.rootViewController = main;
+        window.rootViewController = main;
+        [UIView transitionWithView:window
+                          duration:0.3
+                           options:UIViewAnimationOptionTransitionCrossDissolve
+                        animations:nil
+                        completion:nil];
     }
 }
 

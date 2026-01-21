@@ -234,7 +234,6 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     dispatch_async(dispatch_get_main_queue(), ^{
         SubscriptionState state = [StoreKit2Manager shared].state;
 
-        // unknown：先显示（避免刚进来闪）
         if (state == SubscriptionStateUnknown) {
             self.proCard.hidden = NO;
             self.contactTopToProCst.active = YES;
@@ -243,11 +242,9 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
             return;
         }
 
-        BOOL isActive = (state == SubscriptionStateActive);
-
-        self.proCard.hidden = isActive;
-        self.contactTopToProCst.active = !isActive;
-        self.contactTopToTitleCst.active = isActive;
+        self.proCard.hidden = [PaywallPresenter shared].isProActive;;
+        self.contactTopToProCst.active = ![PaywallPresenter shared].isProActive;;
+        self.contactTopToTitleCst.active = [PaywallPresenter shared].isProActive;;
 
         [self.view layoutIfNeeded];
     });

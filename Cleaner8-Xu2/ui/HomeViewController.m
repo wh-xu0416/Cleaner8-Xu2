@@ -620,7 +620,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
             return;
         }
 
-        self->_proBtn.hidden = isActive;
+        self->_proBtn.hidden = [PaywallPresenter shared].isProActive;
     });
 }
 

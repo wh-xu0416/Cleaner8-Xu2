@@ -5,6 +5,7 @@
 #import "ASMediaPreviewViewController.h"
 #import "ResultViewController.h"
 #import "Common.h"
+#import "PaywallPresenter.h"
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
@@ -2351,6 +2352,21 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
 #pragma mark - Delete
 
+- (NSString *)paywallSourceForDelete {
+    switch (self.mode) {
+        case ASAssetListModeSimilarImage:        return @"similar_photo_delete";
+        case ASAssetListModeSimilarVideo:        return @"similar_video_delete";
+        case ASAssetListModeDuplicateImage:      return @"duplication_photo_delete";
+        case ASAssetListModeDuplicateVideo:      return @"duplication_video_delete";
+        case ASAssetListModeScreenshots:         return @"screenshots_delete";
+        case ASAssetListModeScreenRecordings:    return @"screenrecordings_delete";
+        case ASAssetListModeBigVideos:           return @"bigvideos_delete";
+        case ASAssetListModeBlurryPhotos:        return @"blurryphotos_delete";
+        case ASAssetListModeOtherPhotos:         return @"otherphotos_delete";
+    }
+    return @"assetlist_delete";
+}
+
 - (void)onDelete {
     if (self.selectedIds.count == 0) return;
 
@@ -2387,7 +2403,12 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
         if (!self) return;
 
         if (self.selectedIds.count == 0) return;
-
+    
+        if (![PaywallPresenter shared].isProActive) {
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:[self paywallSourceForDelete]];
+            return;
+        }
+        
         NSSet<NSString *> *toDelete = [self.selectedIds copy];
         NSArray<NSString *> *ids = toDelete.allObjects;
 
@@ -2402,7 +2423,6 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (!success) return;
-                [weakSelf2.selectedIds removeAllObjects];
 
                 NSUInteger deletedCount = toDelete.count;
                 uint64_t freedBytes = weakSelf2.selectedBytes;
@@ -2412,7 +2432,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
                                                          freedBytes:freedBytes];
                 [weakSelf2.navigationController pushViewController:r animated:YES];
 
-                [[ASPhotoScanManager shared] applyLocalDeletionsForUI:ids];
+                [weakSelf2.selectedIds removeAllObjects];
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     [weakSelf2 rebuildDataFromManager];
                     dispatch_async(dispatch_get_main_queue(), ^{
