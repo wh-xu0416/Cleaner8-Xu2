@@ -6,7 +6,7 @@
 #import "ASArchivedFilesViewController.h"
 #import "Common.h"
 #import <CoreImage/CoreImage.h>
-
+#import <PhotosUI/PhotosUI.h>
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
@@ -255,7 +255,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 
 #pragma mark - Card View
 
-@interface SwipeCardView : UIView
+@interface SwipeCardView : UIView <PHLivePhotoViewDelegate>
 @property (nonatomic, copy) NSString *assetID;
 @property (nonatomic, strong) UIImageView *imageView;
 @property (nonatomic, strong) UIImageView *hintImageView;
@@ -265,6 +265,10 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 @property (nonatomic, strong) UIImage *rawImage;
 
 @property (nonatomic, assign) BOOL sw_revealWhenReady;
+@property (nonatomic, strong) UIButton *liveBadgeButton;
+@property (nonatomic, strong) PHLivePhotoView *livePhotoView;
+@property (nonatomic, assign) BOOL isLivePhoto;
+@property (nonatomic, copy) void (^liveTappedBlock)(SwipeCardView *card);
 @end
 
 @implementation SwipeCardView
@@ -289,6 +293,56 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         _hintImageView.hidden = YES;
         _hintImageView.alpha = 1.0;
         [self addSubview:_hintImageView];
+        
+        _liveBadgeButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        _liveBadgeButton.translatesAutoresizingMaskIntoConstraints = NO;
+        _liveBadgeButton.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+        _liveBadgeButton.layer.cornerRadius = SW(16);
+        _liveBadgeButton.layer.masksToBounds = YES;
+
+        if (@available(iOS 13.0, *)) {
+            UIImage *sys = [UIImage systemImageNamed:@"livephoto"];
+            sys = [sys imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+            [_liveBadgeButton setImage:sys forState:UIControlStateNormal];
+            _liveBadgeButton.tintColor = UIColor.whiteColor;
+        } else {
+            UIImage *img = [[UIImage imageNamed:@"ic_livephoto"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+            [_liveBadgeButton setImage:img forState:UIControlStateNormal];
+            _liveBadgeButton.tintColor = UIColor.whiteColor;
+        }
+
+        [_liveBadgeButton setTitle:NSLocalizedString(@"Live",nil) forState:UIControlStateNormal];
+        [_liveBadgeButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        _liveBadgeButton.titleLabel.font = SWFontS(15, UIFontWeightSemibold);
+        _liveBadgeButton.titleLabel.numberOfLines = 1;
+        _liveBadgeButton.titleLabel.lineBreakMode = NSLineBreakByClipping;
+
+        _liveBadgeButton.contentEdgeInsets = UIEdgeInsetsMake(SW(4), SW(15), SW(4), SW(10));
+
+        _liveBadgeButton.imageEdgeInsets = UIEdgeInsetsMake(0, -SW(5), 0, SW(5));
+
+        _liveBadgeButton.hidden = YES;
+
+        [_liveBadgeButton setContentHuggingPriority:UILayoutPriorityRequired
+                                            forAxis:UILayoutConstraintAxisHorizontal];
+        [_liveBadgeButton setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                                          forAxis:UILayoutConstraintAxisHorizontal];
+
+        [_liveBadgeButton addTarget:self
+                             action:@selector(sw_liveBadgeTapped)
+                   forControlEvents:UIControlEventTouchUpInside];
+
+        UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(sw_liveBadgeLongPressed:)];
+        lp.minimumPressDuration = 0.3;
+        [_liveBadgeButton addGestureRecognizer:lp];
+
+        [self addSubview:_liveBadgeButton];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [_liveBadgeButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:SW(10)],
+            [_liveBadgeButton.topAnchor constraintEqualToAnchor:self.topAnchor constant:SW(10)],
+            [_liveBadgeButton.heightAnchor constraintEqualToConstant:SW(32)],
+        ]];
     }
     return self;
 }
@@ -296,6 +350,10 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 - (void)layoutSubviews {
     [super layoutSubviews];
     _imageView.frame = self.bounds;
+    if (self.livePhotoView) {
+        self.livePhotoView.frame = _imageView.bounds;
+    }
+
     UIImage *img = self.hintImageView.image;
     CGSize sz = img ? img.size : CGSizeZero;
     CGFloat w = sz.width;
@@ -304,6 +362,11 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
     self.hintImageView.frame = CGRectMake((self.bounds.size.width  - w) * 0.5,
                                           (self.bounds.size.height - h) * 0.5,
                                           w, h);
+}
+
+- (void)livePhotoView:(PHLivePhotoView *)livePhotoView
+  didEndPlaybackWithStyle:(PHLivePhotoViewPlaybackStyle)playbackStyle {
+    livePhotoView.hidden = YES;
 }
 
 - (void)sw_updateHintForTranslationX:(CGFloat)x {
@@ -319,6 +382,43 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         [self setNeedsLayout];
     }
     self.hintImageView.hidden = NO;
+}
+
+- (void)sw_fireHaptic {
+    if (@available(iOS 10.0, *)) {
+        UIImpactFeedbackGenerator *gen = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+        [gen impactOccurred];
+    }
+}
+
+- (void)sw_liveBadgeTapped {
+    [self sw_fireHaptic];
+    if (self.liveTappedBlock) {
+        self.liveTappedBlock(self);
+    }
+}
+
+- (void)sw_liveBadgeLongPressed:(UILongPressGestureRecognizer *)gr {
+    switch (gr.state) {
+        case UIGestureRecognizerStateBegan: {
+            [self sw_fireHaptic];
+            if (self.liveTappedBlock) {
+                self.liveTappedBlock(self);
+            }
+            break;
+        }
+        case UIGestureRecognizerStateEnded:
+        case UIGestureRecognizerStateCancelled:
+        case UIGestureRecognizerStateFailed: {
+            if (self.livePhotoView) {
+                [self.livePhotoView stopPlayback];
+                self.livePhotoView.hidden = YES;
+            }
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 @end
@@ -502,7 +602,6 @@ static inline NSString *SWImgKey(NSString *prefix, NSString *aid, CGSize px) {
     g.frame = CGRectMake(0, 0, UIScreen.mainScreen.bounds.size.width, SW(307));
     [self.topGradientView.layer insertSublayer:g atIndex:0];
 
-    // ===== Title bar =====
     self.titleBar = [UIView new];
     self.titleBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleBar.backgroundColor = UIColor.clearColor;
@@ -2816,10 +2915,17 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     card.assetID = assetID;
     card.representedAssetID = assetID;
 
-    // ✅ 复用时先清掉旧图，避免错图闪现
     card.rawImage = nil;
     card.imageView.image = nil;
 
+    card.isLivePhoto = NO;
+    card.liveBadgeButton.hidden = YES;
+    card.liveTappedBlock = nil;
+    if (card.livePhotoView) {
+        card.livePhotoView.hidden = YES;
+        card.livePhotoView.livePhoto = nil;
+    }
+    
     card.sw_revealWhenReady = showWhenReady;
     if (showWhenReady) {
         card.hidden = YES;
@@ -2842,6 +2948,21 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     PHAsset *asset = [self assetForID:assetID];
     if (!asset) return;
+
+    BOOL isLive = (asset.mediaSubtypes & PHAssetMediaSubtypePhotoLive) != 0;
+    card.isLivePhoto = isLive;
+    card.liveBadgeButton.hidden = !isLive;
+
+    if (isLive) {
+        __weak typeof(self) ws = self;
+        __weak SwipeCardView *wcard = card;
+        card.liveTappedBlock = ^(SwipeCardView * _Nonnull tappedCard) {
+            __strong typeof(ws) self = ws;
+            SwipeCardView *strongCard = tappedCard ?: wcard;
+            if (!self || !strongCard) return;
+            [self sw_playLivePhotoOnCard:strongCard];
+        };
+    }
 
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.networkAccessAllowed = YES;
@@ -2870,17 +2991,14 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
             if (!self || !scard) return;
             if (![scard.representedAssetID isEqualToString:assetID]) return;
 
-            // ✅ rawImage：先用低清顶住，高清到来再覆盖
             if (!scard.rawImage || !degraded) {
                 scard.rawImage = result;
             }
 
-            // ✅ 高清才进清晰缓存
             if (!degraded) {
                 [self.cardImageCache setObject:result forKey:sharpKey];
             }
 
-            // ✅ 不直接把 result 塞给 imageView（否则非顶卡会变清晰）
             [self sw_applyVisualForCard:scard];
         });
     }];
@@ -2949,5 +3067,64 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     }];
 }
 
+#pragma mark - Live Photo 播放
+
+- (void)sw_playLivePhotoOnCard:(SwipeCardView *)card {
+    if (card.assetID.length == 0) return;
+
+    PHAsset *asset = [self assetForID:card.assetID];
+    if (!asset) return;
+
+    if (!(asset.mediaSubtypes & PHAssetMediaSubtypePhotoLive)) {
+        return;
+    }
+
+    NSString *aid = [card.assetID copy];
+
+    if (!card.livePhotoView) {
+        card.livePhotoView = [[PHLivePhotoView alloc] initWithFrame:card.imageView.bounds];
+        card.livePhotoView.contentMode = UIViewContentModeScaleAspectFit;
+        card.livePhotoView.clipsToBounds = YES;
+        card.livePhotoView.userInteractionEnabled = NO;
+        card.livePhotoView.hidden = YES;
+        card.livePhotoView.delegate = card;
+        [card insertSubview:card.livePhotoView aboveSubview:card.imageView];
+    } else {
+        card.livePhotoView.frame = card.imageView.bounds;
+    }
+
+    if (card.livePhotoView.livePhoto) {
+        card.livePhotoView.hidden = NO;
+        [card.livePhotoView startPlaybackWithStyle:PHLivePhotoViewPlaybackStyleFull];
+        return;
+    }
+
+    PHLivePhotoRequestOptions *opt = [PHLivePhotoRequestOptions new];
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    opt.networkAccessAllowed = YES;
+
+    __weak typeof(self) ws = self;
+    __weak SwipeCardView *wcard = card;
+
+    [self.imageManager requestLivePhotoForAsset:asset
+                                     targetSize:card.imageView.bounds.size
+                                    contentMode:PHImageContentModeAspectFit
+                                        options:opt
+                                  resultHandler:^(PHLivePhoto * _Nullable livePhoto, NSDictionary * _Nullable info) {
+        if (!livePhoto) return;
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(ws) self = ws;
+            SwipeCardView *scard = wcard;
+            if (!self || !scard) return;
+
+            if (![scard.assetID isEqualToString:aid]) return;
+
+            scard.livePhotoView.livePhoto = livePhoto;
+            scard.livePhotoView.hidden = NO;
+            [scard.livePhotoView startPlaybackWithStyle:PHLivePhotoViewPlaybackStyleFull];
+        });
+    }];
+}
 
 @end
