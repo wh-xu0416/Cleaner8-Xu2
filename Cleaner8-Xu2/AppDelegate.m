@@ -8,9 +8,11 @@
 #import "ASABTestManager.h"
 #import "Cleaner8_Xu2-Swift.h"
 
+#ifdef DEBUG
 static inline void ASLog(NSString *module, NSString *msg) {
     NSLog(@"【%@】%@", module ?: @"日志", msg ?: @"");
 }
+#endif
 
 static inline NSString *ASATTStatusText(NSInteger status) {
     switch (status) {
@@ -33,17 +35,14 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-
     NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
     if (![ud objectForKey:kASFirstInstallTSKey]) {
         [ud setDouble:[[NSDate date] timeIntervalSince1970] forKey:kASFirstInstallTSKey];
     }
     
-    ASLog(@"App", @"应用启动：didFinishLaunching 开始");
-
     // Firebase
-    ASLog(@"Firebase", @"初始化");
     if (AppConstants.firebaseEnabled) {
+        ASLog(@"Firebase", @"初始化");
         [FIRApp configure];
         ASLog(@"Firebase", @"已启用并完成 configure");
     } else {
@@ -101,12 +100,12 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
     if (self.as_attRequested) return;
     self.as_attRequested = YES;
 
-    ASLog(@"ATT", @"请求开始：准备弹出/查询 ATT 授权状态");
+    ASLog(@"ATT", @"请求开始 准备弹出/查询 ATT 授权状态");
 
     [ASTrackingPermission requestIfNeededWithDelay:0.0 completion:^(NSInteger status) {
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            ASLog(@"ATT", [NSString stringWithFormat:@"请求结束：状态=%@（%ld）",
+            ASLog(@"ATT", [NSString stringWithFormat:@"请求结束 状态=%@（%ld）",
                            ASATTStatusText(status), (long)status]);
 
             self.as_attFinished = YES;
@@ -118,9 +117,7 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
 #pragma mark - SDK setup
 
 - (void)setupThinkingData {
-
     ASLog(@"(ThinkingData)", @"初始化开始");
-
     NSString *appId = AppConstants.thinkingDataAppId;
     NSString *serverUrl = AppConstants.thinkingDataServerUrl;
 
@@ -130,9 +127,9 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
     NSString *deviceId = [TDAnalytics getDeviceId];
     if (deviceId.length > 0) {
         [TDAnalytics setDistinctId:deviceId];
-        ASLog(@"(ThinkingData)", [NSString stringWithFormat:@"设置 distinctId 成功：%@", deviceId]);
+        ASLog(@"(ThinkingData)", [NSString stringWithFormat:@"设置 distinctId 成功 %@", deviceId]);
     } else {
-        ASLog(@"(ThinkingData)", @"设置 distinctId 失败：deviceId 为空");
+        ASLog(@"(ThinkingData)", @"设置 distinctId 失败 deviceId 为空");
     }
 
     [TDAnalytics enableAutoTrack:(TDAutoTrackEventTypeAppInstall
@@ -140,8 +137,7 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
                                   | TDAutoTrackEventTypeAppEnd)];
 
     [TDAnalytics enableThirdPartySharing:TDThirdPartyTypeAppsFlyer];
-
-    ASLog(@"(ThinkingData)", @"初始化结束：本地初始化已完成（网络是否可达看后续 sync 请求）");
+    ASLog(@"(ThinkingData)", @"初始化结束");
 }
 
 - (void)setupAppsFlyer {
@@ -156,7 +152,7 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
 
     NSTimeInterval timeout = (NSTimeInterval)AppConstants.appsFlyerAttWaitTimeout;
     [af waitForATTUserAuthorizationWithTimeoutInterval:timeout];
-    ASLog(@"AppsFlyer", [NSString stringWithFormat:@"初始化结束：参数已配置 + 已设置 waitForATT(%.0fs)", timeout]);
+    ASLog(@"AppsFlyer", [NSString stringWithFormat:@"初始化结束 已设置 waitForATT(%.0fs)", timeout]);
 }
 
 #pragma mark - AppsFlyer start (after ATT)
@@ -172,29 +168,29 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
     if (self.as_afStarted) return;
 
     if (!self.as_attFinished) {
-        ASLog(@"AppsFlyer", @"启动中止：ATT 尚未结束");
+        ASLog(@"AppsFlyer", @"启动中止 ATT 尚未结束");
         return;
     }
 
     UIApplicationState state = [UIApplication sharedApplication].applicationState;
     if (state != UIApplicationStateActive) {
-        ASLog(@"AppsFlyer", [NSString stringWithFormat:@"启动中止：应用非激活态（state=%ld）", (long)state]);
+        ASLog(@"AppsFlyer", [NSString stringWithFormat:@"启动中止 应用非激活态（state=%ld）", (long)state]);
         return;
     }
 
-    ASLog(@"AppsFlyer", @"启动开始：准备设置 customerUserID 并调用 start");
+    ASLog(@"AppsFlyer", @"启动开始 准备设置 customerUserID 并调用 start");
 
     NSString *distinctId = nil;
     @try { distinctId = [TDAnalytics getDistinctId]; } @catch (__unused NSException *e) {}
 
     if (distinctId.length > 0) {
         [[AppsFlyerLib shared] setCustomerUserID:distinctId];
-        ASLog(@"AppsFlyer", [NSString stringWithFormat:@"customerUserID 设置成功：%@", distinctId]);
+        ASLog(@"AppsFlyer", [NSString stringWithFormat:@"customerUserID 设置成功 %@", distinctId]);
     } else {
-        ASLog(@"AppsFlyer", @"customerUserID 未设置：distinctId 为空");
+        ASLog(@"AppsFlyer", @"customerUserID 未设置 distinctId 为空");
     }
 
-    ASLog(@"AppsFlyer", [NSString stringWithFormat:@"关键参数：DevKey=%@ AppleAppId=%@",
+    ASLog(@"AppsFlyer", [NSString stringWithFormat:@"关键参数 DevKey=%@ AppleAppId=%@",
                          AppConstants.appsFlyerDevKey,
                          AppConstants.appsFlyerAppleAppId]);
 
@@ -205,13 +201,13 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
 #pragma mark - AppsFlyerLibDelegate
 
 - (void)onConversionDataSuccess:(NSDictionary *)conversionInfo {
-    ASLog(@"AppsFlyer", [NSString stringWithFormat:@"成功：%@", conversionInfo ?: @{}]);
+    ASLog(@"AppsFlyer", [NSString stringWithFormat:@"成功 %@", conversionInfo ?: @{}]);
     [[LTEventTracker shared] track:@"Appsflyer_client" properties:@{@"step": @"c_af_init"}];
 }
 
 - (void)onConversionDataFail:(NSError *)error {
     NSString *err = error.localizedDescription ?: @"";
-    ASLog(@"AppsFlyer", [NSString stringWithFormat:@"失败：%@", err]);
+    ASLog(@"AppsFlyer", [NSString stringWithFormat:@"失败 %@", err]);
 }
 
 - (void)onAppOpenAttribution:(NSDictionary *)attributionData {}
