@@ -1,3 +1,4 @@
+#import "LTEventTracker.h"
 #import "ASPhotoScanManager.h"
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
@@ -1064,7 +1065,7 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
             dispatch_async(dispatch_get_main_queue(), showPermissionPlaceholder);
         }
     };
-
+    
     PHAuthorizationStatus raw = [self as_rawPhotoAuthStatus];
     ASPhotoAuthState current = [self as_currentAuthState];
 
@@ -1085,10 +1086,29 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     }
 
     if (raw == PHAuthorizationStatusNotDetermined) {
+        [[LTEventTracker shared] track:@"Permission_status"
+                            properties:@{@"permission_name": @"photo",
+                                         @"permission_status": @"show"}];
+
         __weak typeof(self) weakSelf = self;
         [self as_requestPhotoPermission:^(ASPhotoAuthState st) {
             __strong typeof(weakSelf) self = weakSelf;
             if (!self) return;
+
+            NSString *status = @"permanentlyDenied";
+            if (st == ASPhotoAuthStateFull) {
+                status = @"granted";
+            } else if (st == ASPhotoAuthStateLimited) {
+                status = @"limited";
+            } else if (st == ASPhotoAuthStateNone) {
+                status = @"permanentlyDenied";
+            } else {
+                status = @"permanentlyDenied";
+            }
+
+            [[LTEventTracker shared] track:@"Permission_status"
+                                properties:@{@"permission_name": @"photo",
+                                             @"permission_status": status}];
 
             [self as_storeAuthState:st];
 
@@ -4082,6 +4102,9 @@ static inline void ASDCT1D_64(const float *in, float *out) {
         lastT = t;
         [self emitProgress];
     }
+}
+
+- (void)applyDeletedLocalIds:(nonnull NSSet<NSString *> *)deletedIds {
 }
 
 @end

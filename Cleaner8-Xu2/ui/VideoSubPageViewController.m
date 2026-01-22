@@ -6,6 +6,7 @@
 #import "ASAssetListViewController.h"
 #import "Common.h"
 #import "VideoCompressionMainViewController.h"
+#import "LTEventTracker.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -773,7 +774,7 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
         makeVM(ASVideoSubCardTypeSimilar,    NSLocalizedString(@"Similar Videos", nil),    simThumbs, simVid.count, simBytes),
         makeVM(ASVideoSubCardTypeDuplicate,  NSLocalizedString(@"Duplicate Videos", nil),  dupThumbs, dupVid.count, dupBytes),
         makeVM(ASVideoSubCardTypeRecordings, NSLocalizedString(@"Screen Recording", nil), recThumbs, recs.count,   recBytes),
-        makeVM(ASVideoSubCardTypeBig,        NSLocalizedString(@"Big Videos", nil),        bigThumbs, bigs.count,   bigBytes),
+        makeVM(ASVideoSubCardTypeBig,        NSLocalizedString(@"Large Videos", nil),        bigThumbs, bigs.count,   bigBytes),
         cvm,
     ];
 
@@ -844,10 +845,20 @@ typedef NS_ENUM(NSUInteger, ASVideoSubCardType) {
 
     ASAssetListMode mode = ASAssetListModeSimilarVideo;
     switch (vm.type) {
-        case ASVideoSubCardTypeSimilar:    mode = ASAssetListModeSimilarVideo; break;
-        case ASVideoSubCardTypeDuplicate:  mode = ASAssetListModeDuplicateVideo; break;
-        case ASVideoSubCardTypeRecordings: mode = ASAssetListModeScreenRecordings; break;
-        case ASVideoSubCardTypeBig:        mode = ASAssetListModeBigVideos; break;
+        case ASVideoSubCardTypeSimilar:{
+            [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"similar_video"}];
+            mode = ASAssetListModeSimilarVideo; break;
+        }
+        case ASVideoSubCardTypeDuplicate: {
+            [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"duplicate_video"}];
+            mode = ASAssetListModeDuplicateVideo; break;
+        }
+        case ASVideoSubCardTypeRecordings: {
+            mode = ASAssetListModeScreenRecordings; break;
+        }
+        case ASVideoSubCardTypeBig: {
+            mode = ASAssetListModeBigVideos; break;
+        }
         default: break;
     }
 

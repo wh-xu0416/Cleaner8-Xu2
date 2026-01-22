@@ -6,6 +6,7 @@
 #import <UIKit/UIKit.h>
 #import "UIViewController+ASPrivateBackground.h"
 #import "PaywallPresenter.h"
+#import "ASReviewHelper.h"
 
 #pragma mark - UI Helpers
 
@@ -304,7 +305,7 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
     }
     
     if (![PaywallPresenter shared].isProActive) {
-        [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact_delete_backup"];
+        [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact"];
         return;
     }
     [self confirmDeleteSelectedBackups];
@@ -329,6 +330,7 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
                 NSLog(@"delete backups failed: %@", error.localizedDescription);
                 return;
             }
+            [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
             [weakSelf.selectedBackupIds removeAllObjects];
             [weakSelf loadBackups]; 
         }];

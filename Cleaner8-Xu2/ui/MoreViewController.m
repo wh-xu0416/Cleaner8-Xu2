@@ -3,6 +3,7 @@
 #import "ASContactsViewController.h"
 #import "Common.h"
 #import "PaywallPresenter.h"
+#import "ASReviewHelper.h"
 
 #pragma mark - UI Helpers
 
@@ -454,7 +455,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 }
 
 - (void)tapFeedBack {
-
+    [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeySetRateRate];
 }
 
 - (void)tapSetting {

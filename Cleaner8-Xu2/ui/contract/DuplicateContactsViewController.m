@@ -3,6 +3,7 @@
 #import "ASSelectTitleBar.h"
 #import "Common.h"
 #import "PaywallPresenter.h"
+#import "ASReviewHelper.h"
 #import <Contacts/Contacts.h>
 #import <UIKit/UIKit.h>
 #import <ContactsUI/ContactsUI.h>
@@ -852,7 +853,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
     if (n < 2) return;
 
     if (![PaywallPresenter shared].isProActive) {
-        [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact_merge"];
+        [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact"];
         return;
     }
   
@@ -950,6 +951,8 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
 - (void)mergeBatchesSequentially:(NSArray<NSArray<NSString *> *> *)batches index:(NSInteger)idx {
     if (idx >= (NSInteger)batches.count) {
+        [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
+
         [self showToastDone];
 
         self.floatingButton.enabled = YES;

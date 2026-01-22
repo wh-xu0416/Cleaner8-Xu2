@@ -6,6 +6,7 @@
 #import "ResultViewController.h"
 #import "Common.h"
 #import "PaywallPresenter.h"
+#import "ASReviewHelper.h"
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
@@ -1989,7 +1990,7 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
         case ASAssetListModeDuplicateVideo: return NSLocalizedString(@"Duplicate Videos", nil);
         case ASAssetListModeScreenshots: return NSLocalizedString(@"Screenshots", nil);
         case ASAssetListModeScreenRecordings: return NSLocalizedString(@"Screen Recoeding", nil);
-        case ASAssetListModeBigVideos: return NSLocalizedString(@"Big Videos", nil);
+        case ASAssetListModeBigVideos: return NSLocalizedString(@"Large Videos", nil);
         case ASAssetListModeBlurryPhotos: return NSLocalizedString(@"Blurry Photos", nil);
         case ASAssetListModeOtherPhotos: return NSLocalizedString(@"Other Photos", nil);
     }
@@ -2354,17 +2355,17 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
 - (NSString *)paywallSourceForDelete {
     switch (self.mode) {
-        case ASAssetListModeSimilarImage:        return @"similar_photo_delete";
-        case ASAssetListModeSimilarVideo:        return @"similar_video_delete";
-        case ASAssetListModeDuplicateImage:      return @"duplication_photo_delete";
-        case ASAssetListModeDuplicateVideo:      return @"duplication_video_delete";
-        case ASAssetListModeScreenshots:         return @"screenshots_delete";
-        case ASAssetListModeScreenRecordings:    return @"screenrecordings_delete";
-        case ASAssetListModeBigVideos:           return @"bigvideos_delete";
-        case ASAssetListModeBlurryPhotos:        return @"blurryphotos_delete";
-        case ASAssetListModeOtherPhotos:         return @"otherphotos_delete";
+        case ASAssetListModeSimilarImage:        return @"similar_photo";
+        case ASAssetListModeSimilarVideo:        return @"similar_video";
+        case ASAssetListModeDuplicateImage:      return @"duplicate_photo";
+        case ASAssetListModeDuplicateVideo:      return @"duplicate_video";
+        case ASAssetListModeScreenshots:         return @"screenshots";
+        case ASAssetListModeScreenRecordings:    return @"screen_recording";
+        case ASAssetListModeBigVideos:           return @"large_video";
+        case ASAssetListModeBlurryPhotos:        return @"blurry";
+        case ASAssetListModeOtherPhotos:         return @"other_photo";
     }
-    return @"assetlist_delete";
+    return @"asset_delete";
 }
 
 - (void)onDelete {
@@ -2423,6 +2424,8 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
 
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (!success) return;
+
+                [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
 
                 NSUInteger deletedCount = toDelete.count;
                 uint64_t freedBytes = weakSelf2.selectedBytes;

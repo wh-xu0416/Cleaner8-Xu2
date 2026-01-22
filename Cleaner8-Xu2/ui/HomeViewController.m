@@ -8,6 +8,7 @@
 #import "ASPrivatePermissionBanner.h"
 #import "Common.h"
 #import "PaywallPresenter.h"
+#import "LTEventTracker.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -613,8 +614,6 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
     dispatch_async(dispatch_get_main_queue(), ^{
         SubscriptionState state = [StoreKit2Manager shared].state;
 
-        BOOL isActive = (state == SubscriptionStateActive);
-
         if (state == SubscriptionStateUnknown) {
             self->_proBtn.hidden = NO;
             return;
@@ -625,7 +624,7 @@ typedef NS_ENUM(NSUInteger, ASHomeCardType) {
 }
 
 - (void)tapProBtn {
-    [[PaywallPresenter shared] showSubscriptionPageWithSource:@"home"];
+    [[PaywallPresenter shared] showSubscriptionPageWithSource:@"main_center"];
 }
 
 - (void)dealloc {
@@ -1190,6 +1189,10 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    
+    [[LTEventTracker shared] track:@"start_page"
+                        properties:@{@"page_name": @"Home_show"}];
+    
     [self setupUI];
     [self computeDiskSpace];
     
@@ -2012,20 +2015,16 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
     if (groups.count == 0 || maxCount == 0) return @[];
 
-    // 1. 找到所有该类型的组
     NSMutableArray<ASAssetGroup *> *candidates = [NSMutableArray array];
     for (ASAssetGroup *g in groups) {
         if (g.type != type) continue;
-        if (g.assets.count < 2) continue; // 只有1张的不算组
+        if (g.assets.count < 2) continue;
         [candidates addObject:g];
     }
     
     if (candidates.count == 0) return @[];
 
-    // 2. 按组内“最新一张照片的时间”对组进行排序 (降序)
     [candidates sortUsingComparator:^NSComparisonResult(ASAssetGroup *g1, ASAssetGroup *g2) {
-        // 取每个组的第一个asset（通常是原本逻辑里已排好序的，或者是key asset）
-        // 如果 ASAssetModel 有 creationDate，直接用。
         NSDate *d1 = [NSDate distantPast];
         NSDate *d2 = [NSDate distantPast];
         
@@ -2035,11 +2034,9 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
         return [d2 compare:d1]; // 降序
     }];
 
-    // 3. 取最新那一组的 Top N LocalIDs
     ASAssetGroup *bestGroup = candidates.firstObject;
     NSMutableArray<NSString *> *outIds = [NSMutableArray array];
     
-    // 假设组内 assets 已经是按时间或相似度排好的，如果没排好，这里可以再排一次 assets
     NSArray<ASAssetModel *> *sortedAssets = [bestGroup.assets sortedArrayUsingComparator:^NSComparisonResult(ASAssetModel *m1, ASAssetModel *m2) {
         NSDate *d1 = m1.creationDate ?: [NSDate distantPast];
         NSDate *d2 = m2.creationDate ?: [NSDate distantPast];
@@ -2470,21 +2467,25 @@ referenceSizeForHeaderInSection:(NSInteger)section {
 
     switch (vm.type) {
         case ASHomeCardTypeSimilarPhotos: {
+            [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"similar_photo"}];
             ASAssetListViewController *vc = [[ASAssetListViewController alloc] initWithMode:ASAssetListModeSimilarImage];
             [nav pushViewController:vc animated:YES];
         } break;
 
         case ASHomeCardTypeDuplicatePhotos: {
+            [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"duplicate_photo"}];
             ASAssetListViewController *vc = [[ASAssetListViewController alloc] initWithMode:ASAssetListModeDuplicateImage];
             [nav pushViewController:vc animated:YES];
         } break;
 
         case ASHomeCardTypeScreenshots: {
+            [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"screenshots"}];
             ASAssetListViewController *vc = [[ASAssetListViewController alloc] initWithMode:ASAssetListModeScreenshots];
             [nav pushViewController:vc animated:YES];
         } break;
 
         case ASHomeCardTypeBlurryPhotos: {
+            [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"blurphoto"}];
             ASAssetListViewController *vc = [[ASAssetListViewController alloc] initWithMode:ASAssetListModeBlurryPhotos];
             [nav pushViewController:vc animated:YES];
         } break;

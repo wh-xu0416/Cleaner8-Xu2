@@ -555,7 +555,7 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
         if (!self) return;
 
         if (![PaywallPresenter shared].isProActive) {
-            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"swipe_delete"];
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"swipe_page"];
             return;
         }
         

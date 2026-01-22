@@ -726,9 +726,8 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
    
     if (![PaywallPresenter shared].isProActive) {
 
-        NSString *source = @"image_compress";
+        NSString *source = @"photo_compress";
 
-        // 方案1：看第一个资源（通常你的压缩入口一次只会选一种类型）
         PHAsset *asset = (PHAsset *)self.assets.firstObject;
         if ((asset.mediaSubtypes & PHAssetMediaSubtypePhotoLive) != 0) {
             source = @"livephoto_compress";

@@ -6,6 +6,7 @@
 #import <ContactsUI/ContactsUI.h>
 #import "Common.h"
 #import "PayWallPresenter.h"
+#import "ASReviewHelper.h"
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
@@ -919,19 +920,19 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
 - (void)onSingleAction {
     if (self.mode == AllContactsModeBackup) {
         if (![PaywallPresenter shared].isProActive) {
-            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact_delete_backup"];
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact"];
             return;
         }
         [self doBackupSelected];
     } else if (self.mode == AllContactsModeIncomplete) {
         if (![PaywallPresenter shared].isProActive) {
-            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact_delete_incomplete"];
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact"];
             return;
         }
         [self confirmDeleteIncompleteThenRun];
     } else {
         if (![PaywallPresenter shared].isProActive) {
-            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact_delete"];
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:@"contact"];
             return;
         }
         [self confirmDeleteAllContactsWithBackupOption];
@@ -1005,6 +1006,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                     [weakSelf showAlertWithTitle:NSLocalizedString(@"Delete failed.", nil) message:error3.localizedDescription];
                     return;
                 }
+                [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
 
                 NSIndexSet *rm = [weakSelf.contacts indexesOfObjectsPassingTest:^BOOL(CNContact *obj, NSUInteger idx, BOOL *stop) {
                     (void)idx; (void)stop;
@@ -1067,6 +1069,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                 [weakSelf showAlertWithTitle:NSLocalizedString(@"Delete failed", nil) message:error2.localizedDescription];
                 return;
             }
+            [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
 
             NSIndexSet *rm = [weakSelf.contacts indexesOfObjectsPassingTest:^BOOL(CNContact *obj, NSUInteger idx, BOOL *stop) {
                 (void)idx; (void)stop;
@@ -1118,6 +1121,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                 [weakSelf showAlertWithTitle:NSLocalizedString(@"Backup failed.", nil) message:error2.localizedDescription];
                 return;
             }
+            [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
 
             [[NSNotificationCenter defaultCenter] postNotificationName:@"CMBackupDidFinish" object:nil];
 
@@ -1182,6 +1186,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                 [weakSelf showAlertWithTitle:NSLocalizedString(@"Delete failed.", nil) message:error2.localizedDescription];
                 return;
             }
+            [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
 
             NSIndexSet *rm = [weakSelf.contacts indexesOfObjectsPassingTest:^BOOL(CNContact *obj, NSUInteger idx, BOOL *stop) {
                 (void)idx; (void)stop;

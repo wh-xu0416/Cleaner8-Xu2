@@ -1,6 +1,7 @@
 #import "OnboardingViewController.h"
 #import "MainTabBarController.h"
 #import "Common.h"
+#import "LTEventTracker.h"
 #import <AdSupport/AdSupport.h>
 
 @import Lottie;
@@ -44,6 +45,7 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
 @property(nonatomic,strong) NSArray<NSString *> *descs;
 
 @property(nonatomic,assign) NSInteger index;
+@property(nonatomic,strong) NSMutableSet<NSNumber *> *trackedIndexes;
 @end
 
 @implementation OnboardingViewController
@@ -55,7 +57,7 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-
+    
     self.view.backgroundColor = ASRGBA(0xFFF7F7F9);
 
     self.jsonPaths = @[@"data1", @"data2", @"data3"];
@@ -161,6 +163,18 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
 
 #pragma mark - Actions
 
+- (void)trackGuidePageIfNeededForIndex:(NSInteger)idx {
+    if (idx < 0 || idx >= self.jsonPaths.count) return;
+
+    NSNumber *key = @(idx);
+    if ([self.trackedIndexes containsObject:key]) return;
+    [self.trackedIndexes addObject:key];
+
+    NSString *pageName = [NSString stringWithFormat:@"guide_page_%ld", (long)(idx + 1)];
+    [[LTEventTracker shared] track:@"start_page"
+                        properties:@{@"page_name": pageName}];
+}
+
 - (void)tapContinue {
     if (self.index < self.jsonPaths.count - 1) {
         self.index += 1;
@@ -170,16 +184,16 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
     }
 }
 
-
 - (void)applyPageAtIndex:(NSInteger)idx animated:(BOOL)animated {
     if (idx < 0 || idx >= self.jsonPaths.count) return;
+
+    [self trackGuidePageIfNeededForIndex:idx];
 
     self.titleLabel.text = self.titles[idx];
     self.descLabel.text  = self.descs[idx];
     [self updateDotsForIndex:idx];
 
     CompatibleAnimation *anim = [self loadCompatibleAnimationFromBundlePath:self.jsonPaths[idx]];
-    
     if (!anim) {
         [self.lottieView stop];
         return;

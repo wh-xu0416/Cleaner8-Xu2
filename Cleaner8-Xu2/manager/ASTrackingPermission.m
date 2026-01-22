@@ -1,5 +1,6 @@
 #import "ASTrackingPermission.h"
 #import <AppTrackingTransparency/AppTrackingTransparency.h>
+#import "LTEventTracker.h"
 
 static NSString * const kASHasRequestedATTKey = @"hasRequestedATT";
 
@@ -7,6 +8,11 @@ static NSString * const kASHasRequestedATTKey = @"hasRequestedATT";
 
 + (BOOL)hasRequested {
     return [[NSUserDefaults standardUserDefaults] boolForKey:kASHasRequestedATTKey];
+}
+
++ (void)markRequested {
+    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kASHasRequestedATTKey];
+    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 + (BOOL)shouldRequest {
@@ -24,18 +30,43 @@ static NSString * const kASHasRequestedATTKey = @"hasRequestedATT";
     return 0;
 }
 
++ (NSString *)trackStringForATTStatus:(ATTrackingManagerAuthorizationStatus)st API_AVAILABLE(ios(14.0)){
+    switch (st) {
+        case ATTrackingManagerAuthorizationStatusAuthorized:
+            return @"authorized";
+        case ATTrackingManagerAuthorizationStatusDenied:
+        case ATTrackingManagerAuthorizationStatusRestricted:
+            return @"denied";
+        case ATTrackingManagerAuthorizationStatusNotDetermined:
+        default:
+            return @"notDetermined";
+    }
+}
+
 + (void)requestIfNeededWithDelay:(NSTimeInterval)delay
                       completion:(ASTrackingAuthCompletion)completion {
 
     if (@available(iOS 14, *)) {
         ATTrackingManagerAuthorizationStatus cur = ATTrackingManager.trackingAuthorizationStatus;
+
         if (cur != ATTrackingManagerAuthorizationStatusNotDetermined) {
             if (completion) completion((NSInteger)cur);
             return;
         }
 
         void (^doRequest)(void) = ^{
+            [[LTEventTracker shared] track:@"Permission_status"
+                                properties:@{@"permission_name": @"ATT",
+                                             @"permission_status": @"show"}];
+
             [ATTrackingManager requestTrackingAuthorizationWithCompletionHandler:^(ATTrackingManagerAuthorizationStatus status) {
+                NSString *statusStr = [self trackStringForATTStatus:status];
+                [[LTEventTracker shared] track:@"Permission_status"
+                                    properties:@{@"permission_name": @"ATT",
+                                                 @"permission_status": statusStr}];
+
+                [self markRequested];
+
                 if (completion) completion((NSInteger)status);
             }];
         };

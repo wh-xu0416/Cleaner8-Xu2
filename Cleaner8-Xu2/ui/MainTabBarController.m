@@ -8,6 +8,7 @@
 #import "Common.h"
 #import "SwipeManager.h"
 #import "PaywallPresenter.h"
+#import "LTEventTracker.h"
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
@@ -75,7 +76,27 @@ UIGestureRecognizerDelegate
 
     __weak typeof(self) weakSelf = self;
     self.floatingTab.onSelect = ^(NSInteger idx) {
+        if (weakSelf.selectedIndex == idx) { return; }
         weakSelf.selectedIndex = idx;
+        switch (idx) {
+            case 0:
+                [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"clean_page"}];
+                break;
+            case 1:
+                [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"swipe_page"}];
+                break;
+            case 2:
+                [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"compress_page"}];
+                break;
+            case 3:
+                [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"private_page"}];
+                break;
+            case 4:
+                [[LTEventTracker shared] track:@"function_enter" properties:@{@"function_name": @"more_page"}];
+                break;
+            default:
+                break;
+        }
     };
 
     [self.view addSubview:self.floatingTab];
@@ -84,7 +105,7 @@ UIGestureRecognizerDelegate
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        [[PaywallPresenter shared] showPaywallIfNeededWithSource:@"home"];
+        [[PaywallPresenter shared] showPaywallIfNeededWithSource:@"guide"];
     });
 }
 

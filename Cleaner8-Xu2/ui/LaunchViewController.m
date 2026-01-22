@@ -1,6 +1,7 @@
 #import "LaunchViewController.h"
 #import "OnboardingViewController.h"
 #import "MainTabBarController.h"
+#import "LTEventTracker.h"
 #import "Common.h"
 #import <Network/Network.h>
 
@@ -96,6 +97,9 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     
+    [[LTEventTracker shared] track:@"start_page"
+                        properties:@{@"page_name": @"start_page"}];
+    
     if (self.didScheduleJump) return;
     self.didScheduleJump = YES;
     
@@ -145,6 +149,7 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
 }
 
 #pragma mark - Jump
+
 - (void)jumpNext {
     BOOL done = [[NSUserDefaults standardUserDefaults] boolForKey:kHasCompletedOnboardingKey];
 

@@ -5,7 +5,9 @@ target 'Cleaner8-Xu2' do
 
   # Firebase 分析
   pod 'FirebaseAnalytics'
-
+  
+  pod 'FirebaseRemoteConfig'
+  
   # AppsFlyer 归因分析
   pod 'AppsFlyerFramework'
 

@@ -5,6 +5,7 @@
 #import "ASCustomNavBar.h"
 #import "Common.h"
 #import "ContactsManager.h"
+#import "LTEventTracker.h"
 #import <Contacts/Contacts.h>
 
 #pragma mark - UI Helpers
@@ -84,15 +85,9 @@ static inline UIColor *ASAccent(void) {
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    CNAuthorizationStatus status = [self currentContactsAuthStatus];
-    if (status == CNAuthorizationStatusNotDetermined) {
-        [self requestContactsPermissionIfNeeded];
-    } else {
-        [self applyContactsAuthStatus:status];
-    }
-    
-    [self scheduleRefreshCounts];
+
     [self requestContactsPermissionIfNeeded];
+    [self scheduleRefreshCounts];
 }
 
 - (void)viewDidLoad {
@@ -131,7 +126,6 @@ static inline UIColor *ASAccent(void) {
                                                object:nil];
 
     [self applyContactsAuthStatusIfDetermined];
-    [self requestContactsPermissionIfNeeded];
 }
 
 - (void)dealloc {
@@ -214,26 +208,44 @@ static inline UIColor *ASAccent(void) {
     CNAuthorizationStatus status = [self currentContactsAuthStatus];
 
     switch (status) {
-        case CNAuthorizationStatusAuthorized: {
-            [self applyContactsAuthStatus:status];
-        } break;
-
         case CNAuthorizationStatusNotDetermined: {
+            [[LTEventTracker shared] track:@"Permission_status"
+                                properties:@{@"permission_name": @"contact",
+                                             @"permission_status": @"show"}];
+
             __weak typeof(self) weakSelf = self;
             [self.contactStore requestAccessForEntityType:CNEntityTypeContacts
                                        completionHandler:^(BOOL granted, NSError * _Nullable error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    CNAuthorizationStatus newStatus = [weakSelf currentContactsAuthStatus];
-                    [weakSelf applyContactsAuthStatus:newStatus];
+                    __strong typeof(weakSelf) self = weakSelf;
+                    if (!self) return;
+
+                    CNAuthorizationStatus newStatus = [self currentContactsAuthStatus];
+
+                    NSString *result = @"permanentlyDenied";
+                    if (newStatus == CNAuthorizationStatusAuthorized) {
+                        result = @"granted";
+                    } else if ([self isContactsLimitedStatus:newStatus]) {
+                        result = @"limited";
+                    } else if (newStatus == CNAuthorizationStatusDenied ||
+                               newStatus == CNAuthorizationStatusRestricted) {
+                        result = @"permanentlyDenied";
+                    } else {
+                        result = @"permanentlyDenied";
+                    }
+
+                    [[LTEventTracker shared] track:@"Permission_status"
+                                        properties:@{@"permission_name": @"contact",
+                                                     @"permission_status": result}];
+
+                    [self applyContactsAuthStatus:newStatus];
                 });
             }];
         } break;
 
+        case CNAuthorizationStatusAuthorized:
         case CNAuthorizationStatusDenied:
-        case CNAuthorizationStatusRestricted: {
-            [self applyContactsAuthStatus:status];
-        } break;
-
+        case CNAuthorizationStatusRestricted:
         default: {
             [self applyContactsAuthStatus:status];
         } break;

@@ -39,7 +39,7 @@ final class CompletionBox<T>: @unchecked Sendable {
 @objc enum StoreAvailability: Int {
     case unknown
     case available
-    case unavailable   // 例如无网络、或商店不可用（你可以先只用网络判断）
+    case unavailable
 }
 
 @objc enum ProductsLoadState: Int {
@@ -70,10 +70,16 @@ public final class SK2ProductModel: NSObject {
     public let periodUnit: SK2PeriodUnit
     public let periodValue: Int
 
+    public let currencyCode: String
+    public let currencySymbol: String
+
     public init(product: Product) {
         productID = product.id
         displayPrice = product.displayPrice
         displayName = product.displayName
+
+        currencyCode = product.priceFormatStyle.currencyCode
+        currencySymbol = product.priceFormatStyle.locale.currencySymbol ?? ""
 
         if let p = product.subscription?.subscriptionPeriod {
             periodValue = p.value
@@ -104,13 +110,17 @@ final class StoreSnapshot: NSObject {
     let purchaseState: PurchaseFlowState
     let lastErrorMessage: String?
 
+    let lastOrderID: String?
+
     init(networkAvailable: Bool,
          availability: StoreAvailability,
          productsState: ProductsLoadState,
          products: [SK2ProductModel],
          subscriptionState: SubscriptionState,
          purchaseState: PurchaseFlowState,
-         lastErrorMessage: String?) {
+         lastErrorMessage: String?,
+         lastOrderID: String?) {
+
         self.networkAvailable = networkAvailable
         self.availability = availability
         self.productsState = productsState
@@ -118,6 +128,7 @@ final class StoreSnapshot: NSObject {
         self.subscriptionState = subscriptionState
         self.purchaseState = purchaseState
         self.lastErrorMessage = lastErrorMessage
+        self.lastOrderID = lastOrderID
         super.init()
     }
 }
@@ -160,10 +171,9 @@ private enum ASAccountToken {
         let digest = SHA256.hash(data: Data(input.utf8))
         let bytes = Array(digest)
 
-        // 取前 16 字节做 UUID，并设置 version/variant
         var b = Array(bytes[0..<16])
-        b[6] = (b[6] & 0x0F) | 0x50  // version 5-ish
-        b[8] = (b[8] & 0x3F) | 0x80  // RFC4122 variant
+        b[6] = (b[6] & 0x0F) | 0x50
+        b[8] = (b[8] & 0x3F) | 0x80
 
         return UUID(uuid: (
             b[0], b[1], b[2], b[3],
@@ -173,7 +183,6 @@ private enum ASAccountToken {
             b[10], b[11], b[12], b[13], b[14], b[15]
         ))
         #else
-        // 没有 CryptoKit 就随机
         return UUID()
         #endif
     }
@@ -226,11 +235,17 @@ private struct ASUploadResp: Decodable {
 @MainActor
 final class StoreKit2Manager: NSObject {
 
-    // TODO: 换成自己的域名
     private var iapUploadURL: URL? {
-        let baseURL = "https://YOUR_DOMAIN.com"
-        return URL(string: baseURL + "/iap/upload")
+        return URL(string: AppConstants.iapUploadURL + "/iap/upload")
     }
+    
+    @MainActor
+    private var isRefreshingProducts = false
+
+    private var lastNetworkAvailable: Bool? = nil
+
+    @MainActor
+    private var productWaiters: [CheckedContinuation<Void, Never>] = []
 
     @objc func uploadIAPIdentifiersOnEnterPaywall() {
         Task { await self.uploadIAPIdentifiers(reason: "进入内购页") }
@@ -296,7 +311,8 @@ final class StoreKit2Manager: NSObject {
         products: [],
         subscriptionState: .unknown,
         purchaseState: .idle,
-        lastErrorMessage: nil
+        lastErrorMessage: nil,
+        lastOrderID: nil
     )
 
     @objc var state: SubscriptionState { snapshot.subscriptionState }
@@ -330,8 +346,34 @@ final class StoreKit2Manager: NSObject {
         _ = await (p, s)
     }
 
+    // MARK: - Products 刷新
+    
     @MainActor
-    func refreshProducts() async {
+    func refreshProducts(force: Bool = false) async {
+        if isRefreshingProducts {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                productWaiters.append(cont)
+            }
+            return
+        }
+
+        if !force,
+           snapshot.productsState == .ready,
+           !rawProducts.isEmpty {
+            return
+        }
+
+        isRefreshingProducts = true
+        defer {
+            isRefreshingProducts = false
+
+            let waiters = productWaiters
+            productWaiters.removeAll()
+            waiters.forEach { $0.resume() }
+        }
+        
+        print("开始获取商品")
+
         updateSnapshot { old in
             StoreSnapshot(
                 networkAvailable: old.networkAvailable,
@@ -340,7 +382,8 @@ final class StoreKit2Manager: NSObject {
                 products: old.products,
                 subscriptionState: old.subscriptionState,
                 purchaseState: old.purchaseState,
-                lastErrorMessage: nil
+                lastErrorMessage: nil,
+                lastOrderID: old.lastOrderID
             )
         }
 
@@ -348,7 +391,7 @@ final class StoreKit2Manager: NSObject {
             let list = try await Product.products(for: productIDs)
             self.rawProducts = list
             let models = list.map { SK2ProductModel(product: $0) }
-
+            print("获取商品成功 \(models.count)")
             updateSnapshot { old in
                 StoreSnapshot(
                     networkAvailable: old.networkAvailable,
@@ -357,7 +400,8 @@ final class StoreKit2Manager: NSObject {
                     products: models,
                     subscriptionState: old.subscriptionState,
                     purchaseState: old.purchaseState,
-                    lastErrorMessage: nil
+                    lastErrorMessage: nil,
+                    lastOrderID: old.lastOrderID
                 )
             }
         } catch {
@@ -370,9 +414,17 @@ final class StoreKit2Manager: NSObject {
                     products: old.products,
                     subscriptionState: old.subscriptionState,
                     purchaseState: old.purchaseState,
-                    lastErrorMessage: msg
+                    lastErrorMessage: msg,
+                    lastOrderID: old.lastOrderID
                 )
             }
+        }
+    }
+
+    @objc func forceRefreshProducts() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.refreshProducts(force: true)
         }
     }
 
@@ -396,7 +448,8 @@ final class StoreKit2Manager: NSObject {
                 products: old.products,
                 subscriptionState: newState,
                 purchaseState: old.purchaseState,
-                lastErrorMessage: old.lastErrorMessage
+                lastErrorMessage: old.lastErrorMessage,
+                lastOrderID: old.lastOrderID
             )
         }
     }
@@ -427,11 +480,13 @@ final class StoreKit2Manager: NSObject {
     @MainActor
     private func purchaseAsync(productID: String) async -> PurchaseFlowState {
         Task.detached { [weak self] in
-            await self?.uploadIAPIdentifiers(reason: "点击购买前")
+            await self?.uploadIAPIdentifiersBeforePurchaseTap()
         }
         
-        if rawProducts.first(where: { $0.id == productID }) == nil, snapshot.networkAvailable {
-            await refreshProducts()
+        // 购买前：如果本地没有该商品，强制刷新一次
+        if rawProducts.first(where: { $0.id == productID }) == nil,
+           snapshot.networkAvailable {
+            await refreshProducts(force: true)
         }
         guard let product = rawProducts.first(where: { $0.id == productID }) else {
             setPurchaseState(.failed, err: "Product not loaded")
@@ -447,17 +502,28 @@ final class StoreKit2Manager: NSObject {
             switch result {
             case .success(let verification):
                 let transaction = try checkVerified(verification)
+
+                let oid: String
+                if transaction.id != 0 {
+                    oid = String(transaction.id)               // 每笔交易唯一
+                } else if transaction.originalID != 0 {
+                    oid = String(transaction.originalID)       // 订阅链路唯一（续费同一个）
+                } else {
+                    oid = String(transaction.id)
+                }
+
                 await refreshSubscriptionState()
                 await transaction.finish()
-                setPurchaseState(.succeeded, err: nil)
+
+                setPurchaseState(.succeeded, err: nil, orderID: oid)
                 return .succeeded
 
             case .pending:
-                setPurchaseState(.pending, err: nil)
+                setPurchaseState(.pending, err: nil, orderID: nil)
                 return .pending
 
             case .userCancelled:
-                setPurchaseState(.cancelled, err: nil)
+                setPurchaseState(.cancelled, err: nil, orderID: nil)
                 return .cancelled
 
             @unknown default:
@@ -465,7 +531,7 @@ final class StoreKit2Manager: NSObject {
                 return .failed
             }
         } catch {
-            setPurchaseState(.failed, err: error.localizedDescription)
+            setPurchaseState(.failed, err: error.localizedDescription, orderID: nil)
             return .failed
         }
     }
@@ -495,22 +561,34 @@ final class StoreKit2Manager: NSObject {
             }
         }
     }
-
-    // MARK: - Network / Foreground
+    
+    // MARK: - Network
     private func startNetworkMonitor() {
         if pathMonitor != nil { return }
 
         let monitor = NWPathMonitor()
         self.pathMonitor = monitor
 
-        let box = WeakBox(self)
-        monitor.pathUpdateHandler = { path in
-            guard let self = box.value else { return }
+        monitor.pathUpdateHandler = { [weak self] path in
             let available = (path.status == .satisfied)
 
             Task { @MainActor [weak self] in
                 guard let self else { return }
+
+                if self.lastNetworkAvailable == nil {
+                    self.lastNetworkAvailable = available
+                    self.updateNetwork(available: available)
+                    return
+                }
+
+                if self.lastNetworkAvailable == available {
+                    return
+                }
+
+                self.lastNetworkAvailable = available
                 self.updateNetwork(available: available)
+
+                // 只有从 “不可用 → 可用” 时才当成网络恢复，触发刷新逻辑
                 if available {
                     await self.refreshIfNeededAfterNetworkBack()
                 }
@@ -532,7 +610,7 @@ final class StoreKit2Manager: NSObject {
     @objc private func onAppWillEnterForeground() {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.refreshIfNeededAfterNetworkBack()
+            await self.refreshSubscriptionState()
         }
     }
 
@@ -542,7 +620,13 @@ final class StoreKit2Manager: NSObject {
         isRefreshingAfterNetwork = true
         defer { isRefreshingAfterNetwork = false }
 
-        await refreshProducts()
+        // 网络恢复场景：只在确实没有商品 / 失败过时刷新（这里非强制）
+        if snapshot.productsState == .idle
+            || snapshot.productsState == .failed
+            || rawProducts.isEmpty {
+            await refreshProducts()
+        }
+
         if snapshot.subscriptionState == .unknown {
             await refreshSubscriptionState()
         }
@@ -559,13 +643,14 @@ final class StoreKit2Manager: NSObject {
                 products: old.products,
                 subscriptionState: old.subscriptionState,
                 purchaseState: old.purchaseState,
-                lastErrorMessage: old.lastErrorMessage
+                lastErrorMessage: old.lastErrorMessage,
+                lastOrderID: old.lastOrderID
             )
         }
     }
 
     @MainActor
-    private func setPurchaseState(_ st: PurchaseFlowState, err: String?) {
+    private func setPurchaseState(_ st: PurchaseFlowState, err: String?, orderID: String? = nil) {
         updateSnapshot { old in
             StoreSnapshot(
                 networkAvailable: old.networkAvailable,
@@ -574,7 +659,8 @@ final class StoreKit2Manager: NSObject {
                 products: old.products,
                 subscriptionState: old.subscriptionState,
                 purchaseState: st,
-                lastErrorMessage: err
+                lastErrorMessage: err,
+                lastOrderID: orderID
             )
         }
     }

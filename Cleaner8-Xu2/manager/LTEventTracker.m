@@ -1,4 +1,5 @@
 #import "LTEventTracker.h"
+#import "ThinkingSDK.h"
 
 @implementation LTEventTracker
 
@@ -30,11 +31,10 @@
 
     // 打印
     if (self.enableLog) {
-        NSLog(@"\n🟦 [埋点] TRACK\n- event: %@\n- properties: %@\n", event, [self prettyJSONString:props]);
+        NSLog(@"\n [打点] TRACK\n- 事件名: %@\n- 字段参数: %@\n", event, [self prettyJSONString:props]);
     }
 
-    // TODO: 调用 SDK
-
+    [TDAnalytics track:event properties:properties];
 }
 
 #pragma mark - JSON Pretty Print

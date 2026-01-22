@@ -3,6 +3,43 @@
 #import "LTEventTracker.h"
 
 #pragma mark - Helpers
+
+static inline NSSet<NSString *> *SubscriptionTrackableSources(void) {
+    static NSSet<NSString *> *set;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        set = [NSSet setWithArray:@[
+            @"guide",
+            @"main_center",
+            @"photo_compress",
+            @"video_compress",
+            @"livephoto_compress",
+            @"similar_photo",
+            @"similar_video",
+            @"duplicate_photo",
+            @"duplicate_video",
+            @"screenshots",
+            @"other_photo",
+            @"blurry",
+            @"screen_recording",
+            @"large_video",
+            @"swipe_page",
+            @"contact",
+        ]];
+    });
+    return set;
+}
+
+static inline NSString *NormalizeSource(NSString *source) {
+    NSString *s = [[source ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] lowercaseString];
+    return s.length ? s : nil;
+}
+
+static inline BOOL ShouldTrackSource(NSString *source) {
+    NSString *s = NormalizeSource(source);
+    return (s && [SubscriptionTrackableSources() containsObject:s]);
+}
+
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
 static inline CGFloat SWScaleX(void) {
@@ -284,6 +321,7 @@ static inline id SafeKVC(id obj, NSString *key) {
 #pragma mark - SubscriptionViewController
 
 @interface SubscriptionViewController ()
+@property(nonatomic,assign) BOOL pendingAutoPurchase;
 @property(nonatomic,strong) UIView *loadingMask;
 @property(nonatomic,strong) UIActivityIndicatorView *loadingSpinner;
 @property(nonatomic,assign) NSInteger loadingCount;
@@ -361,6 +399,10 @@ static inline id SafeKVC(id obj, NSString *key) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    if (ShouldTrackSource(self.source)) {
+        [[LTEventTracker shared] track:@"sub_show" properties:@{@"IAP": self.source}];
+    }
+    
     self.view.backgroundColor = HexColor(@"#FFF7F7F9");
 
     self.allowDismiss = YES;
@@ -407,6 +449,7 @@ static inline id SafeKVC(id obj, NSString *key) {
     [self stopLoopAnimation];
     [self hideLoading];
     self.loadingCount = 0;
+    self.pendingAutoPurchase = NO;
 }
 
 - (void)onStoreSnapshotChanged:(NSNotification *)note {
@@ -728,8 +771,18 @@ static inline id SafeKVC(id obj, NSString *key) {
 
     if (!ready) {
         BOOL hasCached = (self.products.count > 0);
-        self.continueBtn.enabled = hasCached && !busy;
         if (!hasCached) self.autoRenewLab.text = @"";
+
+        if (self.pendingAutoPurchase &&
+            snap.productsState == ProductsLoadStateFailed &&
+            !busy) {
+            self.pendingAutoPurchase = NO;
+            [self hideLoading];
+            [self showToastText:NSLocalizedString(@"Failed", nil)];
+
+            SK2ProductModel *mForClick = [self currentProductForPurchase];
+            [self trackSubFailWithProduct:mForClick orderID:@"" error:@"products_load_failed"];
+        }
         return;
     }
 
@@ -779,7 +832,7 @@ static inline id SafeKVC(id obj, NSString *key) {
 
     [self updateAutoRenewLine];
     [self updateTrialHintUI];
-    self.continueBtn.enabled = !busy && ([self currentProductForPurchase] != nil);
+    
 
     if (snap.subscriptionState == SubscriptionStateActive) {
         if (self.presentingViewController) {
@@ -787,10 +840,17 @@ static inline id SafeKVC(id obj, NSString *key) {
         }
     }
 
+    if (ready && !busy && self.pendingAutoPurchase) {
+        self.pendingAutoPurchase = NO;
+        [self beginPurchaseWithCurrentSelection];
+        return;
+    }
+
     if (!busy) {
         [self hideLoading];
         self.loadingCount = 0;
     }
+
 }
 
 - (void)updateTrialHintUI {
@@ -1217,9 +1277,162 @@ static inline id SafeKVC(id obj, NSString *key) {
     }];
 }
 
+#pragma mark - Tracking Helpers
+
+static inline NSString *ASNonEmptyStringFromValue(id v) {
+    if (!v || v == (id)kCFNull) return nil;
+
+    if ([v isKindOfClass:NSString.class]) {
+        NSString *s = [(NSString *)v stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        return s.length ? s : nil;
+    }
+
+    if ([v respondsToSelector:@selector(stringValue)]) {
+        NSString *s = [[v stringValue] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        return s.length ? s : nil;
+    }
+
+    NSString *s = [[v description] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    return s.length ? s : nil;
+}
+
+- (NSString *)trackPlanIDForProduct:(SK2ProductModel *)m {
+    if (!m) return @"";
+    switch (m.periodUnit) {
+        case SK2PeriodUnitWeek: return @"weekly";
+        case SK2PeriodUnitYear: return @"yearly";
+        default: return @"";
+    }
+}
+
+- (NSString *)trackCurrencyForProduct:(SK2ProductModel *)m {
+    if (!m) return @"";
+    NSString *code = SafeKVC(m, @"currencyCode");
+    if (code.length) return code;
+    NSString *sym = SafeKVC(m, @"currencySymbol");
+    return sym.length ? sym : @"";
+}
+
+- (NSString *)trackOrderIDFromSnapshot {
+    StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;
+    NSString *oid = SafeKVC(snap, @"lastOrderID");
+    return oid.length ? oid : @"";
+}
+
+- (NSDictionary *)trackBasePropsForProduct:(SK2ProductModel *)m {
+    return @{
+        @"IAP": self.source ?: @"",
+        @"ID": [self trackPlanIDForProduct:m] ?: @"",
+        @"currency": [self trackCurrencyForProduct:m] ?: @"",
+        @"price_client": (m.displayPrice ?: @""),
+    };
+}
+
+- (void)trackSubClickWithProduct:(SK2ProductModel *)m {
+    if (!ShouldTrackSource(self.source)) return;
+    [[LTEventTracker shared] track:@"sub_click" properties:[self trackBasePropsForProduct:m]];
+}
+
+- (void)trackSubSuccessWithProduct:(SK2ProductModel *)m orderID:(NSString *)orderID {
+    if (!ShouldTrackSource(self.source)) return;
+
+    NSMutableDictionary *p = [[self trackBasePropsForProduct:m] mutableCopy];
+    p[@"order_ID"] = orderID ?: @"";
+    [[LTEventTracker shared] track:@"sub_success" properties:p];
+}
+
+- (void)trackSubFailWithProduct:(SK2ProductModel *)m orderID:(NSString *)orderID error:(NSString *)error {
+    if (!ShouldTrackSource(self.source)) return;
+
+    NSMutableDictionary *p = [[self trackBasePropsForProduct:m] mutableCopy];
+    p[@"order_ID"] = orderID ?: @"";
+    p[@"error"] = error ?: @"";
+    [[LTEventTracker shared] track:@"sub_fail" properties:p];
+}
+
+#pragma mark - Purchase Flow Helper
+
+- (void)beginPurchaseWithCurrentSelection {
+    SK2ProductModel *m = [self currentProductForPurchase];
+    if (!m) {
+        [self hideLoading];
+        [self showToastText:NSLocalizedString(@"Please try again", nil)];
+        return;
+    }
+
+    [self showLoading];
+
+    __weak typeof(self) weakSelf = self;
+    [[StoreKit2Manager shared] purchaseWithProductID:m.productID completion:^(PurchaseFlowState st) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+
+            [self hideLoading];
+            [self render];
+
+            NSString *orderID = [self trackOrderIDFromSnapshot];
+
+            switch (st) {
+                case PurchaseFlowStateSucceeded: {
+                    [self showToastText:NSLocalizedString(@"Success",nil)];
+
+                    if (ShouldTrackSource(self.source)) {
+                        NSMutableDictionary *p = [[self trackBasePropsForProduct:m] mutableCopy];
+                        p[@"order_ID"] = orderID ?: @"";
+                        [[LTEventTracker shared] track:@"sub_success" properties:p];
+                    }
+                    break;
+                }
+
+                case PurchaseFlowStateCancelled: {
+                    [self showToastText:NSLocalizedString(@"Cancelled",nil)];
+
+                    if (ShouldTrackSource(self.source)) {
+                        NSMutableDictionary *p = [[self trackBasePropsForProduct:m] mutableCopy];
+                        p[@"order_ID"] = @"";                 // 取消拿不到
+                        p[@"error"] = @"cancelled";           // 取消也算未购买成功
+                        [[LTEventTracker shared] track:@"sub_fail" properties:p];
+                    }
+                    break;
+                }
+
+                case PurchaseFlowStatePending: {
+                    [self showToastText:NSLocalizedString(@"Pending",nil)];
+
+                    if (ShouldTrackSource(self.source)) {
+                        NSMutableDictionary *p = [[self trackBasePropsForProduct:m] mutableCopy];
+                        p[@"order_ID"] = @"";                 // pending 也没
+                        p[@"error"] = @"pending";
+                        [[LTEventTracker shared] track:@"sub_fail" properties:p];
+                    }
+                    break;
+                }
+
+                case PurchaseFlowStateFailed: {
+                    NSString *msg = [StoreKit2Manager shared].snapshot.lastErrorMessage;
+                    [self showToastText:(msg.length ? msg : NSLocalizedString(@"Failed",nil))];
+
+                    if (ShouldTrackSource(self.source)) {
+                        NSMutableDictionary *p = [[self trackBasePropsForProduct:m] mutableCopy];
+                        p[@"order_ID"] = @"";                 // 失败没 transaction.id
+                        p[@"error"] = (msg.length ? msg : @"failed");
+                        [[LTEventTracker shared] track:@"sub_fail" properties:p];
+                    }
+                    break;
+                }
+
+                default:
+                    break;
+            }
+        });
+    }];
+}
+
 #pragma mark - Actions
 
 - (void)tapBack {
+    self.pendingAutoPurchase = NO;
     if (!self.allowDismiss) return;
     [self dismissViewControllerAnimated:YES completion:nil];
 }
@@ -1243,54 +1456,42 @@ static inline id SafeKVC(id obj, NSString *key) {
 - (void)tapContinue {
     StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;
 
+    BOOL busy = (snap.purchaseState == PurchaseFlowStatePurchasing ||
+                 snap.purchaseState == PurchaseFlowStateRestoring ||
+                 snap.purchaseState == PurchaseFlowStatePending);
+    if (busy) return;
+
+    // 点击订阅按钮：统一先上报（参数从当前选择的 product 取）
+    SK2ProductModel *mForClick = [self currentProductForPurchase];
+    [self trackSubClickWithProduct:mForClick];
+
     if (!snap.networkAvailable) {
         [self showToastText:NSLocalizedString(@"Network Error", nil)];
-        return;
-    }
-    if (snap.productsState != ProductsLoadStateReady) {
-        [self showToastText:NSLocalizedString(@"Loading...", nil)];
+
+        // 网络问题导致无法购买，也记为 fail（避免漏斗断层）
+        [self trackSubFailWithProduct:mForClick orderID:@"" error:@"network_error"];
         return;
     }
 
-    SK2ProductModel *m = [self currentProductForPurchase];
-    if (!m) {
-        [self showToastText:NSLocalizedString(@"Please try again", nil)];
+    BOOL hasLocalProducts = (self.products.count > 0);
+
+    if (hasLocalProducts) {
+        self.pendingAutoPurchase = NO;
+        [self beginPurchaseWithCurrentSelection];
         return;
     }
 
-    self.continueBtn.enabled = NO;
+    if (snap.productsState == ProductsLoadStateLoading) {
+        self.pendingAutoPurchase = YES;
+        [self showLoading];
+        return;
+    }
+
+    self.pendingAutoPurchase = YES;
     [self showLoading];
-
-    __weak typeof(self) weakSelf = self;
-    [[StoreKit2Manager shared] purchaseWithProductID:m.productID completion:^(PurchaseFlowState st) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) return;
-
-            [self hideLoading];
-            [self render];
-
-            switch (st) {
-                case PurchaseFlowStatePending:
-                    [self showToastText:NSLocalizedString(@"Pending",nil)];
-                    break;
-                case PurchaseFlowStateCancelled:
-                    [self showToastText:NSLocalizedString(@"Cancelled",nil)];
-                    break;
-                case PurchaseFlowStateSucceeded:
-                    [self showToastText:NSLocalizedString(@"Success",nil)];
-                    break;
-                case PurchaseFlowStateFailed: {
-                    NSString *msg = [StoreKit2Manager shared].snapshot.lastErrorMessage;
-                    [self showToastText:(msg.length ? msg : NSLocalizedString(@"Failed",nil))];
-                    break;
-                }
-                default:
-                    break;
-            }
-        });
-    }];
+    [[StoreKit2Manager shared] forceRefreshProducts];
 }
+
 
 - (void)tapRestore {
     StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;

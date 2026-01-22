@@ -4,17 +4,9 @@
 #import "AppsFlyerLib/AppsFlyerLib.h"
 #import "ASTrackingPermission.h"
 #import "PaywallPresenter.h"
-
-/// ====== 这里换自己的配置 ======
-static NSString * const kTDAppId      = @"YOUR_THINKINGDATA_APP_ID";
-static NSString * const kTDServerUrl  = @"YOUR_THINKINGDATA_SERVER_URL";
-
-static NSString * const kAFDevKey     = @"123456";
-static NSString * const kAFAppleAppId = @"123456";   // 纯数字，不要带 "id"
-/// ======================================================
-
-
-static NSString * const kASDidReportAFInitEventKey = @"as_did_report_af_init_event";
+#import "LTEventTracker.h"
+#import "ASABTestManager.h"
+#import "Cleaner8_Xu2-Swift.h"
 
 static inline void ASLog(NSString *module, NSString *msg) {
     NSLog(@"【%@】%@", module ?: @"日志", msg ?: @"");
@@ -47,21 +39,33 @@ static inline NSString *ASATTStatusText(NSInteger status) {
     }
 }
 
+static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
+
 @interface AppDelegate () <AppsFlyerLibDelegate>
-@property (nonatomic, assign) BOOL as_attFinished;     // ATT 流程是否已结束（回调触发即算结束）
-@property (nonatomic, assign) BOOL as_attRequested;    // 防止重复请求 ATT
-@property (nonatomic, assign) BOOL as_afStarted;       // 防止重复 start AppsFlyer
+@property (nonatomic, assign) BOOL as_attFinished;
+@property (nonatomic, assign) BOOL as_attRequested;
+@property (nonatomic, assign) BOOL as_afStarted;
 @end
 
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
 
+    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
+    if (![ud objectForKey:kASFirstInstallTSKey]) {
+        [ud setDouble:[[NSDate date] timeIntervalSince1970] forKey:kASFirstInstallTSKey];
+    }
+    
     ASLog(@"App", @"应用启动：didFinishLaunching 开始");
 
     // Firebase
-     ASLog(@"Firebase", @"初始化");
-//     [FIRApp configure];
+    ASLog(@"Firebase", @"初始化");
+    if (AppConstants.firebaseEnabled) {
+        [FIRApp configure];
+        ASLog(@"Firebase", @"已启用并完成 configure");
+    } else {
+        ASLog(@"Firebase", @"已关闭（AppConstants.firebaseEnabled=false）");
+    }
 
     // ThinkingData：主线程初始化
     if ([NSThread isMainThread]) {
@@ -72,10 +76,13 @@ static inline NSString *ASATTStatusText(NSInteger status) {
         });
     }
 
-    // 配置AppsFlyer参数
+    // 配置 AppsFlyer 参数（不 start）
     [self setupAppsFlyer];
 
-    // Scene 架构下：App 变为 active 时再尝试一次
+    // 启动 ABTest
+    [[ASABTestManager shared] startIfNeeded];
+
+    // Scene 架构下：App active 时再尝试一次
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(as_onDidBecomeActive:)
                                                  name:UIApplicationDidBecomeActiveNotification
@@ -84,8 +91,6 @@ static inline NSString *ASATTStatusText(NSInteger status) {
     ASLog(@"Paywall", @"PaywallPresenter 启动开始");
     [[PaywallPresenter shared] start];
     ASLog(@"Paywall", @"PaywallPresenter 启动结束");
-
-    ASLog(@"App", @"应用启动：didFinishLaunching 结束");
     return YES;
 }
 
@@ -101,7 +106,6 @@ static inline NSString *ASATTStatusText(NSInteger status) {
     [self tryStartAppsFlyerIfPossible];
 }
 
-// 兼容非 Scene / 某些项目仍会走这里
 - (void)applicationDidBecomeActive:(UIApplication *)application {
     ASLog(@"App", @"applicationDidBecomeActive 回调");
     [self tryStartAppsFlyerIfPossible];
@@ -109,7 +113,6 @@ static inline NSString *ASATTStatusText(NSInteger status) {
 
 #pragma mark - ATT
 
-// ATT权限请求（尽量只请求一次）
 - (void)requestATTWhenNoModal {
 
     if (self.as_attRequested) return;
@@ -119,15 +122,11 @@ static inline NSString *ASATTStatusText(NSInteger status) {
 
     [ASTrackingPermission requestIfNeededWithDelay:0.0 completion:^(NSInteger status) {
 
-        // 这里回调线程不确定，统一切主线程
         dispatch_async(dispatch_get_main_queue(), ^{
             ASLog(@"ATT", [NSString stringWithFormat:@"请求结束：状态=%@（%ld）",
                            ASATTStatusText(status), (long)status]);
 
-            // 只要回调触发，就视为 ATT 流程结束（包含 NotDetermined）
             self.as_attFinished = YES;
-
-            // ATT 回来了就再试一次启动 AppsFlyer
             [self tryStartAppsFlyerIfPossible];
         });
     }];
@@ -139,21 +138,21 @@ static inline NSString *ASATTStatusText(NSInteger status) {
 
     ASLog(@"数数(ThinkingData)", @"初始化开始");
 
-    // 参数检查：直接把“失败原因”打印出来（否则你只看到 -1002 很难定位）
-    if (ASIsPlaceholder(kTDAppId) || ASIsBlank(kTDAppId)) {
-        ASLog(@"数数(ThinkingData)", @"初始化失败：AppId 还是占位符（请替换 kTDAppId）");
+    NSString *appId = AppConstants.thinkingDataAppId;
+    NSString *serverUrl = AppConstants.thinkingDataServerUrl;
+
+    if (ASIsPlaceholder(appId) || ASIsBlank(appId)) {
+        ASLog(@"数数(ThinkingData)", @"初始化失败：AppId 还是占位符（请替换 AppConstants.thinkingDataAppId）");
         return;
     }
-    if (!ASIsValidHttpUrl(kTDServerUrl) || ASIsPlaceholder(kTDServerUrl)) {
-        ASLog(@"数数(ThinkingData)", @"初始化失败：ServerUrl 非法或是占位符（必须是 http/https 完整 URL，例如 https://xxx）");
+    if (!ASIsValidHttpUrl(serverUrl) || ASIsPlaceholder(serverUrl)) {
+        ASLog(@"数数(ThinkingData)", @"初始化失败：ServerUrl 非法或是占位符（必须是 http/https 完整 URL，例如 https://xxx；请替换 AppConstants.thinkingDataServerUrl）");
         return;
     }
 
-    // 初始化
-    [TDAnalytics enableLog:YES]; // 建议放前面，便于看到更完整日志
-    [TDAnalytics startAnalyticsWithAppId:kTDAppId serverUrl:kTDServerUrl];
+    [TDAnalytics enableLog:AppConstants.thinkingDataEnableLog];
+    [TDAnalytics startAnalyticsWithAppId:appId serverUrl:serverUrl];
 
-    // distinctId（deviceId）
     NSString *deviceId = [TDAnalytics getDeviceId];
     if (deviceId.length > 0) {
         [TDAnalytics setDistinctId:deviceId];
@@ -162,12 +161,10 @@ static inline NSString *ASATTStatusText(NSInteger status) {
         ASLog(@"数数(ThinkingData)", @"设置 distinctId 失败：deviceId 为空");
     }
 
-    // 自动采集：安装、启动、关闭
     [TDAnalytics enableAutoTrack:(TDAutoTrackEventTypeAppInstall
                                   | TDAutoTrackEventTypeAppStart
                                   | TDAutoTrackEventTypeAppEnd)];
 
-    // 开启与 AppsFlyer 的第三方数据共享（要在 AppsFlyer start 之前调用）
     [TDAnalytics enableThirdPartySharing:TDThirdPartyTypeAppsFlyer];
 
     ASLog(@"数数(ThinkingData)", @"初始化结束：本地初始化已完成（网络是否可达看后续 sync 请求）");
@@ -177,18 +174,21 @@ static inline NSString *ASATTStatusText(NSInteger status) {
 
     ASLog(@"AppsFlyer", @"初始化开始（配置参数阶段，不会 start）");
 
-    if (ASIsPlaceholder(kAFDevKey) || ASIsBlank(kAFDevKey)) {
-        ASLog(@"AppsFlyer", @"初始化失败：DevKey 还是占位/为空（请替换 kAFDevKey）");
+    NSString *devKey = AppConstants.appsFlyerDevKey;
+    NSString *appleAppId = AppConstants.appsFlyerAppleAppId;
+
+    if (ASIsPlaceholder(devKey) || ASIsBlank(devKey)) {
+        ASLog(@"AppsFlyer", @"初始化失败：DevKey 还是占位/为空（请替换 AppConstants.appsFlyerDevKey）");
         return;
     }
-    if (ASIsPlaceholder(kAFAppleAppId) || ASIsBlank(kAFAppleAppId)) {
-        ASLog(@"AppsFlyer", @"初始化失败：AppleAppId 还是占位/为空（请替换 kAFAppleAppId，纯数字）");
+    if (ASIsPlaceholder(appleAppId) || ASIsBlank(appleAppId)) {
+        ASLog(@"AppsFlyer", @"初始化失败：AppleAppId 还是占位/为空（请替换 AppConstants.appsFlyerAppleAppId，纯数字字符串）");
         return;
     }
 
     AppsFlyerLib *af = [AppsFlyerLib shared];
-    af.appsFlyerDevKey = kAFDevKey;
-    af.appleAppID = kAFAppleAppId;
+    af.appsFlyerDevKey = devKey;
+    af.appleAppID = appleAppId;
     af.delegate = self;
 
 #if DEBUG
@@ -196,16 +196,14 @@ static inline NSString *ASATTStatusText(NSInteger status) {
     ASLog(@"AppsFlyer", @"调试模式：已开启 isDebug=YES（仅开发环境使用）");
 #endif
 
-    // 等待 ATT：让 SDK 内部在一定时间内等待 ATT 状态
-    [af waitForATTUserAuthorizationWithTimeoutInterval:120];
-    ASLog(@"AppsFlyer", @"初始化结束：参数已配置 + 已设置 waitForATT(120s)");
+    NSTimeInterval timeout = (NSTimeInterval)AppConstants.appsFlyerAttWaitTimeout;
+    [af waitForATTUserAuthorizationWithTimeoutInterval:timeout];
+    ASLog(@"AppsFlyer", [NSString stringWithFormat:@"初始化结束：参数已配置 + 已设置 waitForATT(%.0fs)", timeout]);
 }
 
 #pragma mark - AppsFlyer start (after ATT)
 
 - (void)tryStartAppsFlyerIfPossible {
-
-    // 强制主线程（避免你之前的 Main Thread Checker：UI API called on a background thread）
     if (![NSThread isMainThread]) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self tryStartAppsFlyerIfPossible];
@@ -213,16 +211,13 @@ static inline NSString *ASATTStatusText(NSInteger status) {
         return;
     }
 
-    // 已经 start 过就不再重复
     if (self.as_afStarted) return;
 
-    // ATT 未结束：不启动
     if (!self.as_attFinished) {
         ASLog(@"AppsFlyer", @"启动中止：ATT 尚未结束");
         return;
     }
 
-    // 只在 active 状态启动更稳
     UIApplicationState state = [UIApplication sharedApplication].applicationState;
     if (state != UIApplicationStateActive) {
         ASLog(@"AppsFlyer", [NSString stringWithFormat:@"启动中止：应用非激活态（state=%ld）", (long)state]);
@@ -231,43 +226,29 @@ static inline NSString *ASATTStatusText(NSInteger status) {
 
     ASLog(@"AppsFlyer", @"启动开始：准备设置 customerUserID 并调用 start");
 
-    // 1) 取数数 distinctId（用作 AppsFlyer customerUserID）
     NSString *distinctId = nil;
     @try { distinctId = [TDAnalytics getDistinctId]; } @catch (__unused NSException *e) {}
 
     if (distinctId.length > 0) {
-        [AppsFlyerLib shared].customerUserID = distinctId;
+        [[AppsFlyerLib shared] setCustomerUserID:distinctId];
         ASLog(@"AppsFlyer", [NSString stringWithFormat:@"customerUserID 设置成功：%@", distinctId]);
     } else {
         ASLog(@"AppsFlyer", @"customerUserID 未设置：distinctId 为空");
     }
 
     ASLog(@"AppsFlyer", [NSString stringWithFormat:@"关键参数：DevKey=%@ AppleAppId=%@",
-                         kAFDevKey, kAFAppleAppId]);
+                         AppConstants.appsFlyerDevKey,
+                         AppConstants.appsFlyerAppleAppId]);
 
-    // 2) 启动 AppsFlyer
     [[AppsFlyerLib shared] start];
     self.as_afStarted = YES;
-
-    ASLog(@"AppsFlyer", @"启动结束：start 已调用（是否归因成功看 conversion 回调）");
-
-    // 3) 启动后：用数数只打一次“AF 已初始化”事件（用于排查与校验）
-    BOOL didReport = [[NSUserDefaults standardUserDefaults] boolForKey:kASDidReportAFInitEventKey];
-    if (!didReport) {
-        NSDictionary *properties = @{@"step": @"c_af_init"};
-        [TDAnalytics track:@"Appsflyer_client" properties:properties];
-        ASLog(@"数数(ThinkingData)", @"事件上报：Appsflyer_client step=c_af_init（只打一次）");
-
-        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kASDidReportAFInitEventKey];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-    }
 }
 
-#pragma mark - AppsFlyerLibDelegate（用回调判定“归因链路”成功/失败）
+#pragma mark - AppsFlyerLibDelegate
 
 - (void)onConversionDataSuccess:(NSDictionary *)conversionInfo {
     ASLog(@"AppsFlyer", [NSString stringWithFormat:@"成功：%@", conversionInfo ?: @{}]);
-    [TDAnalytics track:@"Appsflyer_client" properties:@{@"step": @"c_af_init"}];
+    [[LTEventTracker shared] track:@"Appsflyer_client" properties:@{@"step": @"c_af_init"}];
 }
 
 - (void)onConversionDataFail:(NSError *)error {

@@ -256,6 +256,9 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 #pragma mark - Card View
 
 @interface SwipeCardView : UIView <PHLivePhotoViewDelegate>
+@property (nonatomic, assign) BOOL sw_livePlaying;
+@property (nonatomic, assign) PHImageRequestID sw_liveReqId;
+
 @property (nonatomic, copy) NSString *assetID;
 @property (nonatomic, strong) UIImageView *imageView;
 @property (nonatomic, strong) UIImageView *hintImageView;
@@ -343,6 +346,8 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
             [_liveBadgeButton.topAnchor constraintEqualToAnchor:self.topAnchor constant:SW(10)],
             [_liveBadgeButton.heightAnchor constraintEqualToConstant:SW(32)],
         ]];
+        _sw_livePlaying = NO;
+        _sw_liveReqId = PHInvalidImageRequestID;
     }
     return self;
 }
@@ -365,9 +370,11 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 }
 
 - (void)livePhotoView:(PHLivePhotoView *)livePhotoView
-  didEndPlaybackWithStyle:(PHLivePhotoViewPlaybackStyle)playbackStyle {
+    didEndPlaybackWithStyle:(PHLivePhotoViewPlaybackStyle)playbackStyle {
+    self.sw_livePlaying = NO;
     livePhotoView.hidden = YES;
 }
+
 
 - (void)sw_updateHintForTranslationX:(CGFloat)x {
     if (fabs(x) < 1.0) {
@@ -410,6 +417,7 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
         case UIGestureRecognizerStateEnded:
         case UIGestureRecognizerStateCancelled:
         case UIGestureRecognizerStateFailed: {
+            self.sw_livePlaying = NO;
             if (self.livePhotoView) {
                 [self.livePhotoView stopPlayback];
                 self.livePhotoView.hidden = YES;
@@ -426,6 +434,8 @@ static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInte
 #pragma mark - SwipeAlbumViewController
 
 @interface SwipeAlbumViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate>
+@property (nonatomic, strong) UILongPressGestureRecognizer *topLongPress;
+
 @property (nonatomic, strong) NSCache<NSString *, UIImage *> *cardBlurImageCache;
 @property (nonatomic, strong) dispatch_queue_t sw_blurQueue;
 @property (nonatomic, strong) NSMutableSet<NSString *> *sw_blurInFlight;
@@ -1598,12 +1608,32 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
             [c removeGestureRecognizer:gr];
         }
     }
+
     SwipeCardView *top = self.cards.firstObject;
     if (!top) return;
 
     top.userInteractionEnabled = YES;
+
     self.topPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     [top addGestureRecognizer:self.topPan];
+
+    self.topLongPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleCardLongPress:)];
+    self.topLongPress.minimumPressDuration = 0.25;
+    self.topLongPress.allowableMovement = 12;
+    [top addGestureRecognizer:self.topLongPress];
+}
+
+- (void)handleCardLongPress:(UILongPressGestureRecognizer *)gr {
+    SwipeCardView *card = (SwipeCardView *)gr.view;
+    if (!card) return;
+
+    if (gr.state == UIGestureRecognizerStateBegan) {
+        [self sw_startLivePhotoOnCard:card];
+    } else if (gr.state == UIGestureRecognizerStateEnded ||
+               gr.state == UIGestureRecognizerStateCancelled ||
+               gr.state == UIGestureRecognizerStateFailed) {
+        [self sw_stopLivePhotoOnCard:card];
+    }
 }
 
 - (void)layoutCardsAnimated:(BOOL)animated {
@@ -1759,8 +1789,10 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
             [self sw_setAnchorPoint:CGPointMake(0.5, 0.5) forView:card];
             [self layoutCardsAnimated:YES];
         }];
+    } else if (pan.state == UIGestureRecognizerStateBegan) {
+        SwipeCardView *card = (SwipeCardView *)pan.view;
+        [self sw_stopLivePhotoOnCard:card];
     }
-
 }
 
 - (void)sw_animateAdvanceStackWithOutgoingTop:(SwipeCardView *)outTop
@@ -1872,6 +1904,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     SwipeCardView *top = self.cards.firstObject;
     if (!top) return;
+    [self sw_stopLivePhotoOnCard:top];
 
     self.cardAnimating = YES;
 
@@ -2921,11 +2954,14 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     card.isLivePhoto = NO;
     card.liveBadgeButton.hidden = YES;
     card.liveTappedBlock = nil;
+
+    [self sw_stopLivePhotoOnCard:card];
+
     if (card.livePhotoView) {
         card.livePhotoView.hidden = YES;
         card.livePhotoView.livePhoto = nil;
     }
-    
+
     card.sw_revealWhenReady = showWhenReady;
     if (showWhenReady) {
         card.hidden = YES;
@@ -2974,7 +3010,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 
     card.reqId = [self.imageManager requestImageForAsset:asset
                                               targetSize:targetPx
-                                             contentMode:PHImageContentModeAspectFill
+                                             contentMode:PHImageContentModeAspectFit
                                                  options:opt
                                            resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
         if (!result) return;
@@ -3039,10 +3075,13 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     opt.networkAccessAllowed = YES;
 
     __weak UIImageView *wiv = iv;
-
+    PHImageContentMode mode = PHImageContentModeAspectFill;
+    if ([iv.superview isKindOfClass:SwipeCardView.class]) {
+        mode = PHImageContentModeAspectFit;
+    }
     [self.imageManager requestImageForAsset:asset
                                  targetSize:target
-                                contentMode:PHImageContentModeAspectFill
+                                contentMode:mode
                                     options:opt
                               resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
         if (!result) return;
@@ -3070,14 +3109,129 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
 #pragma mark - Live Photo 播放
 
 - (void)sw_playLivePhotoOnCard:(SwipeCardView *)card {
-    if (card.assetID.length == 0) return;
+    if (!card || card.assetID.length == 0) return;
+
+    // 只允许顶卡交互
+    if (self.cards.firstObject != card) return;
 
     PHAsset *asset = [self assetForID:card.assetID];
     if (!asset) return;
 
-    if (!(asset.mediaSubtypes & PHAssetMediaSubtypePhotoLive)) {
+    if (!(asset.mediaSubtypes & PHAssetMediaSubtypePhotoLive)) return;
+
+    // Tap toggle：正在播 -> 直接停
+    if (card.sw_livePlaying) {
+        [self sw_stopLivePhotoOnCard:card];
         return;
     }
+
+    // 开播前，停掉其他卡的 Live 防止串状态
+    [self sw_stopLivePhotoOnAllCards];
+
+    card.sw_livePlaying = YES;
+
+    NSString *aid = [card.assetID copy];
+
+    // 确保 livePhotoView 存在
+    if (!card.livePhotoView) {
+        card.livePhotoView = [[PHLivePhotoView alloc] initWithFrame:card.imageView.bounds];
+        card.livePhotoView.contentMode = UIViewContentModeScaleAspectFit;
+        card.livePhotoView.clipsToBounds = YES;
+        card.livePhotoView.userInteractionEnabled = NO;
+        card.livePhotoView.hidden = YES;
+        card.livePhotoView.delegate = card;
+        [card insertSubview:card.livePhotoView aboveSubview:card.imageView];
+    } else {
+        card.livePhotoView.frame = card.imageView.bounds;
+    }
+
+    // 已有 livePhoto：直接播
+    if (card.livePhotoView.livePhoto) {
+        card.livePhotoView.hidden = NO;
+        [card.livePhotoView startPlaybackWithStyle:PHLivePhotoViewPlaybackStyleFull];
+        return;
+    }
+
+    // 如果之前有 in-flight 的 live 请求，先取消
+    if (card.sw_liveReqId != PHInvalidImageRequestID) {
+        [self.imageManager cancelImageRequest:card.sw_liveReqId];
+        card.sw_liveReqId = PHInvalidImageRequestID;
+    }
+
+    PHLivePhotoRequestOptions *opt = [PHLivePhotoRequestOptions new];
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    opt.networkAccessAllowed = YES;
+
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGSize targetPx = CGSizeMake(card.imageView.bounds.size.width * scale,
+                                 card.imageView.bounds.size.height * scale);
+
+    __weak typeof(self) ws = self;
+    __weak SwipeCardView *wcard = card;
+
+    card.sw_liveReqId =
+    [self.imageManager requestLivePhotoForAsset:asset
+                                     targetSize:targetPx
+                                    contentMode:PHImageContentModeAspectFit
+                                        options:opt
+                                  resultHandler:^(PHLivePhoto * _Nullable livePhoto, NSDictionary * _Nullable info) {
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(ws) self = ws;
+            SwipeCardView *scard = wcard;
+            if (!self || !scard) return;
+
+            scard.sw_liveReqId = PHInvalidImageRequestID;
+
+            // 复用/切卡校验
+            if (![scard.assetID isEqualToString:aid]) return;
+            if (!livePhoto) return;
+
+            scard.livePhotoView.livePhoto = livePhoto;
+
+            if (!scard.sw_livePlaying) {
+                scard.livePhotoView.hidden = YES;
+                return;
+            }
+
+            scard.livePhotoView.hidden = NO;
+            [scard.livePhotoView startPlaybackWithStyle:PHLivePhotoViewPlaybackStyleFull];
+        });
+    }];
+}
+
+- (void)sw_stopLivePhotoOnCard:(SwipeCardView *)card {
+    if (!card) return;
+
+    card.sw_livePlaying = NO;
+
+    if (card.sw_liveReqId != PHInvalidImageRequestID) {
+        [self.imageManager cancelImageRequest:card.sw_liveReqId];
+        card.sw_liveReqId = PHInvalidImageRequestID;
+    }
+
+    if (card.livePhotoView) {
+        [card.livePhotoView stopPlayback];
+        card.livePhotoView.hidden = YES;
+    }
+}
+
+- (void)sw_stopLivePhotoOnAllCards {
+    for (SwipeCardView *c in self.cards) {
+        [self sw_stopLivePhotoOnCard:c];
+    }
+}
+
+- (void)sw_startLivePhotoOnCard:(SwipeCardView *)card {
+    if (!card || card.assetID.length == 0) return;
+    if (self.cards.firstObject != card) return;
+
+    PHAsset *asset = [self assetForID:card.assetID];
+    if (!asset) return;
+    if (!(asset.mediaSubtypes & PHAssetMediaSubtypePhotoLive)) return;
+
+    [self sw_stopLivePhotoOnAllCards];
+    card.sw_livePlaying = YES;
 
     NSString *aid = [card.assetID copy];
 
@@ -3099,28 +3253,46 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
         return;
     }
 
+    if (card.sw_liveReqId != PHInvalidImageRequestID) {
+        [self.imageManager cancelImageRequest:card.sw_liveReqId];
+        card.sw_liveReqId = PHInvalidImageRequestID;
+    }
+
     PHLivePhotoRequestOptions *opt = [PHLivePhotoRequestOptions new];
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
     opt.networkAccessAllowed = YES;
 
+    CGFloat scale = UIScreen.mainScreen.scale;
+    CGSize targetPx = CGSizeMake(card.imageView.bounds.size.width * scale,
+                                 card.imageView.bounds.size.height * scale);
+
     __weak typeof(self) ws = self;
     __weak SwipeCardView *wcard = card;
 
+    card.sw_liveReqId =
     [self.imageManager requestLivePhotoForAsset:asset
-                                     targetSize:card.imageView.bounds.size
+                                     targetSize:targetPx
                                     contentMode:PHImageContentModeAspectFit
                                         options:opt
                                   resultHandler:^(PHLivePhoto * _Nullable livePhoto, NSDictionary * _Nullable info) {
-        if (!livePhoto) return;
 
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(ws) self = ws;
             SwipeCardView *scard = wcard;
             if (!self || !scard) return;
 
+            scard.sw_liveReqId = PHInvalidImageRequestID;
+
             if (![scard.assetID isEqualToString:aid]) return;
+            if (!livePhoto) return;
 
             scard.livePhotoView.livePhoto = livePhoto;
+
+            if (!scard.sw_livePlaying) {
+                scard.livePhotoView.hidden = YES;
+                return;
+            }
+
             scard.livePhotoView.hidden = NO;
             [scard.livePhotoView startPlaybackWithStyle:PHLivePhotoViewPlaybackStyleFull];
         });

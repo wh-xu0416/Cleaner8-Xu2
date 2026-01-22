@@ -1,6 +1,7 @@
 #import "ASCompressionResultBaseViewController.h"
 #import "ASMyStudioViewController.h"
 #import "ASMediaPreviewViewController.h"
+#import "ASReviewHelper.h"
 #import <Photos/Photos.h>
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
@@ -353,6 +354,7 @@ typedef void(^ASDeleteSheetBlock)(void);
     if (![self useStaticPreviewIcon]) {
         [self loadThumbIfNeeded];
     }
+    [ASReviewHelper requestReviewOnceFromViewController:self source:@"paid_rate_rate"];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
