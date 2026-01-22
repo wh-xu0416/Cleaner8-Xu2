@@ -1,5 +1,5 @@
-"NSPhotoLibraryUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
-"NSPhotoLibraryAddUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
-"NSContactsUsageDescription" = "We are requesting access to our contacts only to identify and organize them.";
-"NSUserTrackingUsageDescription" = "Tracking enables personalized features in the app. Your data will be kept strictly confidential and will never be shared with third parties. Allow tracking to experience all features?";
-"NSLocalNetworkUsageDescription" = "Some functionality may not work when wireless data is turned off.";
+"NSPhotoLibraryUsageDescription" = "App cần truy cập thư viện ảnh để xử lý/nén media, phát hiện trùng lặp. Tất cả xử lý local, bảo mật riêng tư.";
+"NSPhotoLibraryAddUsageDescription" = "App cần truy cập thư viện ảnh để xử lý/nén media, phát hiện trùng lặp. Tất cả xử lý local, bảo mật riêng tư.";
+"NSContactsUsageDescription" = "Truy cập liên hệ chỉ để nhận dạng và sắp xếp.";
+"NSUserTrackingUsageDescription" = "Theo dõi cung cấp tính năng cá nhân, dữ liệu bảo mật, không chia sẻ. Cho phép theo dõi dùng tất cả tính năng?";
+"NSLocalNetworkUsageDescription" = "Tắt dữ liệu không dây thì một số chức năng không hoạt động.";

@@ -5,6 +5,7 @@
 #import "ASSelectTitleBar.h"
 #import <Photos/Photos.h>
 #import "PaywallPresenter.h"
+#import "ASReviewHelper.h"
 
 #pragma mark - Adapt Helpers (402)
 
@@ -562,6 +563,8 @@ static inline UIColor *ASColorFromRGBAHex(uint32_t rgba) {
         NSArray *delIDs = self.selectedIDs.allObjects;
         [[SwipeManager shared] deleteAssetsWithIDs:delIDs completion:^(__unused BOOL success, __unused NSError * _Nullable error) {
             dispatch_async(dispatch_get_main_queue(), ^{
+                [ASReviewHelper requestReviewOnceFromViewController:self source:@"swipe_page"];
+
                 [self.selectedIDs removeAllObjects];
                 [self updateDeleteButtonVisibilityAndInsets];
                 [self handleUpdate];

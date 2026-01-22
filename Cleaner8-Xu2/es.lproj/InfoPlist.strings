@@ -1,5 +1,5 @@
-"NSPhotoLibraryUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
-"NSPhotoLibraryAddUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
-"NSContactsUsageDescription" = "We are requesting access to our contacts only to identify and organize them.";
-"NSUserTrackingUsageDescription" = "Tracking enables personalized features in the app. Your data will be kept strictly confidential and will never be shared with third parties. Allow tracking to experience all features?";
-"NSLocalNetworkUsageDescription" = "Some functionality may not work when wireless data is turned off.";
+"NSPhotoLibraryUsageDescription" = "La app necesita acceso a la biblioteca de fotos para procesar/compresar medios, detectar duplicados. Todo local, privacidad garantizada.";
+"NSPhotoLibraryAddUsageDescription" = "La app necesita acceso a la biblioteca de fotos para procesar/compresar medios, detectar duplicados. Todo local, privacidad garantizada.";
+"NSContactsUsageDescription" = "Acceso a contactos solo para identificar y organizarlos.";
+"NSUserTrackingUsageDescription" = "El seguimiento ofrece funciones personalizadas, datos confidenciales, no compartidos. Permitir seguimiento para todas las funciones?";
+"NSLocalNetworkUsageDescription" = "Algunas funciones no funcionan si los datos inalámbricos están desactivados.";

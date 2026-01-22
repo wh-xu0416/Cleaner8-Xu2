@@ -2425,7 +2425,8 @@ static inline CGFloat ASPillW(NSString *title, UIFont *font, CGFloat imgW, CGFlo
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (!success) return;
 
-                [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
+                NSString *reviewSource = [self paywallSourceForDelete];
+                [ASReviewHelper requestReviewOnceFromViewController:self source:reviewSource];
 
                 NSUInteger deletedCount = toDelete.count;
                 uint64_t freedBytes = weakSelf2.selectedBytes;

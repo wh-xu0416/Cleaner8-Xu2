@@ -455,7 +455,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 }
 
 - (void)tapFeedBack {
-    [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeySetRateRate];
+    [ASReviewHelper requestReviewOnceFromViewController:self source:@"setting"];
 }
 
 - (void)tapSetting {

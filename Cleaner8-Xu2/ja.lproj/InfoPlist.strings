@@ -1,5 +1,5 @@
-"NSPhotoLibraryUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
-"NSPhotoLibraryAddUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
-"NSContactsUsageDescription" = "We are requesting access to our contacts only to identify and organize them.";
-"NSUserTrackingUsageDescription" = "Tracking enables personalized features in the app. Your data will be kept strictly confidential and will never be shared with third parties. Allow tracking to experience all features?";
-"NSLocalNetworkUsageDescription" = "Some functionality may not work when wireless data is turned off.";
+"NSPhotoLibraryUsageDescription" = "写真/動画の読み取り・処理、重複検出、圧縮のためフォトライブラリへのアクセスが必要です。全てローカル処理、プライバシー保護。";
+"NSPhotoLibraryAddUsageDescription" = "写真/動画の読み取り・処理、重複検出、圧縮のためフォトライブラリへのアクセスが必要です。全てローカル処理、プライバシー保護。";
+"NSContactsUsageDescription" = "連絡先へのアクセスは、識別と整理のみに使用します。";
+"NSUserTrackingUsageDescription" = "トラッキングでパーソナライズ機能を提供。データは機密保持、第三者に共有しません。全機能を使用するには許可しますか？";
+"NSLocalNetworkUsageDescription" = "ワイヤレスデータをオフにすると一部機能が動作しません。";

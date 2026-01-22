@@ -343,6 +343,20 @@ typedef void(^ASDeleteSheetBlock)(void);
 
 #pragma mark - Life
 
+- (NSString *)reviewSourceForSummary {
+    PHAsset *asset = self.summary.originalAssets.firstObject;
+    if (asset) {
+        if (asset.mediaType == PHAssetMediaTypeVideo) {
+            return @"video_compress";
+        }
+        if (asset.mediaType == PHAssetMediaTypeImage &&
+            (asset.mediaSubtypes & PHAssetMediaSubtypePhotoLive)) {
+            return @"livephoto_compress";
+        }
+    }
+    return @"photo_compress";
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = ASGrayBG();
@@ -354,7 +368,7 @@ typedef void(^ASDeleteSheetBlock)(void);
     if (![self useStaticPreviewIcon]) {
         [self loadThumbIfNeeded];
     }
-    [ASReviewHelper requestReviewOnceFromViewController:self source:@"paid_rate_rate"];
+    [ASReviewHelper requestReviewOnceFromViewController:self source:[self reviewSourceForSummary]];
 }
 
 - (void)viewDidAppear:(BOOL)animated {

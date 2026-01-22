@@ -25,6 +25,7 @@ static inline NSString *ASABTrackedFlagKey(NSString *abKey) {
 + (void)requestReviewOnceFromViewController:(UIViewController *)vc
                                      source:(NSString *)source {
     if (@available(iOS 15.0, *)) {
+        [[LTEventTracker shared] track: @"Rate" properties:@{@"position": source}];
 
         // 先按来源判断是否允许弹出（此处会在“远程AB值”时触发一次打点，默认值不打点）
         if (![self _isReviewAllowedByABForSourceAndTrackIfNeeded:source]) {
@@ -63,16 +64,42 @@ static inline NSString *ASABTrackedFlagKey(NSString *abKey) {
     if (source.length == 0) return YES;
 
     NSString *abKey = nil;
-    if ([source isEqualToString:kABKeyPaidRate]) {
+
+    static NSSet<NSString *> *paidSources;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        paidSources = [NSSet setWithArray:@[
+            @"photo_compress",
+            @"video_compress",
+            @"livephoto_compress",
+            @"similar_photo",
+            @"similar_video",
+            @"duplicate_photo",
+            @"duplicate_video",
+            @"screenshots",
+            @"other_photo",
+            @"blurry",
+            @"screen_recording",
+            @"large_video",
+            @"swipe_page",
+            @"contact"
+        ]];
+    });
+
+    if ([paidSources containsObject:source] ||
+        [source isEqualToString:kABKeyPaidRate]) {
         abKey = kABKeyPaidRate;
-    } else if ([source isEqualToString:kABKeySetRate]) {
+
+    } else if ([source isEqualToString:@"setting"] ||
+               [source isEqualToString:kABKeySetRate]) {
         abKey = kABKeySetRate;
+
     } else {
         return YES;
     }
 
     ASABTestManager *ab = [ASABTestManager shared];
-    NSString *val = [ab stringForKey:abKey]; // open/close；无缓存默认 open
+    NSString *val = [ab stringForKey:abKey]; // open/close；无缓存默认 close
 
     // 仅当值来源为 Remote 时打点；默认值不打点；且每个 key 只打一次；且安装24小时内才打点
     if ([ab isRemoteValueForKey:abKey] && [self _isWithin24HoursSinceInstall]) {

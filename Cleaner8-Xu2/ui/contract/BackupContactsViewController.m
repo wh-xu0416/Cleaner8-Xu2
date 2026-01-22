@@ -330,7 +330,7 @@ static inline UIFont *ASACFont(CGFloat size, UIFontWeight weight) {
                 NSLog(@"delete backups failed: %@", error.localizedDescription);
                 return;
             }
-            [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
+            [ASReviewHelper requestReviewOnceFromViewController:self source:@"contact"];
             [weakSelf.selectedBackupIds removeAllObjects];
             [weakSelf loadBackups]; 
         }];

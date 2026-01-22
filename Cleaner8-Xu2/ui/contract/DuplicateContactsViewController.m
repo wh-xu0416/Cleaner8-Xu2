@@ -951,7 +951,7 @@ forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
 
 - (void)mergeBatchesSequentially:(NSArray<NSArray<NSString *> *> *)batches index:(NSInteger)idx {
     if (idx >= (NSInteger)batches.count) {
-        [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
+        [ASReviewHelper requestReviewOnceFromViewController:self source:@"contact"];
 
         [self showToastDone];
 

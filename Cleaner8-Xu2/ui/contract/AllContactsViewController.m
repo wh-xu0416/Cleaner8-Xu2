@@ -1006,7 +1006,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                     [weakSelf showAlertWithTitle:NSLocalizedString(@"Delete failed.", nil) message:error3.localizedDescription];
                     return;
                 }
-                [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
+                [ASReviewHelper requestReviewOnceFromViewController:self source:@"contact"];
 
                 NSIndexSet *rm = [weakSelf.contacts indexesOfObjectsPassingTest:^BOOL(CNContact *obj, NSUInteger idx, BOOL *stop) {
                     (void)idx; (void)stop;
@@ -1069,7 +1069,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                 [weakSelf showAlertWithTitle:NSLocalizedString(@"Delete failed", nil) message:error2.localizedDescription];
                 return;
             }
-            [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
+            [ASReviewHelper requestReviewOnceFromViewController:self source:@"contact"];
 
             NSIndexSet *rm = [weakSelf.contacts indexesOfObjectsPassingTest:^BOOL(CNContact *obj, NSUInteger idx, BOOL *stop) {
                 (void)idx; (void)stop;
@@ -1121,7 +1121,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                 [weakSelf showAlertWithTitle:NSLocalizedString(@"Backup failed.", nil) message:error2.localizedDescription];
                 return;
             }
-            [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
+            [ASReviewHelper requestReviewOnceFromViewController:self source:@"contact"];
 
             [[NSNotificationCenter defaultCenter] postNotificationName:@"CMBackupDidFinish" object:nil];
 
@@ -1186,7 +1186,7 @@ minimumLineSpacingForSectionAtIndex:(NSInteger)section {
                 [weakSelf showAlertWithTitle:NSLocalizedString(@"Delete failed.", nil) message:error2.localizedDescription];
                 return;
             }
-            [ASReviewHelper requestReviewOnceFromViewController:self source:AppConstants.abKeyPaidRateRate];
+            [ASReviewHelper requestReviewOnceFromViewController:self source:@"contact"];
 
             NSIndexSet *rm = [weakSelf.contacts indexesOfObjectsPassingTest:^BOOL(CNContact *obj, NSUInteger idx, BOOL *stop) {
                 (void)idx; (void)stop;

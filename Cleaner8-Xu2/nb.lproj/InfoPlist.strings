@@ -1,5 +1,5 @@
-"NSPhotoLibraryUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
-"NSPhotoLibraryAddUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
-"NSContactsUsageDescription" = "We are requesting access to our contacts only to identify and organize them.";
-"NSUserTrackingUsageDescription" = "Tracking enables personalized features in the app. Your data will be kept strictly confidential and will never be shared with third parties. Allow tracking to experience all features?";
-"NSLocalNetworkUsageDescription" = "Some functionality may not work when wireless data is turned off.";
+"NSPhotoLibraryUsageDescription" = "Appen trenger tilgang til fotobiblioteket for å behandle/komprimere media, gjenkjenne duplikater. Alt lokalt, personvern beskyttet.";
+"NSPhotoLibraryAddUsageDescription" = "Appen trenger tilgang til fotobiblioteket for å behandle/komprimere media, gjenkjenne duplikater. Alt lokalt, personvern beskyttet.";
+"NSContactsUsageDescription" = "Tilgang til kontakter kun for identifikasjon og organisering.";
+"NSUserTrackingUsageDescription" = "Sporing gir personlige funksjoner, data er konfidensielt, ikke delt. Tillat sporing for alle funksjoner?";
+"NSLocalNetworkUsageDescription" = "Noen funksjoner virker ikke hvis trådløse data er slått av.";

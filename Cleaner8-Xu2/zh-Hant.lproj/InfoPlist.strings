@@ -1,5 +1,5 @@
-"NSPhotoLibraryUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
-"NSPhotoLibraryAddUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
-"NSContactsUsageDescription" = "We are requesting access to our contacts only to identify and organize them.";
-"NSUserTrackingUsageDescription" = "Tracking enables personalized features in the app. Your data will be kept strictly confidential and will never be shared with third parties. Allow tracking to experience all features?";
-"NSLocalNetworkUsageDescription" = "Some functionality may not work when wireless data is turned off.";
+"NSPhotoLibraryUsageDescription" = "本應用需存取您的照片庫，以讀取照片/影片、進行影像處理、辨識相似與重複影像，並壓縮照片/影片。所有處理均於裝置本機進行，保障您的隱私與安全。";
+"NSPhotoLibraryAddUsageDescription" = "本應用需存取您的照片庫，以讀取照片/影片、進行影像處理、辨識相似與重複影像，並壓縮照片/影片。所有處理均於裝置本機進行，保障您的隱私與安全。";
+"NSContactsUsageDescription" = "我們請求存取聯繫人僅為辨識與整理聯繫人資料。";
+"NSUserTrackingUsageDescription" = "追蹤功能可提供個人化體驗，您的資料嚴格保密，絕不分享予第三方。允許追蹤以使用全部功能？";
+"NSLocalNetworkUsageDescription" = "關閉無線網路時，部分功能可能無法使用。";
