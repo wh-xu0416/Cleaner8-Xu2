@@ -1,2 +1,10 @@
-"NSPhotoLibraryUsageDescription" = "需要访问您的相册，用于扫描相似/重复照片与视频并统计可清理空间。";
-"NSPhotoLibraryAddUsageDescription" = "需要修改相册权限，用于删除您选择清理的照片与视频。";
+"NSPhotoLibraryUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
+
+"NSPhotoLibraryAddUsageDescription" = "This app requires access to your photo library to read photos/videos and perform image processing, identify similar and duplicate images, and compress photos/videos. All processing is done locally on your device, ensuring your privacy and security.";
+
+"NSContactsUsageDescription" = "We are requesting access to our contacts only to identify and organize them.";
+
+"NSUserTrackingUsageDescription" = "Tracking enables personalized features in the app. Your data will be kept strictly confidential and will never be shared with third parties. Allow tracking to experience all features?";
+
+"NSLocalNetworkUsageDescription" = "Some functionality may not work when wireless data is turned off.";
+"NSCellularNetworkUsageDescription" = "Some functionality may not work when wireless data is turned off.";
