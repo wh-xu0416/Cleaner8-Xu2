@@ -80,7 +80,9 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
 
         self.isPresenting = YES;
 
-        SubscriptionViewController *vc = [[SubscriptionViewController alloc] initWithMode:SubscriptionPaywallModeGateWeekly];
+        SubscriptionPaywallMode mode = AppConstants.paywallGateModeRaw;
+        SubscriptionViewController *vc = [[SubscriptionViewController alloc] initWithMode:mode];
+
         vc.modalPresentationStyle = UIModalPresentationFullScreen;
         vc.source = source;
 
@@ -92,7 +94,7 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
     });
 }
 
-// 订阅页
+// 订阅列表页
 - (void)showSubscriptionPageWithSource:(NSString * _Nullable)source {
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *top = [self topMostViewController];
@@ -105,8 +107,9 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
 
         if (top.presentedViewController) return;
 
-        // 默认选中年费
-        SubscriptionViewController *vc = [[SubscriptionViewController alloc] initWithMode:SubscriptionPaywallModeYearly];
+        SubscriptionPaywallMode mode = AppConstants.subscriptionPageModeRaw;
+        SubscriptionViewController *vc = [[SubscriptionViewController alloc] initWithMode:mode];
+
         vc.modalPresentationStyle = UIModalPresentationFullScreen;
         vc.source = source;
 
@@ -114,7 +117,6 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
         [top presentViewController:vc animated:YES completion:nil];
     });
 }
-
 
 - (void)dismissIfPresent {
     dispatch_async(dispatch_get_main_queue(), ^{

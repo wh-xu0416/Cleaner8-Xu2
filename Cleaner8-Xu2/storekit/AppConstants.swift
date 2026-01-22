@@ -18,8 +18,6 @@ public class AppConstants: NSObject {
     public static let privacyLink = "https://www.baidu.com"
 
     // MARK: - Firebase
-    
-    // 是否启用 Firebase初始化
     public static let firebaseEnabled: Bool = false
 
     // MARK: - ThinkingData（数数）
@@ -30,16 +28,19 @@ public class AppConstants: NSObject {
     // MARK: - AppsFlyer
     public static let appsFlyerDevKey: String = "YOUR_APPSFLYER_DEV_KEY"
     public static let appsFlyerAppleAppId: String = "YOUR_APPLE_APP_ID"
-    
-    // AppsFlyer 内部等待 ATT 回来的最大时长（秒）
     public static let appsFlyerAttWaitTimeout: Double = 120
     
+    // MARK: - Paywall / Subscription 配置
+    //  栏门页 2: 周费商品, 3: 年费商品
+    public static let paywallGateModeRaw: Int = 3
+
+    // 订阅列表页 0: 默认选中周费, 1: 默认选中年费
+    public static let subscriptionPageModeRaw: Int = 0
     
-    // MARK: - ABTest相关
+    // MARK: - ABTest Key
     public static let abKeyPaidRateRate: String = "paid_rate_rate"
     public static let abKeySetRateRate: String  = "set_rate_rate"
 
-    // 默认值 Remote Config 默认 本地默认
     public static let abDefaultOpen: String = "open"
     public static let abDefaultClose: String = "close"
 }
