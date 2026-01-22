@@ -25,17 +25,19 @@ static inline NSString *ASABTrackedFlagKey(NSString *abKey) {
 + (void)requestReviewOnceFromViewController:(UIViewController *)vc
                                      source:(NSString *)source {
     if (@available(iOS 15.0, *)) {
-        [[LTEventTracker shared] track: @"Rate" properties:@{@"position": source}];
-
-        // 先按来源判断是否允许弹出（此处会在“远程AB值”时触发一次打点，默认值不打点）
-        if (![self _isReviewAllowedByABForSourceAndTrackIfNeeded:source]) {
-            return;
-        }
-
-        // 只尝试弹一次
+        
+        // 弹出过不再弹出
         if ([[NSUserDefaults standardUserDefaults] boolForKey:kOCSystemReviewDidRequestKey]) {
             return;
         }
+        
+        // 按来源判断是否允许弹出（此处会在远程AB值时触发remote配置打点，默认值不打点）
+        if (![self _isReviewAllowedByABForSourceAndTrackIfNeeded:source]) {
+            return;
+        }
+        
+        // show打点
+        [[LTEventTracker shared] track: @"Rate" properties:@{@"position": source}];
 
         void (^doRequest)(void) = ^{
             if ([[NSUserDefaults standardUserDefaults] boolForKey:kOCSystemReviewDidRequestKey]) {
@@ -101,7 +103,7 @@ static inline NSString *ASABTrackedFlagKey(NSString *abKey) {
     ASABTestManager *ab = [ASABTestManager shared];
     NSString *val = [ab stringForKey:abKey]; // open/close；无缓存默认 close
 
-    // 仅当值来源为 Remote 时打点；默认值不打点；且每个 key 只打一次；且安装24小时内才打点
+    // 仅当 Remote 时打点默认值不打点 且每个 key 只打一次 且安装24小时内才打点
     if ([ab isRemoteValueForKey:abKey] && [self _isWithin24HoursSinceInstall]) {
         NSString *flagKey = ASABTrackedFlagKey(abKey);
         NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];

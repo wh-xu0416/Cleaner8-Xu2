@@ -18,7 +18,8 @@ public class AppConstants: NSObject {
     public static let privacyLink = "https://www.baidu.com"
 
     // MARK: - Firebase
-    /// 是否启用 Firebase初始化 现在 AppDelegate 里是注释掉的
+    
+    // 是否启用 Firebase初始化
     public static let firebaseEnabled: Bool = false
 
     // MARK: - ThinkingData（数数）
@@ -38,8 +39,7 @@ public class AppConstants: NSObject {
     public static let abKeyPaidRateRate: String = "paid_rate_rate"
     public static let abKeySetRateRate: String  = "set_rate_rate"
 
-    // 默认值（Remote Config 默认 & 本地默认）
+    // 默认值 Remote Config 默认 本地默认
     public static let abDefaultOpen: String = "open"
     public static let abDefaultClose: String = "close"
-
 }

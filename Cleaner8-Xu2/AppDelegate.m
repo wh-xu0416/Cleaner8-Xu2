@@ -12,23 +12,6 @@ static inline void ASLog(NSString *module, NSString *msg) {
     NSLog(@"【%@】%@", module ?: @"日志", msg ?: @"");
 }
 
-static inline BOOL ASIsBlank(NSString *s) {
-    return (s == nil || s.length == 0);
-}
-
-static inline BOOL ASIsPlaceholder(NSString *s) {
-    if (ASIsBlank(s)) return YES;
-    return ([s containsString:@"YOUR_"] || [s containsString:@"YOUR-"] || [s containsString:@"<YOUR"]);
-}
-
-static inline BOOL ASIsValidHttpUrl(NSString *urlStr) {
-    if (ASIsBlank(urlStr)) return NO;
-    NSURL *url = [NSURL URLWithString:urlStr];
-    if (!url) return NO;
-    NSString *scheme = url.scheme.lowercaseString;
-    return ([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"]);
-}
-
 static inline NSString *ASATTStatusText(NSInteger status) {
     switch (status) {
         case 0: return @"未决定（NotDetermined）";
@@ -136,19 +119,10 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
 
 - (void)setupThinkingData {
 
-    ASLog(@"数数(ThinkingData)", @"初始化开始");
+    ASLog(@"(ThinkingData)", @"初始化开始");
 
     NSString *appId = AppConstants.thinkingDataAppId;
     NSString *serverUrl = AppConstants.thinkingDataServerUrl;
-
-    if (ASIsPlaceholder(appId) || ASIsBlank(appId)) {
-        ASLog(@"数数(ThinkingData)", @"初始化失败：AppId 还是占位符（请替换 AppConstants.thinkingDataAppId）");
-        return;
-    }
-    if (!ASIsValidHttpUrl(serverUrl) || ASIsPlaceholder(serverUrl)) {
-        ASLog(@"数数(ThinkingData)", @"初始化失败：ServerUrl 非法或是占位符（必须是 http/https 完整 URL，例如 https://xxx；请替换 AppConstants.thinkingDataServerUrl）");
-        return;
-    }
 
     [TDAnalytics enableLog:AppConstants.thinkingDataEnableLog];
     [TDAnalytics startAnalyticsWithAppId:appId serverUrl:serverUrl];
@@ -156,9 +130,9 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
     NSString *deviceId = [TDAnalytics getDeviceId];
     if (deviceId.length > 0) {
         [TDAnalytics setDistinctId:deviceId];
-        ASLog(@"数数(ThinkingData)", [NSString stringWithFormat:@"设置 distinctId 成功：%@", deviceId]);
+        ASLog(@"(ThinkingData)", [NSString stringWithFormat:@"设置 distinctId 成功：%@", deviceId]);
     } else {
-        ASLog(@"数数(ThinkingData)", @"设置 distinctId 失败：deviceId 为空");
+        ASLog(@"(ThinkingData)", @"设置 distinctId 失败：deviceId 为空");
     }
 
     [TDAnalytics enableAutoTrack:(TDAutoTrackEventTypeAppInstall
@@ -167,34 +141,18 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
 
     [TDAnalytics enableThirdPartySharing:TDThirdPartyTypeAppsFlyer];
 
-    ASLog(@"数数(ThinkingData)", @"初始化结束：本地初始化已完成（网络是否可达看后续 sync 请求）");
+    ASLog(@"(ThinkingData)", @"初始化结束：本地初始化已完成（网络是否可达看后续 sync 请求）");
 }
 
 - (void)setupAppsFlyer {
-
-    ASLog(@"AppsFlyer", @"初始化开始（配置参数阶段，不会 start）");
-
+    ASLog(@"AppsFlyer", @"配置参数 不start");
     NSString *devKey = AppConstants.appsFlyerDevKey;
     NSString *appleAppId = AppConstants.appsFlyerAppleAppId;
-
-    if (ASIsPlaceholder(devKey) || ASIsBlank(devKey)) {
-        ASLog(@"AppsFlyer", @"初始化失败：DevKey 还是占位/为空（请替换 AppConstants.appsFlyerDevKey）");
-        return;
-    }
-    if (ASIsPlaceholder(appleAppId) || ASIsBlank(appleAppId)) {
-        ASLog(@"AppsFlyer", @"初始化失败：AppleAppId 还是占位/为空（请替换 AppConstants.appsFlyerAppleAppId，纯数字字符串）");
-        return;
-    }
 
     AppsFlyerLib *af = [AppsFlyerLib shared];
     af.appsFlyerDevKey = devKey;
     af.appleAppID = appleAppId;
     af.delegate = self;
-
-#if DEBUG
-    af.isDebug = YES;
-    ASLog(@"AppsFlyer", @"调试模式：已开启 isDebug=YES（仅开发环境使用）");
-#endif
 
     NSTimeInterval timeout = (NSTimeInterval)AppConstants.appsFlyerAttWaitTimeout;
     [af waitForATTUserAuthorizationWithTimeoutInterval:timeout];
