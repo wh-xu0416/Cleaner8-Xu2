@@ -1009,7 +1009,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.archiveTitleLabel.font = SWFont(15, UIFontWeightMedium);
     self.archiveTitleLabel.text = NSLocalizedString(@"Archive Files", nil);
     self.archiveTitleLabel.adjustsFontSizeToFitWidth = YES;
-    self.archiveTitleLabel.minimumScaleFactor = 0.6;
+    self.archiveTitleLabel.minimumScaleFactor = 0.5;
     self.archiveTitleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.archiveCard addSubview:self.archiveTitleLabel];
 
@@ -1019,7 +1019,7 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.archiveDetailLabel.font = SWFont(12, UIFontWeightMedium);
     self.archiveDetailLabel.text = NSLocalizedString(@"Files:0MB", nil);
     self.archiveDetailLabel.adjustsFontSizeToFitWidth = YES;
-    self.archiveDetailLabel.minimumScaleFactor = 0.6;
+    self.archiveDetailLabel.minimumScaleFactor = 0.5;
     self.archiveDetailLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.archiveCard addSubview:self.archiveDetailLabel];
 
