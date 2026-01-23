@@ -47,7 +47,6 @@ static inline UIColor *ASHexBlack(void) {
 
         UILayoutGuide *safe = self.safeAreaLayoutGuide;
 
-        // ===== Back Button =====
         self.backButton = [UIButton buttonWithType:UIButtonTypeCustom];
         self.backButton.translatesAutoresizingMaskIntoConstraints = NO;
         self.backButton.backgroundColor = UIColor.clearColor;
@@ -72,6 +71,8 @@ static inline UIColor *ASHexBlack(void) {
         self.titleLabel.textColor = ASHexBlack();
         self.titleLabel.numberOfLines = 1;
         self.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        self.titleLabel.adjustsFontSizeToFitWidth = YES;
+        self.titleLabel.minimumScaleFactor = 0.6;
         [self addSubview:self.titleLabel];
 
         self.selectAllButton = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -95,8 +96,15 @@ static inline UIColor *ASHexBlack(void) {
         self.selectTextLabel.font = SWFontS(14, UIFontWeightMedium);
         self.selectTextLabel.textColor = ASHexBlack();
         self.selectTextLabel.numberOfLines = 1;
+        self.selectTextLabel.adjustsFontSizeToFitWidth = YES;
+        self.selectTextLabel.minimumScaleFactor = 0.6;
         [self.selectAllButton addSubview:self.selectTextLabel];
 
+        [self.titleLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+
+        [self.selectTextLabel setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        [self.selectAllButton setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        
         [NSLayoutConstraint activateConstraints:@[
             [self.backButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:SW(20)],
             [self.backButton.topAnchor constraintEqualToAnchor:safe.topAnchor constant:0],
@@ -106,7 +114,8 @@ static inline UIColor *ASHexBlack(void) {
             [self.selectAllButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-SW(20)],
             [self.selectAllButton.centerYAnchor constraintEqualToAnchor:self.backButton.centerYAnchor],
             [self.selectAllButton.heightAnchor constraintEqualToConstant:SW(36)],
-
+            [self.selectAllButton.widthAnchor constraintLessThanOrEqualToConstant:SW(140)],
+            
             [self.selectIconView.leadingAnchor constraintEqualToAnchor:self.selectAllButton.leadingAnchor constant:SW(6)],
             [self.selectIconView.centerYAnchor constraintEqualToAnchor:self.selectAllButton.centerYAnchor],
             [self.selectIconView.widthAnchor constraintEqualToConstant:SW(24)],

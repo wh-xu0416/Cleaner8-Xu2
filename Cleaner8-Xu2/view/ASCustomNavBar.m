@@ -42,7 +42,6 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
         self.backgroundColor = UIColor.clearColor;
         UILayoutGuide *safe = self.safeAreaLayoutGuide;
 
-        // back button
         self.backButton = [UIButton buttonWithType:UIButtonTypeCustom];
         self.backButton.translatesAutoresizingMaskIntoConstraints = NO;
         self.backButton.backgroundColor = UIColor.clearColor;
@@ -64,6 +63,8 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
         self.titleLabel.textAlignment = NSTextAlignmentCenter;
         self.titleLabel.font = SWFontS(28, UIFontWeightSemibold);
         self.titleLabel.textColor = [UIColor colorWithWhite:0 alpha:1.0];
+        self.titleLabel.adjustsFontSizeToFitWidth = YES;
+        self.titleLabel.minimumScaleFactor = 0.7;
         [self addSubview:self.titleLabel];
 
         // right button

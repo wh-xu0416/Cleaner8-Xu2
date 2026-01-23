@@ -57,6 +57,8 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
         self.title.text = title;
         self.title.textColor = UIColor.blackColor;
         self.title.font = SWFontS(20, UIFontWeightRegular);
+        self.title.adjustsFontSizeToFitWidth = YES;
+        self.title.minimumScaleFactor = 0.6;
         [self addSubview:self.title];
 
         // pill
@@ -72,8 +74,11 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
         add.text = NSLocalizedString(@"Add", nil);
         add.textColor = UIColor.whiteColor;
         add.font = SWFontS(20, UIFontWeightRegular);
+        add.adjustsFontSizeToFitWidth = YES;
+        add.minimumScaleFactor = 0.6;
+        [add setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
         [self.pill addSubview:add];
-
+        
         UIImageView *arrow = [UIImageView new];
         arrow.translatesAutoresizingMaskIntoConstraints = NO;
         arrow.contentMode = UIViewContentModeScaleAspectFit;
@@ -91,7 +96,8 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
 
             [self.pill.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-SW(20)],
             [self.pill.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-
+            [self.pill.widthAnchor constraintLessThanOrEqualToConstant:SW(130)],
+            
             [self.title.trailingAnchor constraintLessThanOrEqualToAnchor:self.pill.leadingAnchor constant:-SW(12)],
 
             [add.leadingAnchor constraintEqualToAnchor:self.pill.leadingAnchor constant:SW(15)],
@@ -233,7 +239,6 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
     } else {
     }
 
-    // image + text（放到 contentView 里）
     UIImageView *img = [UIImageView new];
     img.translatesAutoresizingMaskIntoConstraints = NO;
     img.contentMode = UIViewContentModeScaleAspectFit;
@@ -247,6 +252,8 @@ static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) 
     desc.font = SWFontS(17, UIFontWeightMedium);
     desc.textAlignment = NSTextAlignmentCenter;
     desc.numberOfLines = 2;
+    desc.adjustsFontSizeToFitWidth = YES;
+    desc.minimumScaleFactor = 0.6;
     [self.contentView addSubview:desc];
 
     [NSLayoutConstraint activateConstraints:@[
