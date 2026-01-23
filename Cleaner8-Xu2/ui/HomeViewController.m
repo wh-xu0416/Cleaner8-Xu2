@@ -932,7 +932,10 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
 
     CGFloat pad = SW(15.0);
 
-    self.titleLabel.frame = CGRectMake(pad, pad, w - pad * 2.0, SW(20));
+    CGFloat titleH = ceil(self.titleLabel.font.lineHeight);
+    self.titleLabel.frame = CGRectMake(pad, pad, w - pad * 2.0, titleH);
+    self.titleLabel.numberOfLines = 1;
+    self.titleLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters; 
 
     self.countLabel.frame = CGRectMake(pad,
                                        CGRectGetMaxY(self.titleLabel.frame) + SW(4),
