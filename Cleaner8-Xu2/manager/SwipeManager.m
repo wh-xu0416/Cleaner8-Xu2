@@ -292,16 +292,17 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
     return [shortFmt stringFromDate:date];   // e.g. Jan 5
 }
 
-- (NSString *)monthTitleForYear:(NSInteger)year month:(NSInteger)month calendar:(NSCalendar *)cal monthFormatter:(NSDateFormatter *)monthFmt {
+- (NSString *)monthTitleForYear:(NSInteger)year
+                          month:(NSInteger)month
+                       calendar:(NSCalendar *)cal
+                 monthFormatter:(NSDateFormatter *)monthFmt {
     NSDateComponents *dc = [NSDateComponents new];
     dc.year = year;
     dc.month = month;
     dc.day = 1;
     NSDate *d = [cal dateFromComponents:dc];
 
-    NSString *m = [monthFmt stringFromDate:d]; // e.g. Dec
-    if (![m hasSuffix:@"."]) m = [m stringByAppendingString:@"."]; // Dec.
-    return m;
+    return [monthFmt stringFromDate:d];
 }
 
 #pragma mark - Core scan & modules
@@ -377,18 +378,21 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
 
         // 最近7天：每天一个模块
             {
-                NSCalendar *cal = [NSCalendar currentCalendar];
+                NSCalendar *cal = [NSCalendar autoupdatingCurrentCalendar];
+                cal.locale = [NSLocale currentLocale];
                 NSDate *now = [NSDate date];
 
-                NSLocale *en = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+                NSLocale *locale = [NSLocale currentLocale];
 
                 NSDateFormatter *weekdayFmt = [NSDateFormatter new];
-                weekdayFmt.locale = en;
-                weekdayFmt.dateFormat = @"EEEE"; // Wednesday
+                weekdayFmt.locale = locale;
+                weekdayFmt.dateFormat =
+                    [NSDateFormatter dateFormatFromTemplate:@"EEEE" options:0 locale:locale];
 
                 NSDateFormatter *shortDateFmt = [NSDateFormatter new];
-                shortDateFmt.locale = en;
-                shortDateFmt.dateFormat = @"MMM d"; // Jan 5
+                shortDateFmt.locale = locale;
+                shortDateFmt.dateFormat =
+                    [NSDateFormatter dateFormatFromTemplate:@"MMM d" options:0 locale:locale];
 
                 for (NSInteger i = 0; i < 7; i++) {
                     NSDate *day = [cal dateByAddingUnit:NSCalendarUnitDay value:-i toDate:now options:0];
@@ -413,7 +417,7 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
                     m.moduleID = [@"day_" stringByAppendingString:ymd];
 
                     m.title = [self dayTitleForDate:day calendar:cal weekdayFormatter:weekdayFmt]; // Today/Yesterday/Wednesday
-                    m.subtitle = ymd;
+//                    m.subtitle = ymd;
                     m.assetIDs = [self assetIDsFromFetchResult:r];
 
                     NSNumber *sortPref = self.moduleSortAscendingByID[m.moduleID];
@@ -427,13 +431,15 @@ NSString * const SwipeManagerDidUpdateNotification = @"SwipeManagerDidUpdateNoti
         // 每月一个模块
             {
                 NSMutableDictionary<NSString *, NSMutableArray<NSString *> *> *bucket = [NSMutableDictionary dictionary];
-                NSCalendar *cal = [NSCalendar currentCalendar];
+                NSCalendar *cal = [NSCalendar autoupdatingCurrentCalendar];
+                cal.locale = [NSLocale currentLocale];
 
-                NSLocale *en = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+                NSLocale *locale = [NSLocale currentLocale];
 
                 NSDateFormatter *monthFmt = [NSDateFormatter new];
-                monthFmt.locale = en;
-                monthFmt.dateFormat = @"MMM"; // Dec
+                monthFmt.locale = locale;
+                monthFmt.dateFormat =
+                    [NSDateFormatter dateFormatFromTemplate:@"MMM" options:0 locale:locale];
 
                 [all enumerateObjectsUsingBlock:^(PHAsset * _Nonnull asset, NSUInteger idx, BOOL * _Nonnull stop) {
                     NSDate *d = asset.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];

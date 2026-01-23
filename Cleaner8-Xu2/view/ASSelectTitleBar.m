@@ -178,7 +178,7 @@ static inline UIColor *ASHexBlack(void) {
 
 - (void)updateSelectUI {
     NSString *iconName = self.allSelected ? @"ic_select_s" : @"ic_select_gray_n";
-    NSString *text     = self.allSelected ? @"Deselect All" : @"Select All";
+    NSString *text     = self.allSelected ? NSLocalizedString(@"Deselect All",nil) : NSLocalizedString(@"Select All",nil);
 
     self.selectIconView.image = [[UIImage imageNamed:iconName] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     self.selectTextLabel.text = text;

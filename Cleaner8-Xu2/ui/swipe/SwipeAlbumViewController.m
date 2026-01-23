@@ -71,13 +71,23 @@ static inline BOOL SWIsWithinLastNDays(NSString *ymd, NSInteger days) {
     NSDate *b = [cal startOfDayForDate:today];
 
     NSDateComponents *diff = [cal components:NSCalendarUnitDay fromDate:a toDate:b options:0];
-    // diff.day: date -> today 的天数差；0=今天，1=昨天...
     return (diff.day >= 0 && diff.day <= (days - 1));
 }
 
-// 给 RecentDay 的 next 按钮标题
+static inline NSString *SWLocalizedDateStringFromYMD(NSString *ymd) {
+    NSDate *date = SWDateFromYMD(ymd);
+    if (!date) return ymd ?: @"";
+    
+    return [NSDateFormatter localizedStringFromDate:date
+                                          dateStyle:NSDateFormatterMediumStyle
+                                          timeStyle:NSDateFormatterNoStyle];
+}
+
 static inline NSString *SWNextRecentTitle(NSString *ymd) {
-    if (ymd.length >= 10) return [NSString stringWithFormat:NSLocalizedString(@"Next Album > %@", nil), ymd];
+    if (ymd.length >= 10) {
+        NSString *local = SWLocalizedDateStringFromYMD(ymd);
+        return [NSString stringWithFormat:NSLocalizedString(@"Next Album > %@", nil), local];
+    }
     return NSLocalizedString(@"Next Album", nil);
 }
 
@@ -96,7 +106,7 @@ static inline UIFont *SWFont(CGFloat size, UIFontWeight weight) {
 static inline NSString *SWDayKeyFromModule(SwipeModule *m) {
     NSString *mid = m.moduleID ?: @"";
     if ([mid hasPrefix:@"day_"] && mid.length >= 14) {
-        return [mid substringFromIndex:4]; // "YYYY-MM-DD"
+        return [mid substringFromIndex:4];
     }
     return nil;
 }
@@ -104,7 +114,7 @@ static inline NSString *SWDayKeyFromModule(SwipeModule *m) {
 static inline NSString *SWMonthKeyFromModule(SwipeModule *m) {
     NSString *mid = m.moduleID ?: @"";
     if ([mid hasPrefix:@"month_"] && mid.length >= 13) {
-        return [mid substringFromIndex:6]; // "YYYY-MM"
+        return [mid substringFromIndex:6];
     }
     return nil;
 }
@@ -112,12 +122,16 @@ static inline NSString *SWMonthKeyFromModule(SwipeModule *m) {
 static inline NSString *SWWeekdayFromYMD(NSString *ymd) {
     NSDate *d = SWDateFromYMD(ymd);
     if (!d) return @"";
+    
     static NSDateFormatter *fmt;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         fmt = [NSDateFormatter new];
-        fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
-        fmt.dateFormat = @"EEEE"; // Friday / Thursday
+        NSLocale *locale = [NSLocale currentLocale];
+        fmt.locale = locale;
+        fmt.dateFormat = [NSDateFormatter dateFormatFromTemplate:@"EEEE"
+                                                        options:0
+                                                         locale:locale];
     });
     return [fmt stringFromDate:d] ?: @"";
 }
@@ -134,18 +148,7 @@ static inline NSString *SWHumanBytesNoSpace(uint64_t bytes) {
         fmt.includesActualByteCount = NO;
     });
     NSString *s = [fmt stringFromByteCount:(long long)bytes] ?: @"0B";
-    // "49.5 MB" -> "49.5MB"
     return [[s stringByReplacingOccurrencesOfString:@" " withString:@""] copy];
-}
-
-static inline NSString *SWMonthShort(NSInteger month) {
-    static NSArray<NSString *> *arr;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        arr = @[NSLocalizedString(@"Jan.", nil),NSLocalizedString(@"Feb.", nil),NSLocalizedString(@"Mar.", nil),NSLocalizedString(@"Apr.", nil),NSLocalizedString(@"May.", nil),NSLocalizedString(@"Jun.", nil),NSLocalizedString(@"Jul.", nil),NSLocalizedString(@"Aug.", nil),NSLocalizedString(@"Sep.", nil),NSLocalizedString(@"Oct.", nil),NSLocalizedString(@"Nov.", nil),NSLocalizedString(@"Dec.", nil)];
-    });
-    if (month < 1 || month > 12) return @"";
-    return arr[month-1];
 }
 
 static inline void SWParseYearMonth(NSString *yyyyMM, NSInteger *outYear, NSInteger *outMonth) {
@@ -828,7 +831,6 @@ static inline NSString *SWImgKey(NSString *prefix, NSString *aid, CGSize px) {
         [self.thumbs.heightAnchor constraintEqualToConstant:SW(60)],
     ]];
 
-    // ===== Done Card (hidden by default) =====
     self.doneCard = [UIView new];
     self.doneCard.translatesAutoresizingMaskIntoConstraints = NO;
     self.doneCard.backgroundColor = UIColor.whiteColor;
@@ -907,6 +909,9 @@ static inline NSString *SWImgKey(NSString *prefix, NSString *aid, CGSize px) {
     self.nextAlbumBtn.backgroundColor = SWHexRGBA(0xF6F6F6FF);
     self.nextAlbumBtn.layer.cornerRadius = SW(25);
     self.nextAlbumBtn.titleLabel.font = SWFontS(17, UIFontWeightRegular);
+    self.nextAlbumBtn.titleLabel.adjustsFontSizeToFitWidth = YES;
+    self.nextAlbumBtn.titleLabel.minimumScaleFactor = 0.7;
+    self.nextAlbumBtn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.nextAlbumBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     [self.nextAlbumBtn addTarget:self action:@selector(onNextAlbum) forControlEvents:UIControlEventTouchUpInside];
     [self.doneCard addSubview:self.nextAlbumBtn];
@@ -916,6 +921,9 @@ static inline NSString *SWImgKey(NSString *prefix, NSString *aid, CGSize px) {
     self.viewArchivedBtn.backgroundColor = SWHexRGBA(0x024DFFFF);
     self.viewArchivedBtn.layer.cornerRadius = SW(25);
     self.viewArchivedBtn.titleLabel.font = SWFontS(17, UIFontWeightMedium);
+    self.viewArchivedBtn.titleLabel.adjustsFontSizeToFitWidth = YES;
+    self.viewArchivedBtn.titleLabel.minimumScaleFactor = 0.7;
+    self.viewArchivedBtn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.viewArchivedBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.viewArchivedBtn addTarget:self action:@selector(onViewArchived) forControlEvents:UIControlEventTouchUpInside];
     [self.doneCard addSubview:self.viewArchivedBtn];
@@ -1290,7 +1298,6 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
         self.nextAlbumBtn.hidden = YES;
     }
 
-    // Total archived bytes
     uint64_t totalBytes = (uint64_t)[[SwipeManager shared] totalArchivedBytesCached];
     NSString *btnTitle = [NSString stringWithFormat:NSLocalizedString(@"View Archived Files(%@)", nil), SWHumanBytesNoSpace(totalBytes)];
     [self.viewArchivedBtn setTitle:btnTitle forState:UIControlStateNormal];
@@ -1393,7 +1400,6 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
     UIImage *raw = card.rawImage ?: card.imageView.image;
     if (!raw) return;
 
-    // ✅ 顶卡永远清晰
     if (idx == 0) {
         card.imageView.image = raw;
         [self sw_revealCardIfNeeded:card];
@@ -1412,12 +1418,10 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
         return;
     }
 
-    // 缓存未命中：为了不出现空白，非 showWhenReady 的卡先用 raw 顶一下
     if (!card.sw_revealWhenReady && !card.imageView.image) {
         card.imageView.image = raw;
     }
 
-    // 防止重复算同一张
     @synchronized (self.sw_blurInFlight) {
         if ([self.sw_blurInFlight containsObject:blurKey]) return;
         [self.sw_blurInFlight addObject:blurKey];
@@ -1441,20 +1445,17 @@ static inline NSAttributedString *SWNextAlbumAttributedTitle(NSString *leftText,
             SwipeCardView *scard = wcard;
             if (!self || !scard) return;
 
-            // asset 复用校验 + 位置校验（防止轮转/撤回后错贴）
             if (![scard.assetID isEqualToString:aid]) return;
 
             NSInteger curIdx = [self.cards indexOfObject:scard];
             if (curIdx == NSNotFound) return;
 
-            // 如果此刻它已经变成顶卡了，就别贴模糊
             if (curIdx == 0) {
                 scard.imageView.image = scard.rawImage ?: scard.imageView.image;
                 [self sw_revealCardIfNeeded:scard];
                 return;
             }
 
-            // 仍是非顶卡 -> 应用模糊
             UIImage *finalBlur = [self.cardBlurImageCache objectForKey:blurKey];
             if (finalBlur) {
                 scard.imageView.image = finalBlur;
@@ -2642,7 +2643,7 @@ static inline CGRect SWCardFrameForIndex(NSInteger idx) {
     if (self.module.type == SwipeModuleTypeMonth) {
         next = [self nextMonthModuleAfterCurrentMonthModuleIfPossible];
     } else if (self.module.type == SwipeModuleTypeRecentDay) {
-        NSString *curYMD = self.module.subtitle ?: @"";
+        NSString *curYMD = SWDayKeyFromModule(self.module) ?: @"";
         if (SWIsWithinLastNDays(curYMD, 7)) {
             next = [self nextRecentDayModuleWithinLast7DaysAfterCurrentIfPossible];
         }

@@ -214,11 +214,19 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
     self.nameLab.textColor = UIColor.blackColor;
     self.nameLab.font = ASFont(34, UIFontWeightMedium);
     self.nameLab.textAlignment = NSTextAlignmentCenter;
-    self.nameLab.numberOfLines = 2;
+    self.nameLab.adjustsFontSizeToFitWidth = YES;
+    self.nameLab.minimumScaleFactor = 0.7;
+    self.nameLab.lineBreakMode = NSLineBreakByTruncatingTail;
+    self.nameLab.numberOfLines = 3;
     [self.centerContainer addSubview:self.nameLab];
 
     self.containerCenterYCons =
         [self.centerContainer.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-SW(100)];
+
+    CGFloat side = SW(24);
+
+    [self.nameLab setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                                 forAxis:UILayoutConstraintAxisHorizontal];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.centerContainer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
@@ -230,6 +238,7 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
         [self.logoView.heightAnchor constraintEqualToConstant:SW(150)],
 
         [self.nameLab.topAnchor constraintEqualToAnchor:self.logoView.bottomAnchor constant:SW(20)],
+        [self.nameLab.widthAnchor constraintLessThanOrEqualToAnchor:self.view.widthAnchor constant:-(side * 2)],
         [self.nameLab.centerXAnchor constraintEqualToAnchor:self.centerContainer.centerXAnchor],
         [self.nameLab.bottomAnchor constraintEqualToAnchor:self.centerContainer.bottomAnchor],
     ]];

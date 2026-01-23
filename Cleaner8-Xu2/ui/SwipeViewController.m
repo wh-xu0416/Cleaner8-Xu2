@@ -1008,6 +1008,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.archiveTitleLabel.textColor = SWHexRGBA(0x000000FF);
     self.archiveTitleLabel.font = SWFont(15, UIFontWeightMedium);
     self.archiveTitleLabel.text = NSLocalizedString(@"Archive Files", nil);
+    self.archiveTitleLabel.adjustsFontSizeToFitWidth = YES;
+    self.archiveTitleLabel.minimumScaleFactor = 0.7;
+    self.archiveTitleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.archiveCard addSubview:self.archiveTitleLabel];
 
     self.archiveDetailLabel = [UILabel new];
@@ -1015,6 +1018,9 @@ static inline NSString *SWRecentTag(NSString *ymd) {
     self.archiveDetailLabel.textColor = SWHexRGBA(0x666666FF);
     self.archiveDetailLabel.font = SWFont(12, UIFontWeightMedium);
     self.archiveDetailLabel.text = NSLocalizedString(@"Files:0MB", nil);
+    self.archiveDetailLabel.adjustsFontSizeToFitWidth = YES;
+    self.archiveDetailLabel.minimumScaleFactor = 0.7;
+    self.archiveDetailLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.archiveCard addSubview:self.archiveDetailLabel];
 
     [NSLayoutConstraint activateConstraints:@[

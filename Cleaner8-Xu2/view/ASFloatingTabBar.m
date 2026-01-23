@@ -88,19 +88,37 @@ static inline UIColor *ASColorHex(uint32_t rgb, CGFloat alpha) {
             lb.font = SWFontS(10, UIFontWeightRegular);
             lb.textAlignment = NSTextAlignmentCenter;
             lb.textColor = ASColorHex(0x454545, 1.0);
+            lb.numberOfLines = 1;
+            lb.lineBreakMode = NSLineBreakByTruncatingTail;
+            lb.adjustsFontSizeToFitWidth = YES;
+            lb.minimumScaleFactor = 0.7;
+            [lb setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                                forAxis:UILayoutConstraintAxisHorizontal];
 
-            UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[iv, lb]];
-            stack.axis = UILayoutConstraintAxisVertical;
-            stack.alignment = UIStackViewAlignmentCenter;
-            stack.spacing = SW(4);
-            stack.userInteractionEnabled = NO;
-            stack.translatesAutoresizingMaskIntoConstraints = NO;
 
-            [b addSubview:stack];
+            lb.translatesAutoresizingMaskIntoConstraints = NO;
+
+            [b addSubview:iv];
+            [b addSubview:lb];
+
+            CGFloat padLR = SW(10);
+            CGFloat topPad = SW(10);
+            CGFloat gap    = SW(4);
+            CGFloat bottomPad = SW(8);
+
             [NSLayoutConstraint activateConstraints:@[
-                [stack.centerXAnchor constraintEqualToAnchor:b.centerXAnchor],
-                [stack.centerYAnchor constraintEqualToAnchor:b.centerYAnchor],
+                [iv.centerXAnchor constraintEqualToAnchor:b.centerXAnchor],
+                [iv.centerYAnchor constraintEqualToAnchor:b.centerYAnchor constant:-SW(8)],
+                [iv.widthAnchor constraintEqualToConstant:SW(31)],
+                [iv.heightAnchor constraintEqualToConstant:SW(31)],
+
+                [lb.topAnchor constraintEqualToAnchor:iv.bottomAnchor constant:gap],
+                [lb.leadingAnchor constraintGreaterThanOrEqualToAnchor:b.leadingAnchor constant:padLR],
+                [lb.trailingAnchor constraintLessThanOrEqualToAnchor:b.trailingAnchor constant:-padLR],
+                [lb.centerXAnchor constraintEqualToAnchor:b.centerXAnchor],
+                [lb.bottomAnchor constraintLessThanOrEqualToAnchor:b.bottomAnchor constant:-bottomPad],
             ]];
+
 
             objc_setAssociatedObject(b, kASIconViewKey, iv, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             objc_setAssociatedObject(b, kASTitleLabelKey, lb, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
