@@ -256,8 +256,25 @@ final class StoreKit2Manager: NSObject {
     }
 
     private func logCN(_ msg: String) {
+        #if DEBUG
         print("[内购标识上传] \(msg)")
+        #endif
     }
+    
+    // MARK: - Debug Log
+    private func logSK2(_ msg: String) {
+        #if DEBUG
+        print("[刷新] \(msg)")
+        #endif
+    }
+
+    @MainActor private func fmt(_ date: Date?) -> String {
+        guard let d = date else { return "nil" }
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss.SSS"
+        return f.string(from: d)
+    }
+
 
     private func uploadIAPIdentifiers(reason: String) async {
         guard let url = iapUploadURL else {
@@ -314,7 +331,15 @@ final class StoreKit2Manager: NSObject {
         lastErrorMessage: nil,
         lastOrderID: nil
     )
-
+    
+    @objc let canPay: Bool = {
+        if #available(iOS 15.0, *) {
+            return AppStore.canMakePayments
+        } else {
+            return SKPaymentQueue.canMakePayments()
+        }
+    }()
+        
     @objc var state: SubscriptionState { snapshot.subscriptionState }
 
     private var pathMonitor: NWPathMonitor?
@@ -332,6 +357,7 @@ final class StoreKit2Manager: NSObject {
         observeAppForeground()
 
         listenForTransactionUpdates()
+        listenForStorefrontUpdates()
 
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -341,6 +367,7 @@ final class StoreKit2Manager: NSObject {
 
     @MainActor
     func refreshAll(reason: String) async {
+        logSK2("refreshAll reason=\(reason) net=\(snapshot.networkAvailable) productsState=\(snapshot.productsState) sub=\(snapshot.subscriptionState)")
         async let p: () = refreshProducts()
         async let s: () = refreshSubscriptionState()
         _ = await (p, s)
@@ -351,17 +378,35 @@ final class StoreKit2Manager: NSObject {
     @MainActor
     func refreshProducts(force: Bool = false) async {
         if isRefreshingProducts {
+            logSK2("refreshProducts wait (already refreshing)")
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
                 productWaiters.append(cont)
             }
+            logSK2("refreshProducts resumed (wait done)")
             return
         }
 
+        let now = Date()
+
+        // 失败退避：避免连续失败疯狂刷
         if !force,
-           snapshot.productsState == .ready,
-           !rawProducts.isEmpty {
+           snapshot.productsState == .failed,
+           let lastTry = lastProductsAttemptAt,
+           now.timeIntervalSince(lastTry) < minProductsRetryInterval {
+           logSK2("refreshProducts skip(backoff) dt=\(now.timeIntervalSince(lastTry)) < \(minProductsRetryInterval)")
+
+           return
+        }
+
+        // TTL/状态判断
+        if !shouldRefreshProducts(force: force, now: now) {
+            logSK2("refreshProducts skip(TTL ok) lastOK=\(fmt(lastProductsSuccessAt)) ttl=\(productsTTL)s state=\(snapshot.productsState) raw=\(rawProducts.count)")
+
             return
         }
+
+        lastProductsAttemptAt = now
+        logSK2("refreshProducts start force=\(force) net=\(snapshot.networkAvailable) state=\(snapshot.productsState) raw=\(rawProducts.count)")
 
         isRefreshingProducts = true
         defer {
@@ -371,7 +416,7 @@ final class StoreKit2Manager: NSObject {
             productWaiters.removeAll()
             waiters.forEach { $0.resume() }
         }
-        
+
         print("开始获取商品")
 
         updateSnapshot { old in
@@ -391,6 +436,10 @@ final class StoreKit2Manager: NSObject {
             let list = try await Product.products(for: productIDs)
             self.rawProducts = list
             let models = list.map { SK2ProductModel(product: $0) }
+
+            lastProductsSuccessAt = Date()
+            logSK2("refreshProducts success count=\(list.count) lastOK=\(fmt(lastProductsSuccessAt))")
+
             for product in list {
                 print("获取商品成功 \(product.displayName): \(product.displayPrice) \(product.priceFormatStyle.currencyCode)")
             }
@@ -407,6 +456,8 @@ final class StoreKit2Manager: NSObject {
                 )
             }
         } catch {
+            logSK2("refreshProducts failed err=\(error.localizedDescription)")
+
             print("获取商品失败 \(error)")
             let msg = error.localizedDescription
             updateSnapshot { old in
@@ -432,16 +483,61 @@ final class StoreKit2Manager: NSObject {
     }
 
     @MainActor
-    func refreshSubscriptionState() async {
-        var newState: SubscriptionState = .inactive
+    func refreshSubscriptionState(force: Bool = false) async {
+        let now = Date()
 
+        // 防抖：避免瞬间重复调用
+        if !force,
+           let lastTry = lastEntitlementsAttemptAt,
+           now.timeIntervalSince(lastTry) < minEntitlementsRetryInterval {
+           logSK2("refreshSub skip(debounce) dt=\(now.timeIntervalSince(lastTry)) < \(minEntitlementsRetryInterval)")
+
+           return
+        }
+
+        if !shouldRefreshEntitlements(force: force, now: now) {
+            logSK2("refreshSub skip(TTL ok) lastOK=\(fmt(lastEntitlementsRefreshAt)) ttl=\(entitlementsTTL)s state=\(snapshot.subscriptionState)")
+            return
+        }
+
+        lastEntitlementsAttemptAt = now
+        logSK2("refreshSub start force=\(force) net=\(snapshot.networkAvailable) old=\(snapshot.subscriptionState)")
+
+        let oldState = snapshot.subscriptionState
+
+        var isActive = false
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
                productIDs.contains(transaction.productID) {
-                newState = .active
+                isActive = true
                 break
             }
         }
+
+        // 离线保护：不要把 active 错误降级成 inactive
+        if !isActive,
+           !snapshot.networkAvailable,
+           oldState == .active,
+           !force {
+            lastEntitlementsRefreshAt = now
+            logSK2("refreshSub offline-protect keep ACTIVE (no downgrade)")
+
+            return
+        }
+
+        // 离线且 unknown：也不急着定性
+        if !isActive,
+           !snapshot.networkAvailable,
+           oldState == .unknown,
+           !force {
+           lastEntitlementsRefreshAt = now
+           logSK2("refreshSub offline-protect keep UNKNOWN (no downgrade)")
+           return
+        }
+
+        let newState: SubscriptionState = isActive ? .active : .inactive
+        lastEntitlementsRefreshAt = now
+        logSK2("refreshSub done isActive=\(isActive) new=\(newState) lastOK=\(fmt(lastEntitlementsRefreshAt))")
 
         updateSnapshot { old in
             StoreSnapshot(
@@ -482,8 +578,8 @@ final class StoreKit2Manager: NSObject {
 
     @MainActor
     private func purchaseAsync(productID: String) async -> PurchaseFlowState {
-        Task.detached { [weak self] in
-            await self?.uploadIAPIdentifiersBeforePurchaseTap()
+        Task { [weak self] in
+            await self?.uploadIAPIdentifiers(reason: "点击购买前")
         }
         
         // 购买前：如果本地没有该商品，强制刷新一次
@@ -507,10 +603,10 @@ final class StoreKit2Manager: NSObject {
                 let transaction = try checkVerified(verification)
 
                 let oid: String
-                if transaction.id != 0 {
-                    oid = String(transaction.id)               // 每笔交易唯一
-                } else if transaction.originalID != 0 {
+                if transaction.originalID != 0 {
                     oid = String(transaction.originalID)       // 订阅链路唯一（续费同一个）
+                } else if transaction.id != 0 {
+                    oid = String(transaction.id)               // 每笔交易唯一
                 } else {
                     oid = String(transaction.id)
                 }
@@ -558,6 +654,7 @@ final class StoreKit2Manager: NSObject {
             for await update in Transaction.updates {
                 if Task.isCancelled { return }
                 if case .verified(let transaction) = update {
+                    await logSK2("transaction update verified productID=\(transaction.productID) id=\(transaction.id) originalID=\(transaction.originalID)")
                     await self.refreshSubscriptionState()
                     await transaction.finish()
                 }
@@ -565,6 +662,84 @@ final class StoreKit2Manager: NSObject {
         }
     }
     
+    private var storefrontTask: Task<Void, Never>?
+
+    private func listenForStorefrontUpdates() {
+        storefrontTask?.cancel()
+        storefrontTask = Task.detached(priority: .background) { [weak self] in
+            guard let self else { return }
+            if #available(iOS 15.0, *) {
+                for await _ in Storefront.updates {
+                    if Task.isCancelled { return }
+                    await logSK2("storefront updated -> force refreshProducts")
+                    await self.refreshProducts(force: true) // 换区/换账号，强制刷新价格
+                }
+            }
+        }
+    }
+
+    // MARK: - Refresh Policy
+
+    @MainActor private var lastProductsSuccessAt: Date? = nil
+    @MainActor private var lastProductsAttemptAt: Date? = nil
+    @MainActor private var lastEntitlementsRefreshAt: Date? = nil
+    @MainActor private var lastEntitlementsAttemptAt: Date? = nil
+
+    private let productsTTL: TimeInterval = 1 * 60        // 商品信息 1 分钟内不刷新
+    private let entitlementsTTL: TimeInterval = 30             // 订阅状态 30 秒防抖
+
+    private let minProductsRetryInterval: TimeInterval = 10    // 商品失败后最短 10 秒再试
+    private let minEntitlementsRetryInterval: TimeInterval = 2 // 订阅刷新最短 2 秒再刷一次（防抖）
+
+    @MainActor
+    private func shouldRefreshProducts(force: Bool, now: Date = Date()) -> Bool {
+        if force { return true }
+        // 没拉过/失败过/本地为空 -> 需要刷新
+        if snapshot.productsState == .idle || snapshot.productsState == .failed || rawProducts.isEmpty {
+            return true
+        }
+        // TTL 过期 -> 需要刷新
+        if let last = lastProductsSuccessAt, now.timeIntervalSince(last) < productsTTL {
+            return false
+        }
+        return true
+    }
+
+    @MainActor
+    private func shouldRefreshEntitlements(force: Bool, now: Date = Date()) -> Bool {
+        if force { return true }
+        if snapshot.subscriptionState == .unknown { return true }
+        if let last = lastEntitlementsRefreshAt, now.timeIntervalSince(last) < entitlementsTTL {
+            return false
+        }
+        return true
+    }
+
+    @MainActor
+    func refreshAllIfStale(reason: String, force: Bool = false) async {
+        let now = Date()
+        let needProducts = shouldRefreshProducts(force: force, now: now)
+        let needEnt = shouldRefreshEntitlements(force: force, now: now)
+        
+        logSK2("refreshAllIfStale reason=\(reason) force=\(force) needProducts=\(needProducts) needEnt=\(needEnt) " +
+                 "productsState=\(snapshot.productsState) rawProducts=\(rawProducts.count) " +
+                 "sub=\(snapshot.subscriptionState) net=\(snapshot.networkAvailable) " +
+                 "lastProdOK=\(fmt(lastProductsSuccessAt)) lastProdTry=\(fmt(lastProductsAttemptAt)) " +
+                 "lastEntOK=\(fmt(lastEntitlementsRefreshAt)) lastEntTry=\(fmt(lastEntitlementsAttemptAt))")
+
+        if needProducts && needEnt {
+            async let p: () = refreshProducts(force: force)
+            async let s: () = refreshSubscriptionState(force: force)
+            _ = await (p, s)
+        } else if needProducts {
+            await refreshProducts(force: force)
+        } else if needEnt {
+            await refreshSubscriptionState(force: force)
+        } else {
+            logSK2("refreshAllIfStale skip (fresh enough)")
+        }
+    }
+
     // MARK: - Network
     private func startNetworkMonitor() {
         if pathMonitor != nil { return }
@@ -592,7 +767,10 @@ final class StoreKit2Manager: NSObject {
                 self.updateNetwork(available: available)
 
                 // 只有从 “不可用 → 可用” 时才当成网络恢复，触发刷新逻辑
+                self.logSK2("network changed \(self.lastNetworkAvailable == true ? "up" : "down") -> \(available ? "up" : "down")")
+
                 if available {
+                    self.logSK2("network back -> refreshAllIfStale")
                     await self.refreshIfNeededAfterNetworkBack()
                 }
             }
@@ -613,7 +791,7 @@ final class StoreKit2Manager: NSObject {
     @objc private func onAppWillEnterForeground() {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.refreshSubscriptionState()
+            await self.refreshAllIfStale(reason: "foreground")
         }
     }
 
@@ -623,16 +801,7 @@ final class StoreKit2Manager: NSObject {
         isRefreshingAfterNetwork = true
         defer { isRefreshingAfterNetwork = false }
 
-        // 网络恢复场景：只在确实没有商品 / 失败过时刷新（这里非强制）
-        if snapshot.productsState == .idle
-            || snapshot.productsState == .failed
-            || rawProducts.isEmpty {
-            await refreshProducts()
-        }
-
-        if snapshot.subscriptionState == .unknown {
-            await refreshSubscriptionState()
-        }
+        await refreshAllIfStale(reason: "network_back")
     }
 
     // MARK: - Snapshot updates

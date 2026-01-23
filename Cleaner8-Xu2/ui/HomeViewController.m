@@ -847,7 +847,9 @@ shouldFullSpanAtIndexPath:(NSIndexPath *)indexPath;
         _titleLabel = [UILabel new];
         _titleLabel.font = SWFontS(20, UIFontWeightRegular);
         _titleLabel.textColor = UIColor.blackColor;
-
+        _titleLabel.adjustsFontSizeToFitWidth = YES;
+        _titleLabel.minimumScaleFactor = 0.6;
+        
         _countLabel = [UILabel new];
         _countLabel.font = SWFontS(12, UIFontWeightRegular);
         _countLabel.textColor = kTextGray();

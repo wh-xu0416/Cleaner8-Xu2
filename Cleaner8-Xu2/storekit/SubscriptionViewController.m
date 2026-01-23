@@ -143,6 +143,8 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.titleLab.textColor = HexColor(@"#FF1F1434");
     self.titleLab.font = PoppinsFont(@"Poppins-SemiBold", AS(14), UIFontWeightSemibold);
     self.titleLab.text = title ?: @"";
+    self.titleLab.adjustsFontSizeToFitWidth = YES;
+    self.titleLab.minimumScaleFactor = 0.6;
     [self addSubview:self.titleLab];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -523,9 +525,13 @@ static inline id SafeKVC(id obj, NSString *key) {
     self.titleLab.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLab.textAlignment = NSTextAlignmentCenter;
     self.titleLab.numberOfLines = 0;
+    self.titleLab.lineBreakMode = NSLineBreakByTruncatingTail;
+    self.titleLab.adjustsFontSizeToFitWidth = YES;
+    self.titleLab.minimumScaleFactor = 0.6;
     self.titleLab.lineBreakMode = NSLineBreakByWordWrapping;
     self.titleLab.adjustsFontSizeToFitWidth = NO;
 
+    [self.titleLab.heightAnchor constraintEqualToConstant:AS(40) * 2].active = YES;
     [self.titleLab setContentCompressionResistancePriority:UILayoutPriorityRequired
                                                   forAxis:UILayoutConstraintAxisVertical];
     [self.titleLab setContentHuggingPriority:UILayoutPriorityRequired
@@ -679,7 +685,7 @@ static inline id SafeKVC(id obj, NSString *key) {
     
     CGFloat rowW = AS(85 + 65 + 85);
     self.titleTopToSafe = [self.titleLab.topAnchor constraintEqualToAnchor:safe.topAnchor constant:AS(60)];
-    self.titleTopToGateBadge = [self.titleLab.topAnchor constraintEqualToAnchor:self.gateBadgeView.bottomAnchor constant:AS(18)];
+    self.titleTopToGateBadge = [self.titleLab.topAnchor constraintEqualToAnchor:self.gateBadgeView.bottomAnchor constant:AS(0)];
 
     self.titleTopToSafe.active = YES;
     self.titleTopToGateBadge.active = NO;
@@ -1002,7 +1008,7 @@ static inline id SafeKVC(id obj, NSString *key) {
     NSString *fmt = NSLocalizedString(@"Auto-renewing, %@ / %@, cancel any time",nil);
     self.autoRenewLab.text = [NSString stringWithFormat:fmt, (m.displayPrice ?: @""), unit];
     self.autoRenewLab.adjustsFontSizeToFitWidth = YES;
-    self.autoRenewLab.minimumScaleFactor = 0.7;
+    self.autoRenewLab.minimumScaleFactor = 0.6;
     self.autoRenewLab.lineBreakMode = NSLineBreakByTruncatingTail;
 }
 
@@ -1476,6 +1482,14 @@ static inline NSString *ASNonEmptyStringFromValue(id v) {
         return;
     }
 
+//    if (![StoreKit2Manager shared].canPay) {
+//        [self showToastText:NSLocalizedString(@"App Store Error", nil)];
+//
+//        // 商店问题导致无法购买（屏幕使用时间限制、家长控制 / 儿童账号 / 家庭共享的限制、企业/学校设备（MDM 配置）、Apple ID / App Store 状态问题）
+//        [self trackSubFailWithProduct:mForClick orderID:@"" error:@"app_store_error"];
+//        return;
+//    }
+    
     BOOL hasLocalProducts = (self.products.count > 0);
 
     if (hasLocalProducts) {
