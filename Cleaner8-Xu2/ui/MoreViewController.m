@@ -316,6 +316,9 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     proLab.text = NSLocalizedString(@"Pro",nil);
     proLab.textColor = UIColor.whiteColor;
     proLab.font = ASFont(36, UIFontWeightSemibold);
+    proLab.adjustsFontSizeToFitWidth = YES;
+    proLab.minimumScaleFactor = 0.7;
+    proLab.lineBreakMode = NSLineBreakByTruncatingTail;
     [content addSubview:proLab];
 
     UIImageView *todoWhite = [UIImageView new];
@@ -328,6 +331,9 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     subLab.translatesAutoresizingMaskIntoConstraints = NO;
     subLab.text = NSLocalizedString(@"Unlock all Features",nil);
     subLab.textColor = UIColor.whiteColor;
+    subLab.adjustsFontSizeToFitWidth = YES;
+    subLab.minimumScaleFactor = 0.7;
+    subLab.lineBreakMode = NSLineBreakByTruncatingTail;
     subLab.font = ASFont(20, UIFontWeightRegular);
     [content addSubview:subLab];
 
@@ -346,6 +352,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
         [todoWhite.heightAnchor constraintEqualToConstant:SW(36)],
 
         [subLab.leadingAnchor constraintEqualToAnchor:proLab.leadingAnchor],
+        [subLab.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
         [subLab.topAnchor constraintEqualToAnchor:proLab.bottomAnchor constant:SW(5)],
         [subLab.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
     ]];

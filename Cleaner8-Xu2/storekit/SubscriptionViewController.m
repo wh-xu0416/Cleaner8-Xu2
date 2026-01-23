@@ -1001,6 +1001,9 @@ static inline id SafeKVC(id obj, NSString *key) {
 
     NSString *fmt = NSLocalizedString(@"Auto-renewing, %@ / %@, cancel any time",nil);
     self.autoRenewLab.text = [NSString stringWithFormat:fmt, (m.displayPrice ?: @""), unit];
+    self.autoRenewLab.adjustsFontSizeToFitWidth = YES;
+    self.autoRenewLab.minimumScaleFactor = 0.7;
+    self.autoRenewLab.lineBreakMode = NSLineBreakByTruncatingTail;
 }
 
 - (NSInteger)indexForUnit:(SK2PeriodUnit)unit {

@@ -215,7 +215,7 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
     self.nameLab.font = ASFont(34, UIFontWeightMedium);
     self.nameLab.textAlignment = NSTextAlignmentCenter;
     self.nameLab.adjustsFontSizeToFitWidth = YES;
-    self.nameLab.minimumScaleFactor = 0.7;
+    self.nameLab.minimumScaleFactor = 0.6;
     self.nameLab.lineBreakMode = NSLineBreakByTruncatingTail;
     self.nameLab.numberOfLines = 3;
     [self.centerContainer addSubview:self.nameLab];

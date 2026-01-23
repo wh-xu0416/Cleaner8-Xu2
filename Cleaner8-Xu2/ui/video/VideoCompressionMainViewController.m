@@ -146,6 +146,11 @@ static NSString *ASDurationText(NSTimeInterval duration) {
         _savePill.layer.masksToBounds = YES;
 
         _savePill.titleLabel.font = ASFontS(12, UIFontWeightMedium);
+        _savePill.titleLabel.adjustsFontSizeToFitWidth = YES;
+        _savePill.titleLabel.minimumScaleFactor = 0.6;
+        _savePill.titleLabel.numberOfLines = 1;
+        _savePill.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        _savePill.titleLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
         [_savePill setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
 
         _savePill.userInteractionEnabled = NO;
@@ -153,8 +158,6 @@ static NSString *ASDurationText(NSTimeInterval duration) {
         _savePill.contentEdgeInsets = ASEdgeInsets(8, 10, 8, 12);
 
         [_savePill setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-        [_savePill setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-        [_savePill.titleLabel setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
         _savePill.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -164,6 +167,8 @@ static NSString *ASDurationText(NSTimeInterval duration) {
         _savePill.imageEdgeInsets = UIEdgeInsetsMake(0, AS(6), 0, -AS(6));
 
         [self.contentView addSubview:_savePill];
+        
+        CGFloat pillSide = AS(12);
 
         [NSLayoutConstraint activateConstraints:@[
             [_thumbView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
@@ -179,6 +184,12 @@ static NSString *ASDurationText(NSTimeInterval duration) {
             [_savePill.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
             [_savePill.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-AS(14)],
             [_savePill.heightAnchor constraintEqualToConstant:AS(36)],
+
+            [_savePill.widthAnchor constraintLessThanOrEqualToAnchor:self.contentView.widthAnchor
+                                                           constant:-(pillSide * 2)],
+
+            [_savePill.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.leadingAnchor constant:pillSide],
+            [_savePill.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-pillSide],
         ]];
 
         self.requestId = PHInvalidImageRequestID;

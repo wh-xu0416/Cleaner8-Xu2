@@ -91,7 +91,7 @@ static inline UIColor *ASColorHex(uint32_t rgb, CGFloat alpha) {
             lb.numberOfLines = 1;
             lb.lineBreakMode = NSLineBreakByTruncatingTail;
             lb.adjustsFontSizeToFitWidth = YES;
-            lb.minimumScaleFactor = 0.7;
+            lb.minimumScaleFactor = 0.6;
             [lb setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
                                                 forAxis:UILayoutConstraintAxisHorizontal];
 

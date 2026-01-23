@@ -164,7 +164,17 @@ static NSString *ASMBPill(uint64_t bytes) {
         _pill.layer.cornerRadius = AS(14);
         _pill.layer.masksToBounds = YES;
         _pill.translatesAutoresizingMaskIntoConstraints = NO;
+        _pill.adjustsFontSizeToFitWidth = YES;
+        _pill.minimumScaleFactor = 0.6;
+        _pill.numberOfLines = 1;
+        _pill.lineBreakMode = NSLineBreakByTruncatingTail;
+        _pill.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
         [self.contentView addSubview:_pill];
+
+        [_pill setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+        [_pill setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+
+        CGFloat pillSide = AS(10);
 
         [NSLayoutConstraint activateConstraints:@[
             [_thumbView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
@@ -182,9 +192,11 @@ static NSString *ASMBPill(uint64_t bytes) {
             [_checkTapBtn.widthAnchor constraintEqualToConstant:AS(56)],
             [_checkTapBtn.heightAnchor constraintEqualToConstant:AS(56)],
 
-            [_pill.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-AS(10)],
             [_pill.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-AS(10)],
             [_pill.heightAnchor constraintEqualToConstant:AS(28)],
+            [_pill.widthAnchor constraintLessThanOrEqualToAnchor:self.contentView.widthAnchor constant:-(pillSide * 2)],
+            [_pill.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.leadingAnchor constant:pillSide],
+            [_pill.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-pillSide],
         ]];
 
         self.thumbView.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1];
