@@ -579,7 +579,6 @@ typedef void(^ASDeleteSheetBlock)(void);
     self.table = [self buildStatsTable];
     [self.topCard addSubview:self.table];
 
-    // ===== studioRow（也滚动）=====
     self.studioRow = [UIControl new];
     self.studioRow.translatesAutoresizingMaskIntoConstraints = NO;
     self.studioRow.backgroundColor = UIColor.whiteColor;
@@ -782,6 +781,17 @@ typedef void(^ASDeleteSheetBlock)(void);
     l.textColor = color;
     l.font = ASFontS(16, UIFontWeightSemibold);
     l.text = @"--";
+    l.adjustsFontSizeToFitWidth = YES;
+    l.minimumScaleFactor = 0.7;
+    l.numberOfLines = 1;
+    l.lineBreakMode = NSLineBreakByClipping;
+    l.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
+
+    [l setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                       forAxis:UILayoutConstraintAxisHorizontal];
+    [l setContentHuggingPriority:UILayoutPriorityDefaultLow
+                         forAxis:UILayoutConstraintAxisHorizontal];
+
     return l;
 }
 
@@ -790,6 +800,13 @@ typedef void(^ASDeleteSheetBlock)(void);
     t.translatesAutoresizingMaskIntoConstraints = NO;
     t.textAlignment = NSTextAlignmentCenter;
     t.numberOfLines = 2;
+    t.adjustsFontSizeToFitWidth = YES;
+    t.minimumScaleFactor = 0.7;
+    t.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
+    [t setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                       forAxis:UILayoutConstraintAxisHorizontal];
+    [t setContentHuggingPriority:UILayoutPriorityDefaultLow
+                         forAxis:UILayoutConstraintAxisHorizontal];
 
     NSMutableAttributedString *att = [NSMutableAttributedString new];
     NSDictionary *aTop = @{ NSFontAttributeName: ASFontS(15, UIFontWeightSemibold), NSForegroundColorAttributeName: UIColor.blackColor };
@@ -818,6 +835,16 @@ typedef void(^ASDeleteSheetBlock)(void);
     t.textColor = UIColor.blackColor;
     t.font = ASFontS(15, UIFontWeightSemibold);
     t.text = title;
+    t.adjustsFontSizeToFitWidth = YES;
+    t.minimumScaleFactor = 0.7;
+    t.numberOfLines = 1;
+    t.lineBreakMode = NSLineBreakByTruncatingTail;
+    t.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
+
+    [t setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                       forAxis:UILayoutConstraintAxisHorizontal];
+    [t setContentHuggingPriority:UILayoutPriorityDefaultLow
+                         forAxis:UILayoutConstraintAxisHorizontal];
 
     UIView *wrap = [UIView new];
     wrap.translatesAutoresizingMaskIntoConstraints = NO;

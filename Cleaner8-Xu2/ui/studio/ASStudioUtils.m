@@ -13,13 +13,21 @@
 }
 
 + (NSString *)formatDateYMD:(NSDate *)date {
-    static NSDateFormatter *df;
+    if (!date) return @"";
+
+    static NSDateFormatter *df = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         df = [NSDateFormatter new];
-        df.dateFormat = @"yyyy/MM/dd";
+        df.dateStyle = NSDateFormatterMediumStyle;
+        df.timeStyle = NSDateFormatterNoStyle;
+        df.doesRelativeDateFormatting = NO;
     });
-    return [df stringFromDate:date ?: [NSDate date]];
+
+    df.locale = [NSLocale autoupdatingCurrentLocale];
+    df.timeZone = [NSTimeZone localTimeZone];
+
+    return [df stringFromDate:date];
 }
 
 + (NSString *)formatDuration:(double)sec {

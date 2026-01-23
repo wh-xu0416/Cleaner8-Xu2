@@ -76,6 +76,16 @@ static inline UIFont *ASFontS(CGFloat s, UIFontWeight w) {
         _nameLabel.font = ASFontS(15, UIFontWeightSemibold);
         _nameLabel.textColor = UIColor.blackColor;
         _nameLabel.numberOfLines = 1;
+        _nameLabel.adjustsFontSizeToFitWidth = YES;
+        _nameLabel.minimumScaleFactor = 0.6;
+        _nameLabel.lineBreakMode = NSLineBreakByClipping;
+        _nameLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
+
+        [_nameLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                           forAxis:UILayoutConstraintAxisHorizontal];
+        [_nameLabel setContentHuggingPriority:UILayoutPriorityDefaultLow
+                             forAxis:UILayoutConstraintAxisHorizontal];
+
         [_card addSubview:_nameLabel];
 
         _metaLabel = [UILabel new];

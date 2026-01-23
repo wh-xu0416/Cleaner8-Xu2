@@ -326,8 +326,8 @@ static inline UIColor *ASSecondaryLabel(void) {
 
     if (!has) {
         self.emptyLabel.text = (self.currentType == ASStudioMediaTypePhoto)
-        ? @"No photos yet.\nCompress photos to see them here."
-        : @"No videos yet.\nCompress videos to see them here.";
+        ? NSLocalizedString(@"No Content", nil)
+        : NSLocalizedString(@"No Content", nil);
     }
 }
 
