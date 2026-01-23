@@ -120,6 +120,17 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
         self.sizeLabel.textColor = [UIColor colorWithWhite:0 alpha:0.5];
         self.sizeLabel.textAlignment = NSTextAlignmentRight;
 
+        self.titleLabel.adjustsFontSizeToFitWidth = YES;
+        self.titleLabel.minimumScaleFactor = 0.7;
+
+        self.subLabel.adjustsFontSizeToFitWidth = YES;
+        self.subLabel.minimumScaleFactor = 0.7;
+        
+        self.percentLabel.adjustsFontSizeToFitWidth = YES;
+        self.percentLabel.minimumScaleFactor = 0.7;
+
+        self.sizeLabel.adjustsFontSizeToFitWidth = YES;
+        self.sizeLabel.minimumScaleFactor = 0.7;
         [self addSubview:self.radioIcon];
         [self addSubview:self.titleLabel];
         [self addSubview:self.subLabel];
@@ -360,7 +371,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
 }
 
 - (void)buildUI {
-    // ===== scaled constants based on 402x874 =====
     CGFloat side = ASClamp(ASV(20), 14, 20);
     CGFloat headerH = ASClamp(ASV(56), 50, 56);
 
@@ -397,10 +407,9 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
 
     CGFloat rowH = ASClamp(ASV(74), 66, 74);
 
-    CGFloat compressH = ASClamp(ASV(70), 64, 70);  // ✅ 下限保护
+    CGFloat compressH = ASClamp(ASV(70), 64, 70);
     CGFloat compressR = compressH / 2.0;
 
-    // ===== bg =====
     self.bgGradient = [CAGradientLayer layer];
     self.bgGradient.colors = @[
         (id)[UIColor colorWithRed:229/255.0 green:241/255.0 blue:251/255.0 alpha:1].CGColor,
@@ -410,7 +419,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
     self.bgGradient.endPoint   = CGPointMake(0.5, 1.0);
     [self.view.layer insertSublayer:self.bgGradient atIndex:0];
 
-    // ===== bottom button =====
     self.compressBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.compressBtn setTitle:NSLocalizedString(@"Compress",nil) forState:UIControlStateNormal];
     self.compressBtn.titleLabel.font = ASRG(20);
@@ -422,7 +430,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
     self.compressBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.compressBtn];
 
-    // ===== header =====
     UIView *header = [UIView new];
     header.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:header];
@@ -443,7 +450,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [header addSubview:self.titleLabel];
 
-    // ===== scroll =====
     self.scrollView = [UIScrollView new];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.scrollView.alwaysBounceVertical = YES;
@@ -456,7 +462,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
     self.scrollContentView.backgroundColor = UIColor.clearColor;
     [self.scrollView addSubview:self.scrollContentView];
 
-    // ===== preview =====
     UIView *preview = [UIView new];
     preview.translatesAutoresizingMaskIntoConstraints = NO;
     [self.scrollContentView addSubview:preview];
@@ -504,7 +509,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
     [info addSubview:self.resVal];
     for (UIView *v in info.subviews) v.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // ===== before/after =====
     self.beforeLabel = [UILabel new];
     self.beforeLabel.font = ASSB(24);
     self.beforeLabel.textColor = UIColor.blackColor;
@@ -537,7 +541,6 @@ static inline UIFont *ASRG(CGFloat s) { return [UIFont systemFontOfSize:round(s 
     self.saveLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [self.scrollContentView addSubview:self.saveLabel];
 
-    // ===== select card =====
     self.selectCard = [UIView new];
     self.selectCard.backgroundColor = ASSelectCardBG();
     self.selectCard.layer.cornerRadius = cardR;

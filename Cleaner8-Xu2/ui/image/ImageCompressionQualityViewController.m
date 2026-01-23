@@ -177,6 +177,17 @@ static double ASImageRemainRatioForQuality(ASImageCompressionQuality q) {
         self.sizeLabel.textColor = [UIColor colorWithWhite:0 alpha:0.5];
         self.sizeLabel.textAlignment = NSTextAlignmentRight;
 
+        self.titleLabel.adjustsFontSizeToFitWidth = YES;
+        self.titleLabel.minimumScaleFactor = 0.7;
+
+        self.subLabel.adjustsFontSizeToFitWidth = YES;
+        self.subLabel.minimumScaleFactor = 0.7;
+        
+        self.percentLabel.adjustsFontSizeToFitWidth = YES;
+        self.percentLabel.minimumScaleFactor = 0.7;
+
+        self.sizeLabel.adjustsFontSizeToFitWidth = YES;
+        self.sizeLabel.minimumScaleFactor = 0.7;
         [self addSubview:self.radioIcon];
         [self addSubview:self.titleLabel];
         [self addSubview:self.subLabel];
