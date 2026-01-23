@@ -391,7 +391,9 @@ final class StoreKit2Manager: NSObject {
             let list = try await Product.products(for: productIDs)
             self.rawProducts = list
             let models = list.map { SK2ProductModel(product: $0) }
-            print("获取商品成功 \(models.count)")
+            for product in list {
+                print("获取商品成功 \(product.displayName): \(product.displayPrice) \(product.priceFormatStyle.currencyCode)")
+            }
             updateSnapshot { old in
                 StoreSnapshot(
                     networkAvailable: old.networkAvailable,
@@ -405,6 +407,7 @@ final class StoreKit2Manager: NSObject {
                 )
             }
         } catch {
+            print("获取商品失败 \(error)")
             let msg = error.localizedDescription
             updateSnapshot { old in
                 StoreSnapshot(
