@@ -298,3 +298,4 @@
 "You deleted %@ photos today." = "Vous avez supprimé %@ photos aujourd'hui.";
 "You will save about " = "Vous économiserez environ";
 "Large Videos" = "Grandes Vidéos";
+"  |  just %@%@ / week" = "  |  seulement %@%@ / sem"; 

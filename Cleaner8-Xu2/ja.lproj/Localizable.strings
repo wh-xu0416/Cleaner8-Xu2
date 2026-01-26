@@ -298,3 +298,4 @@
 "You deleted %@ photos today." = "今日%@ 写真を削除しました。";
 "You will save about " = "約 節約できます";
 "Large Videos" = "大容量動画";
+"  |  just %@%@ / week" = "  |  週%@%@だけ";              

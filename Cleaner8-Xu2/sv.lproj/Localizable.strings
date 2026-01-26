@@ -298,3 +298,4 @@
 "You deleted %@ photos today." = "Du raderade %@ bilder idag.;";
 "You will save about " = "Du sparar cirka ";
 "Large Videos" = "Stora Videor";
+"  |  just %@%@ / week" = "  |  bara %@%@ / vecka";     // sv

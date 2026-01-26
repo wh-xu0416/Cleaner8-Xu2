@@ -298,3 +298,4 @@
 "You deleted %@ photos today." = "您今日刪除了%@張照片。";
 "You will save about " = "您將節省約";
 "Large Videos" = "大檔影片";
+"  |  just %@%@ / week" = "  |  每週僅 %@%@";       
