@@ -416,7 +416,7 @@ final class StoreKit2Manager: NSObject {
         }
 
         do {
-            try? await Task.sleep(nanoseconds: UInt64(10 * 1_000_000_000))
+//            try? await Task.sleep(nanoseconds: UInt64(10 * 1_000_000_000))
             let list = try await Product.products(for: productIDs)
             guard !list.isEmpty else {
                 updateSnapshot { old in
