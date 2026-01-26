@@ -44,6 +44,8 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
         if (state == SubscriptionStateActive) return;
 
         if (state == SubscriptionStateUnknown) {
+            [[StoreKit2Manager shared] forceRefreshSubscriptionState];
+
             __weak typeof(self) weakSelf = self;
             __block id token = [[NSNotificationCenter defaultCenter]
                 addObserverForName:@"subscriptionStateChanged"
@@ -52,11 +54,18 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
                         usingBlock:^(NSNotification * _Nonnull note) {
 
                 [[NSNotificationCenter defaultCenter] removeObserver:token];
-                SubscriptionState st = [StoreKit2Manager shared].state;
-                if (st == SubscriptionStateInactive) {
+                if ([StoreKit2Manager shared].state != SubscriptionStateActive) {
                     [weakSelf showPaywallWithSource:source];
                 }
             }];
+
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                if ([StoreKit2Manager shared].state == SubscriptionStateUnknown) {
+                    [[NSNotificationCenter defaultCenter] removeObserver:token];
+                    [weakSelf showPaywallWithSource:source];
+                }
+            });
             return;
         }
 

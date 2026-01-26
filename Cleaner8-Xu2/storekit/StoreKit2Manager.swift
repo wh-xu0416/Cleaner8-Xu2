@@ -481,6 +481,12 @@ final class StoreKit2Manager: NSObject {
             await self.refreshProducts(force: true)
         }
     }
+    
+    @objc func forceRefreshSubscriptionState() {
+        Task { @MainActor [weak self] in
+            await self?.refreshSubscriptionState(force: true)
+        }
+    }
 
     @MainActor
     func refreshSubscriptionState(force: Bool = false) async {
@@ -512,17 +518,6 @@ final class StoreKit2Manager: NSObject {
                 isActive = true
                 break
             }
-        }
-
-        // 离线保护：不要把 active 错误降级成 inactive
-        if !isActive,
-           !snapshot.networkAvailable,
-           oldState == .active,
-           !force {
-            lastEntitlementsRefreshAt = now
-            logSK2("refreshSub offline-protect keep ACTIVE (no downgrade)")
-
-            return
         }
 
         // 离线且 unknown：也不急着定性
