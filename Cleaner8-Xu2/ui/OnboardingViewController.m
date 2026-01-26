@@ -6,6 +6,7 @@
 #import "ASTrackingPermission.h"
 #import "AppDelegate.h"
 #import "PaywallPresenter.h"
+#import <AppTrackingTransparency/AppTrackingTransparency.h>
 
 @import Lottie;
 
@@ -274,19 +275,10 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
 - (void)as_triggerATTOnSecondPageIfNeeded {
     if (self.as_attTriggered) return;
 
-    // 只在首次安装（首次启动）时走引导页 ATT
-    AppDelegate *app = (AppDelegate *)UIApplication.sharedApplication.delegate;
-    if (![app isKindOfClass:[AppDelegate class]] || !app.as_isFirstLaunch) {
-        return;
-    }
-
     self.as_attTriggered = YES;
 
-    // 给页面切换动画一点时间，避免“弹窗抢动画”
     [ASTrackingPermission requestIfNeededWithDelay:0.35 completion:^(NSInteger status) {
-
-        // 通知 AppDelegate：ATT 已完成（用于触发 AppsFlyer start）
-        [[NSNotificationCenter defaultCenter] postNotificationName:kASATTDidFinishNotification
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"as_att_did_finish"
                                                             object:nil
                                                           userInfo:@{@"status": @(status)}];
     }];

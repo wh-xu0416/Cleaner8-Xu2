@@ -120,8 +120,10 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
 - (void)as_onDidBecomeActive:(NSNotification *)note {
     ASLog(@"App", @"收到 DidBecomeActive 通知");
 
-    if (self.as_isFirstLaunch) {
-        ASLog(@"ATT", @"首次安装：ATT 由引导页第2页触发，App 流程不请求");
+    BOOL onboardingDone = [[NSUserDefaults standardUserDefaults] boolForKey:kHasCompletedOnboardingKey];
+
+    if (!onboardingDone) {
+        ASLog(@"ATT", @"引导未完成：ATT 交给引导页第2页触发");
     } else {
         [self requestATTWhenNoModal];
     }

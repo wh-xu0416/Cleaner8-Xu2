@@ -17,7 +17,6 @@ static NSString * const kASHasRequestedATTKey = @"hasRequestedATT";
 
 + (BOOL)shouldRequest {
     if (@available(iOS 14, *)) {
-        if ([self hasRequested]) return NO;
         return (ATTrackingManager.trackingAuthorizationStatus == ATTrackingManagerAuthorizationStatusNotDetermined);
     }
     return NO;

@@ -892,6 +892,22 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
             self.selectedIndex = idx;
             self.selectedProductID = self.products.count ? self.products[idx].productID : nil;
         }
+    } else {
+        if (self.paywallMode == SubscriptionPaywallModeGateWeekly) {
+            self.selectedUnit = SK2PeriodUnitWeek;
+        } else {
+            self.selectedUnit = SK2PeriodUnitYear;
+        }
+        
+        SK2ProductModel *targetM = [self currentProductForPurchase];
+        if (targetM) {
+            for (NSInteger i = 0; i < self.products.count; i++) {
+                if ([self.products[i].productID isEqualToString:targetM.productID]) {
+                    self.selectedIndex = i;
+                    break;
+                }
+            }
+        }
     }
 
 //    NSString *sig = [self signatureForProducts:self.products];
@@ -1197,12 +1213,26 @@ static inline NSString *ASExtractCurrencySymbolFromPriceString(NSString *s) {
     return key;
 }
 
-- (SK2ProductModel *)currentProductForPurchase {
-    SK2ProductModel *m = nil;
-    if (self.paywallMode == SubscriptionPaywallModeGateWeekly) m = [self productForUnit:SK2PeriodUnitWeek];
-    else if (self.paywallMode == SubscriptionPaywallModeGateYearly) m = [self productForUnit:SK2PeriodUnitYear];
-    else if (self.selectedIndex >= 0 && self.selectedIndex < self.products.count) m = self.products[self.selectedIndex];
+- (SK2ProductModel *)productForID:(NSString *)pid {
+    for (SK2ProductModel *m in self.products) {
+        if ([m.productID isEqualToString:pid]) return m;
+    }
+    return nil;
+}
 
+- (SK2ProductModel *)currentProductForPurchase {
+    if (self.paywallMode == SubscriptionPaywallModeGateWeekly) {
+        return [self productForID:AppConstants.productIDWeekly];
+    }
+    if (self.paywallMode == SubscriptionPaywallModeGateYearly) {
+        return [self productForID:AppConstants.productIDYearly];
+    }
+
+    SK2ProductModel *m = nil;
+    if (self.selectedIndex >= 0 && self.selectedIndex < self.products.count) {
+        m = self.products[self.selectedIndex];
+    }
+    
     if (!m && self.products.count > 0) m = self.products.firstObject;
     return m;
 }

@@ -443,7 +443,7 @@ final class StoreKit2Manager: NSObject {
         }
 
         do {
-//            try? await Task.sleep(nanoseconds: UInt64(15 * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(15 * 1_000_000_000))
             let list = try await Product.products(for: productIDs)
             guard !list.isEmpty else {
                 updateSnapshot { old in
@@ -609,8 +609,8 @@ final class StoreKit2Manager: NSObject {
 
         do {
             let distinctId = ASIdentifiers.distinctId()
-            let token = ASAccountToken.tokenUUID(distinctId: distinctId)
-            let result = try await product.purchase(options: [.appAccountToken(token)])
+            let uuid = UUID(uuidString: distinctId) ?? UUID()
+            let result = try await product.purchase(options: [.appAccountToken(uuid)])
             switch result {
             case .success(let verification):
                 let transaction = try checkVerified(verification)
