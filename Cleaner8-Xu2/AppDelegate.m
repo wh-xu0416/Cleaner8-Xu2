@@ -8,6 +8,10 @@
 #import "ASABTestManager.h"
 #import "Cleaner8_Xu2-Swift.h"
 
+static NSString * const kASHasLaunchedBeforeKey = @"as_has_launched_before";
+static NSString * const kASATTDidFinishNotification = @"as_att_did_finish";
+static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding"; // 和你 Onboarding 里保持一致
+
 #ifdef DEBUG
 static inline void ASLog(NSString *module, NSString *msg) {
     NSLog(@"【%@】%@", module ?: @"日志", msg ?: @"");
@@ -36,6 +40,21 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
+
+    // 是否首次启动（首次安装第一次打开）
+    BOOL hasLaunchedBefore = [ud boolForKey:kASHasLaunchedBeforeKey];
+    self.as_isFirstLaunch = !hasLaunchedBefore;
+    if (!hasLaunchedBefore) {
+        [ud setBool:YES forKey:kASHasLaunchedBeforeKey];
+    }
+
+    // 监听引导页触发的 ATT 结果
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(as_onATTFinishedFromOnboarding:)
+                                                 name:kASATTDidFinishNotification
+                                               object:nil];
+
+    // 你原来的 first_install_ts 逻辑保留
     if (![ud objectForKey:kASFirstInstallTSKey]) {
         [ud setDouble:[[NSDate date] timeIntervalSince1970] forKey:kASFirstInstallTSKey];
     }
@@ -76,6 +95,22 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
     return YES;
 }
 
+- (void)as_onATTFinishedFromOnboarding:(NSNotification *)note {
+    NSNumber *num = note.userInfo[@"status"];
+    NSInteger status = num.integerValue;
+    ASLog(@"ATT", [NSString stringWithFormat:@"收到引导页 ATT 完成通知 status=%@（%ld）",
+                   ASATTStatusText(status), (long)status]);
+
+    [self as_markATTFinishedAndTryStart:status];
+}
+
+- (void)as_markATTFinishedAndTryStart:(NSInteger)status {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.as_attFinished = YES;
+        [self tryStartAppsFlyerIfPossible];
+    });
+}
+
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
@@ -84,7 +119,13 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
 
 - (void)as_onDidBecomeActive:(NSNotification *)note {
     ASLog(@"App", @"收到 DidBecomeActive 通知");
-    [self requestATTWhenNoModal];
+
+    if (self.as_isFirstLaunch) {
+        ASLog(@"ATT", @"首次安装：ATT 由引导页第2页触发，App 流程不请求");
+    } else {
+        [self requestATTWhenNoModal];
+    }
+
     [self tryStartAppsFlyerIfPossible];
 }
 
@@ -108,8 +149,7 @@ static NSString * const kASFirstInstallTSKey = @"as_first_install_ts";
             ASLog(@"ATT", [NSString stringWithFormat:@"请求结束 状态=%@（%ld）",
                            ASATTStatusText(status), (long)status]);
 
-            self.as_attFinished = YES;
-            [self tryStartAppsFlyerIfPossible];
+            [self as_markATTFinishedAndTryStart:status];
         });
     }];
 }
