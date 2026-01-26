@@ -320,9 +320,13 @@ static inline id SafeKVC(id obj, NSString *key) {
 
 @end
 
+static NSString * const kPaywallDidDismissNotification = @"XXPaywallDidDismissNotification";
+
 #pragma mark - SubscriptionViewController
 
 @interface SubscriptionViewController ()
+@property(nonatomic,assign) BOOL didPostPaywallDismiss;
+
 @property(nonatomic,assign) SK2PeriodUnit selectedUnit;
 @property(nonatomic,assign) BOOL userDidChooseUnit;
 
@@ -474,12 +478,25 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
     [self startLoopAnimation];
 }
 
+- (void)notifyPaywallDidDismissIfNeeded {
+    if (self.didPostPaywallDismiss) return;
+    self.didPostPaywallDismiss = YES;
+
+    [[NSNotificationCenter defaultCenter] postNotificationName:kPaywallDidDismissNotification
+                                                        object:nil
+                                                      userInfo:@{@"source": self.source ?: @""}];
+}
+
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
     [self stopLoopAnimation];
     [self hideLoading];
     self.loadingCount = 0;
     self.pendingAutoPurchase = NO;
+    // 无论是点返回取消、还是订阅成功后被 dismiss，这里都会走
+    if (self.isBeingDismissed || self.navigationController.isBeingDismissed) {
+        [self notifyPaywallDidDismissIfNeeded];
+    }
 }
 
 - (void)onStoreSnapshotChanged:(NSNotification *)note {
@@ -596,7 +613,7 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
     self.featureRow.spacing = AS(65);
     [self.view addSubview:self.featureRow];
 
-    NSString *photosTitle = NSLocalizedString(@"photos",nil);
+    NSString *photosTitle = NSLocalizedString(@"Photos",nil);
     NSString *icloudTitle = NSLocalizedString(@"icloud",nil);
 
     self.photosFeature = [[SubFeatureView alloc] initWithIcon:@"ic_sub_photos" title:photosTitle];
@@ -748,7 +765,7 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
         [self.usedRow.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:AS(20)],
         [self.usedRow.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-AS(20)],
         
-        [self.plansStack.topAnchor constraintEqualToAnchor:self.usedRow.bottomAnchor constant:AS(64)],
+        [self.plansStack.topAnchor constraintEqualToAnchor:self.usedRow.bottomAnchor constant:AS(54)],
         [self.plansStack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:AS(30)],
         [self.plansStack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-AS(30)],
 
@@ -952,8 +969,11 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
             it.nameLab.text = [self localizedPlanNameForModel:m];
 
             NSString *unit = [self localizedPeriodUnitForModel:m];
-            NSString *fmt = NSLocalizedString(@"%@ / %@",nil);
-            it.priceLab.text = [NSString stringWithFormat:fmt, (m.displayPrice ?: @""), unit];
+            NSString *base = [NSString stringWithFormat:NSLocalizedString(@"%@ / %@",nil), (m.displayPrice ?: @""), unit];
+            if (m.periodUnit == SK2PeriodUnitYear) {
+                base = [base stringByAppendingString:[self yearlyPerWeekSuffixForModel:m fallbackPriceText:(m.displayPrice ?: @"")]];
+            }
+            it.priceLab.text = base;
         }
     }
 }
@@ -995,7 +1015,11 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
 
         item.nameLab.text = [self localizedPlanNameForModel:m];
         NSString *unit = [self localizedPeriodUnitForModel:m];
-        item.priceLab.text = [NSString stringWithFormat:NSLocalizedString(@"%@ / %@",nil), (m.displayPrice ?: @""), unit];
+        NSString *base = [NSString stringWithFormat:NSLocalizedString(@"%@ / %@",nil), (m.displayPrice ?: @""), unit];
+        if (m.periodUnit == SK2PeriodUnitYear) {
+            base = [base stringByAppendingString:[self yearlyPerWeekSuffixForModel:m fallbackPriceText:(m.displayPrice ?: @"")]];
+        }
+        item.priceLab.text = base;
 
         [item addTarget:self action:@selector(tapPlanItem:) forControlEvents:UIControlEventTouchUpInside];
         [item applySelectedStyle:(i == self.selectedIndex)];
@@ -1009,15 +1033,20 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
     item.tag = tag;
     item.isPopular = isPopular;
     item.showPopularAlways = YES;
-    
+
     NSString *price = [self defaultPriceForPeriodUnit:unit];
     NSString *unitStr = (unit == SK2PeriodUnitYear) ? NSLocalizedString(@"year", nil) : NSLocalizedString(@"week", nil);
     NSString *nameStr = (unit == SK2PeriodUnitYear) ? NSLocalizedString(@"Yearly", nil) : NSLocalizedString(@"Weekly", nil);
-    
+
     item.nameLab.text = nameStr;
-    item.priceLab.text = [NSString stringWithFormat:NSLocalizedString(@"%@ / %@",nil), price, unitStr];
+
+    NSString *base = [NSString stringWithFormat:NSLocalizedString(@"%@ / %@",nil), price, unitStr];
+    if (unit == SK2PeriodUnitYear) {
+        base = [base stringByAppendingString:[self yearlyPerWeekSuffixForModel:nil fallbackPriceText:price]];
+    }
+    item.priceLab.text = base;
+
     [item addTarget:self action:@selector(tapPlanItem:) forControlEvents:UIControlEventTouchUpInside];
-    
     [self.plansStack addArrangedSubview:item];
 }
 
@@ -1027,6 +1056,104 @@ static inline NSInteger ASPeriodRank(SK2PeriodUnit u) {
         case SK2PeriodUnitYear: return 1;
         default: return 2;
     }
+}
+
+static inline NSDecimalNumber *ASParseAmountFromPriceString(NSString *s) {
+    if (s.length == 0) return nil;
+
+    NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"0123456789.,-"];
+    NSMutableString *num = [NSMutableString string];
+
+    for (NSUInteger i = 0; i < s.length; i++) {
+        unichar c = [s characterAtIndex:i];
+        if ([allowed characterIsMember:c]) {
+            [num appendFormat:@"%C", c];
+        }
+    }
+
+    // 处理 39,99 这种：如果有逗号没点，把逗号当小数点；否则去掉千分位逗号
+    if ([num containsString:@","] && ![num containsString:@"."]) {
+        [num replaceOccurrencesOfString:@"," withString:@"." options:0 range:NSMakeRange(0, num.length)];
+    } else {
+        [num replaceOccurrencesOfString:@"," withString:@"" options:0 range:NSMakeRange(0, num.length)];
+    }
+
+    NSDecimalNumber *n = [NSDecimalNumber decimalNumberWithString:num];
+    if ([n isEqualToNumber:[NSDecimalNumber notANumber]]) return nil;
+    return n;
+}
+
+static inline NSString *ASExtractCurrencySymbolFromPriceString(NSString *s) {
+    if (s.length == 0) return @"";
+
+    NSCharacterSet *digits = [NSCharacterSet decimalDigitCharacterSet];
+    NSMutableString *prefix = [NSMutableString string];
+
+    // 前缀货币符号：$39.99
+    for (NSUInteger i = 0; i < s.length; i++) {
+        unichar c = [s characterAtIndex:i];
+        if ([digits characterIsMember:c] || c == '.' || c == ',') break;
+        if (![[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:c]) {
+            [prefix appendFormat:@"%C", c];
+        }
+    }
+    NSString *p = [prefix stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (p.length) return p;
+
+    // 后缀货币符号：39,99 €
+    NSMutableString *suffix = [NSMutableString string];
+    for (NSInteger i = (NSInteger)s.length - 1; i >= 0; i--) {
+        unichar c = [s characterAtIndex:(NSUInteger)i];
+        if ([digits characterIsMember:c] || c == '.' || c == ',') break;
+        if (![[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:c]) {
+            [suffix insertString:[NSString stringWithFormat:@"%C", c] atIndex:0];
+        }
+    }
+    NSString *q = [suffix stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    return q ?: @"";
+}
+
+- (NSString *)yearlyPerWeekSuffixForModel:(SK2ProductModel * _Nullable)m
+                       fallbackPriceText:(NSString *)fallbackPriceText {
+    // 只给年费加
+    if (m && m.periodUnit != SK2PeriodUnitYear) return @"";
+
+    NSDecimalNumber *yearAmount = nil;
+    NSString *symbol = nil;
+
+    // 优先真实数值
+    if (m) {
+        id v = SafeKVC(m, @"priceValue");
+        if ([v isKindOfClass:NSDecimalNumber.class]) {
+            yearAmount = (NSDecimalNumber *)v;
+        }
+        symbol = SafeKVC(m, @"currencySymbol");
+    }
+
+    // 没有真实数值就从字符串解析（默认价也走这里）
+    if (!yearAmount) yearAmount = ASParseAmountFromPriceString(fallbackPriceText);
+    if (symbol.length == 0) symbol = ASExtractCurrencySymbolFromPriceString(fallbackPriceText);
+
+    if (!yearAmount || yearAmount.doubleValue <= 0 || symbol.length == 0) return @"";
+
+    NSDecimalNumber *weeks = [NSDecimalNumber decimalNumberWithString:@"52"];
+    NSDecimalNumber *perWeek = [yearAmount decimalNumberByDividingBy:weeks];
+
+    NSDecimalNumberHandler *round2 = [NSDecimalNumberHandler decimalNumberHandlerWithRoundingMode:NSRoundPlain
+                                                                                           scale:2
+                                                                                raiseOnExactness:NO
+                                                                                 raiseOnOverflow:NO
+                                                                                raiseOnUnderflow:NO
+                                                                             raiseOnDivideByZero:NO];
+    perWeek = [perWeek decimalNumberByRoundingAccordingToBehavior:round2];
+
+    NSNumberFormatter *fmt = [[NSNumberFormatter alloc] init];
+    fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    fmt.minimumFractionDigits = 2;
+    fmt.maximumFractionDigits = 2;
+
+    NSString *num = [fmt stringFromNumber:perWeek] ?: perWeek.stringValue;
+    return [NSString stringWithFormat:@"  |  just %@%@ / week", symbol, num];
 }
 
 - (NSArray<SK2ProductModel *> *)normalizedProducts:(NSArray<SK2ProductModel *> *)products {
@@ -1166,11 +1293,9 @@ static inline NSInteger ASPeriodRank(SK2PeriodUnit u) {
     lab.font = PoppinsFont(@"Poppins-Regular", AS(14), UIFontWeightRegular);
     lab.text = text ?: @"";
 
-    [lab setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
-                                         forAxis:UILayoutConstraintAxisHorizontal];
-    [lab setContentHuggingPriority:UILayoutPriorityDefaultHigh
-                           forAxis:UILayoutConstraintAxisHorizontal];
-
+    [lab setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [lab setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    
     UIImageView *iv = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ic_sub_tip"]];
     iv.translatesAutoresizingMaskIntoConstraints = NO;
     iv.contentMode = UIViewContentModeScaleAspectFit;
@@ -1226,19 +1351,20 @@ static inline NSInteger ASPeriodRank(SK2PeriodUnit u) {
     [NSLayoutConstraint activateConstraints:@[
         [row1.topAnchor constraintEqualToAnchor:tipsHost.topAnchor],
         [row1.centerXAnchor constraintEqualToAnchor:tipsHost.centerXAnchor],
-        [row1.leadingAnchor constraintGreaterThanOrEqualToAnchor:tipsHost.leadingAnchor],
-        [row1.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor],
+        
+        [row1.leadingAnchor constraintGreaterThanOrEqualToAnchor:tipsHost.leadingAnchor constant:AS(20)],
+        [row1.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor constant:-AS(20)],
 
-        [row2.topAnchor constraintEqualToAnchor:row1.bottomAnchor constant:AS(12)],
+        [row2.topAnchor constraintEqualToAnchor:row1.bottomAnchor constant:AS(10)],
         [row2.leadingAnchor constraintEqualToAnchor:row1.leadingAnchor],
-        [row2.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor],
+        [row2.trailingAnchor constraintEqualToAnchor:row1.trailingAnchor],
 
-        [row3.topAnchor constraintEqualToAnchor:row2.bottomAnchor constant:AS(12)],
+        [row3.topAnchor constraintEqualToAnchor:row2.bottomAnchor constant:AS(10)],
         [row3.leadingAnchor constraintEqualToAnchor:row1.leadingAnchor],
-        [row3.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor],
+        [row3.trailingAnchor constraintEqualToAnchor:row1.trailingAnchor],
         [row3.bottomAnchor constraintEqualToAnchor:tipsHost.bottomAnchor],
     ]];
-
+    
     [self.plansStack addArrangedSubview:trial];
     [self.plansStack addArrangedSubview:tipsHost];
 
@@ -1689,7 +1815,7 @@ static inline NSString *ASNonEmptyStringFromValue(id v) {
     lab.textColor = UIColor.whiteColor;
     lab.font = ASACFont(16, UIFontWeightMedium);
     lab.textAlignment = NSTextAlignmentCenter;
-    lab.numberOfLines = 1;
+    lab.numberOfLines = 0;
 
     UIView *toast = [UIView new];
     toast.tag = tag;

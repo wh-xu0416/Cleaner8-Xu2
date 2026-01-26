@@ -160,10 +160,8 @@ static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding";
         target = [OnboardingViewController new];
     }
 
-    // 优先用当前 nav
     UINavigationController *nav = self.navigationController;
     if (!nav) {
-        // 兜底：从 window root 拿
         UIViewController *root = self.view.window.rootViewController;
         if ([root isKindOfClass:[UINavigationController class]]) {
             nav = (UINavigationController *)root;

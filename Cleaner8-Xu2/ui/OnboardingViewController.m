@@ -3,6 +3,7 @@
 #import "Common.h"
 #import "LTEventTracker.h"
 #import <AdSupport/AdSupport.h>
+#import "PaywallPresenter.h"
 
 @import Lottie;
 
@@ -103,7 +104,7 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
     self.titleLabel = [UILabel new];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
-    self.titleLabel.numberOfLines = 1;
+    self.titleLabel.numberOfLines = 0;
     self.titleLabel.textColor = ASRGBA(0xFF1F1434);
     self.titleLabel.font = ASFont(@"Poppins-Bold", 28);
     [self.view addSubview:self.titleLabel];
@@ -114,6 +115,8 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
     self.descLabel.numberOfLines = 0;
     self.descLabel.textColor = ASRGBA(0xFF8F8A98);
     self.descLabel.font = ASFont(@"Poppins-Regular", 20);
+    self.descLabel.adjustsFontSizeToFitWidth = YES;
+    self.descLabel.minimumScaleFactor = 0.6;
     [self.view addSubview:self.descLabel];
 
     self.dots = [NSMutableArray array];
@@ -286,15 +289,12 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
 
 #pragma mark - Finish
 
-- (void)startExperience {
-    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kHasCompletedOnboardingKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
-
+- (void)enterMainTabBar {
     MainTabBarController *main = [MainTabBarController new];
 
     UIWindow *window = self.view.window;
     if (self.navigationController) {
-        [self.navigationController setViewControllers:@[main] animated:YES];
+        [self.navigationController setViewControllers:@[main] animated:NO];
     } else {
         window.rootViewController = main;
         [UIView transitionWithView:window
@@ -303,6 +303,18 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
                         animations:nil
                         completion:nil];
     }
+}
+
+- (void)startExperience {
+    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kHasCompletedOnboardingKey];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+
+    __weak typeof(self) weakSelf = self;
+    [[PaywallPresenter shared] showPaywallIfNeededWithSource:@"guide" completion:^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [self enterMainTabBar];
+    }];
 }
 
 @end

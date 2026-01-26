@@ -4,6 +4,7 @@
 #import <UIKit/UIKit.h>
 #import <Photos/Photos.h>
 #import "LivePhotoCoverFrameManager.h"
+#import "PaywallPresenter.h"
 
 static inline CGFloat SWDesignWidth(void) { return 402.0; }
 static inline CGFloat SWDesignHeight(void) { return 874.0; }
@@ -1422,6 +1423,12 @@ UICollectionViewDataSourcePrefetching
 - (void)goConvertCover {
     if (self.selectedAssets.count == 0) return;
 
+    if (![PaywallPresenter shared].isProActive) {
+        NSString *source = @"livephoto_compress";
+        [[PaywallPresenter shared] showSubscriptionPageWithSource:source];
+        return;
+    }
+    
     uint64_t before = 0, after = 0, saved = 0;
     [LivePhotoCoverFrameManager estimateForAssets:self.selectedAssets
                                   totalBeforeBytes:&before

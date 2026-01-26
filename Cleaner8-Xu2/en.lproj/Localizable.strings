@@ -130,7 +130,7 @@
 "has" = "has";
 "have" = "have";
 "How to empty\n\"Recently Deleted\" album?" = "How to empty\n\"Recently Deleted\" album?";
-"icloud" = "icloud";
+"icloud" = "Icloud";
 "image" = "image";
 "Image" = "Image";
 "Image Compressor" = "Image Compressor";
@@ -297,3 +297,4 @@
 "You can perform this action now to free up space, or do it at any convenient time" = "You can perform this action now to free up space, or do it at any convenient time";
 "You deleted %@ photos today." = "You deleted %@ photos today.";
 "You will save about " = "You will save about ";
+"  |  just %@%@ / week" = "  |  just %@%@ / week";

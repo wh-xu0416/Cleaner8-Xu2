@@ -496,11 +496,6 @@ static inline UIColor *ASHexBlack(void) {
     if (self.selectedPaths.count > 0) {
         NSArray<NSURL *> *toDelete = [self selectedURLs];
         if (toDelete.count == 0) return;
-
-        if (![PaywallPresenter shared].isProActive) {
-            [[PaywallPresenter shared] showSubscriptionPageWithSource:(_mediaType == ASPrivateMediaTypeVideo) ? @"private_video_delete" : @"private_photo_delete"];
-            return;
-        }
         
         [[ASPrivateMediaStore shared] deleteItems:toDelete];
 
@@ -535,6 +530,11 @@ static inline UIColor *ASHexBlack(void) {
 
     [self ensurePhotoAuthThen:^(BOOL ok) {
         if (!ok) { [self handlePermissionCTA]; return; }
+        
+        if (![PaywallPresenter shared].isProActive) {
+            [[PaywallPresenter shared] showSubscriptionPageWithSource:(self->_mediaType == ASPrivateMediaTypeVideo) ? @"private_video" : @"private_photo"];
+            return;
+        }
         [self presentPicker];
     }];
 }

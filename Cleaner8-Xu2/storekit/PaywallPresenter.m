@@ -4,6 +4,8 @@
 #import "SubscriptionViewController.h"
 #import "LTEventTracker.h"
 
+static NSString * const kPaywallDidDismissNotification = @"XXPaywallDidDismissNotification";
+
 NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateChanged";
 
 @interface PaywallPresenter ()
@@ -12,6 +14,7 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
 
 @property (nonatomic, copy) PaywallContinueBlock pendingContinue;
 @property (nonatomic, copy) NSString *currentSource;
+@property (nonatomic, assign) BOOL autoPaywallAttemptedThisSession;
 @end
 
 @implementation PaywallPresenter
@@ -31,18 +34,54 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
                                              selector:@selector(onSubscriptionChanged)
                                                  name:@"subscriptionStateChanged"
                                                object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(onPaywallDidDismiss:)
+                                                 name:kPaywallDidDismissNotification
+                                               object:nil];
 }
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-// 栏门页 未订阅弹出
+- (void)firePendingContinueIfAny {
+    PaywallContinueBlock block = self.pendingContinue;
+    self.pendingContinue = nil;
+    if (block) block();
+}
+
+- (void)onPaywallDidDismiss:(NSNotification *)note {
+    self.presentedVC = nil;
+    [self firePendingContinueIfAny];
+}
+
+// 栏门页 未订阅弹出,只弹一次
 - (void)showPaywallIfNeededWithSource:(NSString * _Nullable)source {
+    [self showPaywallIfNeededWithSource:source completion:nil];
+}
+
+- (void)showPaywallIfNeededWithSource:(NSString * _Nullable)source
+                           completion:(PaywallContinueBlock _Nullable)completion {
     dispatch_async(dispatch_get_main_queue(), ^{
         SubscriptionState state = [StoreKit2Manager shared].state;
-        if (state == SubscriptionStateActive) return;
 
+        // 已订阅：直接放行
+        if (state == SubscriptionStateActive) {
+            if (completion) completion();
+            return;
+        }
+
+        // 本次启动已经尝试弹过自动 paywall：不再弹，直接放行（满足“启动页调用过，其他页面不再弹”）
+        if (self.autoPaywallAttemptedThisSession) {
+            if (completion) completion();
+            return;
+        }
+
+        // 记录 completion（只用于这次调用，比如 onboarding 进首页）
+        self.pendingContinue = completion;
+
+        // unknown：先刷新订阅状态，等一下再决定
         if (state == SubscriptionStateUnknown) {
             [[StoreKit2Manager shared] forceRefreshSubscriptionState];
 
@@ -51,24 +90,37 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
                 addObserverForName:@"subscriptionStateChanged"
                             object:nil
                              queue:[NSOperationQueue mainQueue]
-                        usingBlock:^(NSNotification * _Nonnull note) {
+                        usingBlock:^(__unused NSNotification *note) {
 
                 [[NSNotificationCenter defaultCenter] removeObserver:token];
+                __strong typeof(weakSelf) self = weakSelf;
+                if (!self) return;
+
                 if ([StoreKit2Manager shared].state != SubscriptionStateActive) {
-                    [weakSelf showPaywallWithSource:source];
+                    self.autoPaywallAttemptedThisSession = YES;
+                    [self showPaywallWithSource:source];
+                } else {
+                    [self firePendingContinueIfAny];
                 }
             }];
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
                            dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) self = weakSelf;
+                if (!self) return;
+
                 if ([StoreKit2Manager shared].state == SubscriptionStateUnknown) {
                     [[NSNotificationCenter defaultCenter] removeObserver:token];
-                    [weakSelf showPaywallWithSource:source];
+                    self.autoPaywallAttemptedThisSession = YES;
+                    [self showPaywallWithSource:source];
                 }
             });
+
             return;
         }
 
+        // inactive：直接弹
+        self.autoPaywallAttemptedThisSession = YES;
         [self showPaywallWithSource:source];
     });
 }
@@ -157,7 +209,12 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
         [[NSNotificationCenter defaultCenter] postNotificationName:PaywallPresenterStateChanged object:nil];
 
         if (state == SubscriptionStateActive) {
-            [self dismissIfPresent];
+            __weak typeof(self) weakSelf = self;
+            [self dismissIfPresentWithCompletion:^{
+                __strong typeof(weakSelf) self = weakSelf;
+                if (!self) return;
+                [self firePendingContinueIfAny];
+            }];
         }
     });
 }

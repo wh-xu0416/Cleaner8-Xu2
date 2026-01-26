@@ -73,6 +73,8 @@ public final class SK2ProductModel: NSObject {
     public let currencyCode: String
     public let currencySymbol: String
 
+    public let priceValue: NSDecimalNumber
+
     public init(product: Product) {
         productID = product.id
         displayPrice = product.displayPrice
@@ -80,6 +82,8 @@ public final class SK2ProductModel: NSObject {
 
         currencyCode = product.priceFormatStyle.currencyCode
         currencySymbol = product.priceFormatStyle.locale.currencySymbol ?? ""
+
+        priceValue = NSDecimalNumber(decimal: product.price)
 
         if let p = product.subscription?.subscriptionPeriod {
             periodValue = p.value
@@ -267,6 +271,29 @@ final class StoreKit2Manager: NSObject {
         f.dateFormat = "HH:mm:ss.SSS"
         return f.string(from: d)
     }
+    
+    @MainActor
+    private func paywallRank(for product: Product) -> Int {
+        guard let p = product.subscription?.subscriptionPeriod else { return 99 }
+        switch p.unit {
+        case .week: return 0
+        case .year: return 1
+        case .month: return 2
+        case .day: return 3
+        @unknown default: return 99
+        }
+    }
+
+    @MainActor
+    private func sortPaywallProducts(_ list: [Product]) -> [Product] {
+        return list.sorted { a, b in
+            let ra = paywallRank(for: a)
+            let rb = paywallRank(for: b)
+            if ra != rb { return ra < rb }
+            // 同 rank 用 id 做稳定排序，避免顺序抖动
+            return a.id < b.id
+        }
+    }
 
     private func uploadIAPIdentifiers(reason: String) async {
         guard let url = iapUploadURL else {
@@ -416,7 +443,7 @@ final class StoreKit2Manager: NSObject {
         }
 
         do {
-//            try? await Task.sleep(nanoseconds: UInt64(10 * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(15 * 1_000_000_000))
             let list = try await Product.products(for: productIDs)
             guard !list.isEmpty else {
                 updateSnapshot { old in
@@ -433,8 +460,10 @@ final class StoreKit2Manager: NSObject {
                 }
                 return
             }
-            self.rawProducts = list
-            let models = list.map { SK2ProductModel(product: $0) }
+            let sortedList = sortPaywallProducts(list)
+
+            self.rawProducts = sortedList
+            let models = sortedList.map { SK2ProductModel(product: $0) }
 
             lastProductsSuccessAt = Date()
 

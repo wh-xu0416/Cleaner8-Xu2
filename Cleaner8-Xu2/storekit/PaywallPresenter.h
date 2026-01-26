@@ -23,6 +23,11 @@ extern NSNotificationName const PaywallPresenterStateChanged;
 - (void)showSubscriptionPageWithSource:(NSString * _Nullable)source;
 - (void)dismissIfPresent;
 
+typedef void(^PaywallContinueBlock)(void);
+
+- (void)showPaywallIfNeededWithSource:(NSString * _Nullable)source
+                           completion:(PaywallContinueBlock _Nullable)completion;
+
 @end
 
 NS_ASSUME_NONNULL_END
