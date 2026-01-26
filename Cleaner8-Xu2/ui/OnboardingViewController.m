@@ -30,6 +30,9 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
 }
 
 @interface OnboardingViewController ()
+@property(nonatomic,strong) UIView *lottieContainer;
+@property(nonatomic,strong) NSLayoutConstraint *lottieCenterYConstraint;
+
 @property(nonatomic,strong) CompatibleAnimationView *lottieView;
 
 @property(nonatomic,strong) UILabel *titleLabel;
@@ -57,18 +60,24 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
     self.view.backgroundColor = ASRGBA(0xFFF7F7F9);
 
     self.jsonPaths = @[@"data1", @"data2", @"data3"];
-    
-    self.titles = @[NSLocalizedString(@"Cleanup Phone Storage",nil), NSLocalizedString(@"Photo Space Manage",nil), NSLocalizedString(@"Security Center",nil)];
+
+    self.titles = @[
+        NSLocalizedString(@"Cleanup Phone Storage",nil),
+        NSLocalizedString(@"Photo Space Manage",nil),
+        NSLocalizedString(@"Security Center",nil)
+    ];
     self.descs = @[
         NSLocalizedString(@"Get rid of what you don't need, free up 80% space",nil),
         NSLocalizedString(@"AI detect and delete duplicate & similar photos",nil),
         NSLocalizedString(@"Protect your photos and keep your data safe",nil)
     ];
+
     self.index = 0;
+    self.trackedIndexes = [NSMutableSet set];
 
     [self buildUI];
     [self applyPageAtIndex:self.index animated:NO];
@@ -77,7 +86,14 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
 #pragma mark - UI Construction
 
 - (void)buildUI {
-    self.lottieView = [[CompatibleAnimationView alloc] initWithFrame:CGRectZero];
+    CompatibleAnimation *first = [self animationForIndex:0];
+    if (first) {
+        self.lottieView = [[CompatibleAnimationView alloc] initWithCompatibleAnimation:first
+                                                        compatibleRenderingEngineOption:CompatibleRenderingEngineOptionMainThread];
+    } else {
+        self.lottieView = [[CompatibleAnimationView alloc] initWithFrame:CGRectZero];
+    }
+
     self.lottieView.translatesAutoresizingMaskIntoConstraints = NO;
     self.lottieView.contentMode = UIViewContentModeScaleAspectFit;
     self.lottieView.clipsToBounds = YES;
@@ -122,7 +138,6 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
         [self.dots addObject:dot];
     }
 
-    // Continue Button
     self.continueBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     self.continueBtn.translatesAutoresizingMaskIntoConstraints = NO;
     self.continueBtn.backgroundColor = ASRGBA(0xFF014EFE);
@@ -134,14 +149,36 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
     [self.continueBtn addTarget:self action:@selector(tapContinue) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.continueBtn];
 
+    self.lottieContainer = [UIView new];
+    self.lottieContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.lottieContainer.clipsToBounds = YES;
+    [self.view addSubview:self.lottieContainer];
+
+    [self.lottieContainer addSubview:self.lottieView];
+    self.lottieView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.lottieView.clipsToBounds = YES;
+    self.lottieView.contentMode = UIViewContentModeScaleAspectFit;
+
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [self.lottieView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.lottieView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.lottieView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.lottieView.heightAnchor constraintEqualToAnchor:self.view.heightAnchor multiplier:0.55],
+        [self.lottieContainer.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.lottieContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.lottieContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.lottieContainer.heightAnchor constraintEqualToAnchor:self.view.heightAnchor multiplier:0.55],
 
-        [self.titleLabel.topAnchor constraintEqualToAnchor:self.lottieView.bottomAnchor constant:SW(30)],
+        [self.lottieView.centerXAnchor constraintEqualToAnchor:self.lottieContainer.centerXAnchor],
+    ]];
+    self.lottieCenterYConstraint =
+        [self.lottieView.centerYAnchor constraintEqualToAnchor:self.lottieContainer.centerYAnchor constant:0];
+    self.lottieCenterYConstraint.active = YES;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.lottieView.widthAnchor constraintEqualToAnchor:self.lottieContainer.widthAnchor],
+        [self.lottieView.heightAnchor constraintEqualToAnchor:self.lottieContainer.heightAnchor],
+    ]];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.lottieContainer.bottomAnchor constant:SW(30)],
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(30)],
         [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(30)],
 
@@ -156,7 +193,7 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
         [self.continueBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(38)],
         [self.continueBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(38)],
         [self.continueBtn.heightAnchor constraintEqualToConstant:SW(68)],
-        
+
         [self.continueBtn.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:0],
     ]];
 }
@@ -193,14 +230,18 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
     self.descLabel.text  = self.descs[idx];
     [self updateDotsForIndex:idx];
 
-    CompatibleAnimation *anim = [self loadCompatibleAnimationFromBundlePath:self.jsonPaths[idx]];
+    CompatibleAnimation *anim = [self animationForIndex:idx];
     if (!anim) {
         [self.lottieView stop];
         return;
     }
 
     void (^startAnim)(void) = ^{
+        self.lottieCenterYConstraint.constant = (idx == 2) ? 20.0 : 0.0;
+        [self.view layoutIfNeeded];
+
         self.lottieView.compatibleAnimation = anim;
+        [self.lottieView reloadImages];
         [self.lottieView play];
     };
 
@@ -231,20 +272,26 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
     }
 }
 
-- (CompatibleAnimation *)loadCompatibleAnimationFromBundlePath:(NSString *)fileName {
-    CompatibleAnimation *anim = [[CompatibleAnimation alloc] initWithName:fileName
+#pragma mark - Lottie Helpers
+
+- (CompatibleAnimation *)animationForIndex:(NSInteger)idx {
+    if (idx < 0 || idx >= self.jsonPaths.count) return nil;
+    NSString *name = self.jsonPaths[idx];
+
+    CompatibleAnimation *anim = [[CompatibleAnimation alloc] initWithName:name
                                                              subdirectory:nil
                                                                    bundle:[NSBundle mainBundle]];
     return anim;
 }
 
+#pragma mark - Finish
 
 - (void)startExperience {
     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kHasCompletedOnboardingKey];
     [[NSUserDefaults standardUserDefaults] synchronize];
-    
+
     MainTabBarController *main = [MainTabBarController new];
-    
+
     UIWindow *window = self.view.window;
     if (self.navigationController) {
         [self.navigationController setViewControllers:@[main] animated:YES];
