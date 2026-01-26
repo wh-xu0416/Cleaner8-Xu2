@@ -1153,7 +1153,7 @@ static inline NSString *ASExtractCurrencySymbolFromPriceString(NSString *s) {
     fmt.maximumFractionDigits = 2;
 
     NSString *num = [fmt stringFromNumber:perWeek] ?: perWeek.stringValue;
-    return [NSString stringWithFormat:@"  |  just %@%@ / week", symbol, num];
+    return [NSString stringWithFormat:NSLocalizedString(@"  |  just %@%@ / week",nil), symbol, num];
 }
 
 - (NSArray<SK2ProductModel *> *)normalizedProducts:(NSArray<SK2ProductModel *> *)products {
