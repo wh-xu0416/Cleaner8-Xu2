@@ -237,7 +237,7 @@ static inline UIFont *ASFont(NSString *name, CGFloat size) {
     }
 
     void (^startAnim)(void) = ^{
-        self.lottieCenterYConstraint.constant = (idx == 2) ? 20.0 : 0.0;
+        self.lottieCenterYConstraint.constant = (idx == 2) ? SW(20.0) : 0.0;
         [self.view layoutIfNeeded];
 
         self.lottieView.compatibleAnimation = anim;
