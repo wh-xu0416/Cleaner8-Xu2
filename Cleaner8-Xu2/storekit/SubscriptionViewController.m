@@ -323,6 +323,9 @@ static inline id SafeKVC(id obj, NSString *key) {
 #pragma mark - SubscriptionViewController
 
 @interface SubscriptionViewController ()
+@property(nonatomic,assign) SK2PeriodUnit selectedUnit;
+@property(nonatomic,assign) BOOL userDidChooseUnit;
+
 @property(nonatomic,assign) BOOL pendingAutoPurchase;
 @property(nonatomic,strong) UIView *loadingMask;
 @property(nonatomic,strong) UIActivityIndicatorView *loadingSpinner;
@@ -392,6 +395,27 @@ static inline id SafeKVC(id obj, NSString *key) {
 
 @implementation SubscriptionViewController
 
+static NSString * const kDefaultWeeklyPrice = @"$7.99";
+static NSString * const kDefaultYearlyPrice = @"$39.99";
+
+- (BOOL)isYearlyMode {
+    return (self.paywallMode == SubscriptionPaywallModeYearly ||
+            self.paywallMode == SubscriptionPaywallModeGateYearly);
+}
+
+- (NSString *)defaultPriceForPeriodUnit:(SK2PeriodUnit)unit {
+    switch (unit) {
+        case SK2PeriodUnitYear: return kDefaultYearlyPrice;
+        case SK2PeriodUnitWeek: return kDefaultWeeklyPrice;
+        default: return [self isYearlyMode] ? kDefaultYearlyPrice : kDefaultWeeklyPrice;
+    }
+}
+
+- (NSString *)defaultPlanIDForCurrentMode {
+    return [self isYearlyMode] ? NSLocalizedString(@"yearly",nil) : NSLocalizedString(@"weekly",nil);
+}
+
+
 - (instancetype)initWithMode:(SubscriptionPaywallMode)mode {
     if (self = [super init]) {
         _paywallMode = mode;
@@ -416,7 +440,8 @@ static inline id SafeKVC(id obj, NSString *key) {
                                                object:nil];
 
     [self buildUI];
-    
+    [self updateAutoRenewLine];
+
     if (self.paywallMode != SubscriptionPaywallModeWeekly &&
         self.paywallMode != SubscriptionPaywallModeYearly &&
         self.paywallMode != SubscriptionPaywallModeGateWeekly &&
@@ -431,6 +456,9 @@ static inline id SafeKVC(id obj, NSString *key) {
         [self rebuildGateUI];
         self.gateBuilt = YES;
     }
+    
+    self.selectedUnit = [self isYearlyMode] ? SK2PeriodUnitYear : SK2PeriodUnitWeek;
+    self.userDidChooseUnit = NO;
     
     [self render];
     [[StoreKit2Manager shared] uploadIAPIdentifiersOnEnterPaywall];
@@ -761,6 +789,11 @@ static inline id SafeKVC(id obj, NSString *key) {
     }
 }
 
+- (BOOL)isGateMode {
+    return (self.paywallMode == SubscriptionPaywallModeGateWeekly ||
+            self.paywallMode == SubscriptionPaywallModeGateYearly);
+}
+
 #pragma mark - Render
 
 - (void)render {
@@ -774,10 +807,30 @@ static inline id SafeKVC(id obj, NSString *key) {
     BOOL ready = (snap.productsState == ProductsLoadStateReady && snap.products.count > 0);
 
     self.restoreBtn.enabled = hasNet && !busy;
+    
+    if (snap.products.count > 0) {
+        self.products = [self normalizedProducts:snap.products];
+    }
 
+    NSString *sig = [self signatureForProducts:self.products];
+    if (![sig isEqualToString:self.productsSignature] || !self.gateBuilt) {
+        if ([self isGateMode]) {
+            [self rebuildGateUI];
+            self.gateBuilt = YES;
+        } else {
+            [self rebuildPlansUI];
+        }
+        self.productsSignature = sig;
+    } else {
+        [self refreshPlanSelectionOnly];
+    }
+
+    [self updateAutoRenewLine];
+    [self updateTrialHintUI];
+     
     if (!ready) {
+        [self updateAutoRenewLine];
         BOOL hasCached = (self.products.count > 0);
-        if (!hasCached) self.autoRenewLab.text = @"";
 
         if (self.pendingAutoPurchase &&
             snap.productsState == ProductsLoadStateFailed &&
@@ -816,12 +869,17 @@ static inline id SafeKVC(id obj, NSString *key) {
             }
             if (found != NSNotFound) self.selectedIndex = found;
         } else {
-            self.selectedIndex = (self.paywallMode == SubscriptionPaywallModeYearly) ? yearIdx : weekIdx;
-            self.selectedProductID = self.products.count ? self.products[self.selectedIndex].productID : nil;
+            NSInteger idx = [self indexForUnit:self.selectedUnit];
+            if (idx == NSNotFound) {
+                idx = [self isYearlyMode] ? yearIdx : weekIdx;
+                self.selectedUnit = (idx == yearIdx) ? SK2PeriodUnitYear : SK2PeriodUnitWeek;
+            }
+            self.selectedIndex = idx;
+            self.selectedProductID = self.products.count ? self.products[idx].productID : nil;
         }
     }
 
-    NSString *sig = [self signatureForProducts:self.products];
+//    NSString *sig = [self signatureForProducts:self.products];
     BOOL productsChanged = ![sig isEqualToString:self.productsSignature];
     self.productsSignature = sig;
 
@@ -860,20 +918,26 @@ static inline id SafeKVC(id obj, NSString *key) {
 }
 
 - (void)updateTrialHintUI {
-    BOOL isGate = (self.paywallMode == SubscriptionPaywallModeGateWeekly ||
-                   self.paywallMode == SubscriptionPaywallModeGateYearly);
+    if ([self isGateMode]) {
+        self.trialHintLab.hidden = YES;
+        self.continueTopToPlansStack.active = YES;
+        self.continueTopToTrialHint.active  = NO;
+        [self.view setNeedsLayout];
+        return;
+    }
 
+    SK2ProductModel *m = [self currentProductForPurchase];
     BOOL show = NO;
-    if (!isGate) {
-        SK2ProductModel *m = [self currentProductForPurchase];
-        show = (m && m.periodUnit == SK2PeriodUnitWeek);
+
+    if (m) {
+        show = (m.periodUnit == SK2PeriodUnitWeek);
+    } else {
+        show = (self.selectedUnit == SK2PeriodUnitWeek);
     }
 
     self.trialHintLab.hidden = !show;
-
     self.continueTopToPlansStack.active = !show;
     self.continueTopToTrialHint.active  = show;
-
     [self.view setNeedsLayout];
 }
 
@@ -905,14 +969,23 @@ static inline id SafeKVC(id obj, NSString *key) {
 
 - (void)rebuildPlansUI {
     [self clearPlansUI];
-    if (self.products.count == 0) return;
 
-    if (self.paywallMode == SubscriptionPaywallModeGateWeekly || self.paywallMode == SubscriptionPaywallModeGateYearly) {
-        [self rebuildGateUI];
-        return;
-    }
+    if ([self isGateMode]) return;
 
     self.plansStack.spacing = AS(20);
+
+    if (self.products.count == 0) {
+        [self addDefaultPlanItem:SK2PeriodUnitYear isPopular:YES tag:1];
+        [self addDefaultPlanItem:SK2PeriodUnitWeek isPopular:NO tag:0];
+
+        self.selectedIndex = [self isYearlyMode] ? 1 : 0;
+        self.selectedUnit  = [self isYearlyMode] ? SK2PeriodUnitYear : SK2PeriodUnitWeek;
+
+        [self refreshPlanSelectionOnly];
+        [self updateAutoRenewLine];
+        [self updateTrialHintUI];
+        return;
+    }
     
     for (NSInteger i = 0; i < self.products.count; i++) {
         SK2ProductModel *m = self.products[i];
@@ -921,24 +994,33 @@ static inline id SafeKVC(id obj, NSString *key) {
         item.tag = i;
         item.isPopular = (i == self.popularIndex);
         item.showPopularAlways = YES;
-        
+
         item.nameLab.text = [self localizedPlanNameForModel:m];
-
         NSString *unit = [self localizedPeriodUnitForModel:m];
-
-        NSString *fmt = NSLocalizedString(@"%@ / %@",nil);
-
-        item.priceLab.text = [NSString stringWithFormat:fmt, (m.displayPrice ?: @""), unit];
+        item.priceLab.text = [NSString stringWithFormat:NSLocalizedString(@"%@ / %@",nil), (m.displayPrice ?: @""), unit];
 
         [item addTarget:self action:@selector(tapPlanItem:) forControlEvents:UIControlEventTouchUpInside];
-
-        BOOL selected = (i == self.selectedIndex);
-        [item applySelectedStyle:selected];
-
-        item.enabled = YES;
+        [item applySelectedStyle:(i == self.selectedIndex)];
 
         [self.plansStack addArrangedSubview:item];
     }
+}
+
+- (void)addDefaultPlanItem:(SK2PeriodUnit)unit isPopular:(BOOL)isPopular tag:(NSInteger)tag {
+    SubPlanItemView *item = [[SubPlanItemView alloc] init];
+    item.tag = tag;
+    item.isPopular = isPopular;
+    item.showPopularAlways = YES;
+    
+    NSString *price = [self defaultPriceForPeriodUnit:unit];
+    NSString *unitStr = (unit == SK2PeriodUnitYear) ? NSLocalizedString(@"year", nil) : NSLocalizedString(@"week", nil);
+    NSString *nameStr = (unit == SK2PeriodUnitYear) ? NSLocalizedString(@"Yearly", nil) : NSLocalizedString(@"Weekly", nil);
+    
+    item.nameLab.text = nameStr;
+    item.priceLab.text = [NSString stringWithFormat:NSLocalizedString(@"%@ / %@",nil), price, unitStr];
+    [item addTarget:self action:@selector(tapPlanItem:) forControlEvents:UIControlEventTouchUpInside];
+    
+    [self.plansStack addArrangedSubview:item];
 }
 
 - (NSArray<SK2ProductModel *> *)normalizedProducts:(NSArray<SK2ProductModel *> *)products {
@@ -996,17 +1078,23 @@ static inline id SafeKVC(id obj, NSString *key) {
 }
 
 - (void)updateAutoRenewLine {
-    if (self.selectedIndex < 0 || self.selectedIndex >= self.products.count) {
-        self.autoRenewLab.text = @"";
-        return;
-    }
     SK2ProductModel *m = [self currentProductForPurchase];
-    if (!m) { self.autoRenewLab.text = @""; return; }
+    SK2PeriodUnit unit;
+    NSString *price;
 
-    NSString *unit = [self localizedPeriodUnitForModel:m];
+    if (m && m.displayPrice.length > 0) {
+        unit = m.periodUnit;
+        price = m.displayPrice;
+    } else {
+        unit = [self isGateMode] ? ([self isYearlyMode] ? SK2PeriodUnitYear : SK2PeriodUnitWeek)
+                                 : self.selectedUnit;
+        price = [self defaultPriceForPeriodUnit:unit];
+    }
 
-    NSString *fmt = NSLocalizedString(@"Auto-renewing, %@ / %@, cancel any time",nil);
-    self.autoRenewLab.text = [NSString stringWithFormat:fmt, (m.displayPrice ?: @""), unit];
+    NSString *unitStr = (unit == SK2PeriodUnitYear) ? NSLocalizedString(@"year", nil) : NSLocalizedString(@"week", nil);
+    self.autoRenewLab.text = [NSString stringWithFormat:NSLocalizedString(@"Auto-renewing, %@ / %@, cancel any time", nil),
+                             price, unitStr];
+    
     self.autoRenewLab.adjustsFontSizeToFitWidth = YES;
     self.autoRenewLab.minimumScaleFactor = 0.6;
     self.autoRenewLab.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -1329,11 +1417,22 @@ static inline NSString *ASNonEmptyStringFromValue(id v) {
 }
 
 - (NSDictionary *)trackBasePropsForProduct:(SK2ProductModel *)m {
+    NSString *planID = [self trackPlanIDForProduct:m];
+    if (planID.length == 0) planID = [self defaultPlanIDForCurrentMode];
+
+    NSString *priceClient = @"";
+    if (m && m.displayPrice.length) {
+        priceClient = m.displayPrice;
+    } else {
+        SK2PeriodUnit u = m ? m.periodUnit : ([self isYearlyMode] ? SK2PeriodUnitYear : SK2PeriodUnitWeek);
+        priceClient = [self defaultPriceForPeriodUnit:u];
+    }
+
     return @{
         @"IAP": self.source ?: @"",
-        @"ID": [self trackPlanIDForProduct:m] ?: @"",
+        @"ID": planID ?: @"",
         @"currency": [self trackCurrencyForProduct:m] ?: @"",
-        @"price_client": (m.displayPrice ?: @""),
+        @"price_client": priceClient ?: @"",
     };
 }
 
@@ -1447,17 +1546,27 @@ static inline NSString *ASNonEmptyStringFromValue(id v) {
 }
 
 - (void)tapPlanItem:(SubPlanItemView *)sender {
-    if (self.paywallMode == SubscriptionPaywallModeGateWeekly || self.paywallMode == SubscriptionPaywallModeGateYearly) return;
-    if (sender.tag < 0 || sender.tag >= self.products.count) return;
+    if ([self isGateMode]) return;
 
-    self.selectedIndex = sender.tag;
-    self.selectedProductID = self.products[self.selectedIndex].productID;
+    self.userDidChooseUnit = YES;
+
+    if (self.products.count > 0 && sender.tag >= 0 && sender.tag < self.products.count) {
+        self.selectedIndex = sender.tag;
+        SK2ProductModel *m = self.products[self.selectedIndex];
+        self.selectedProductID = m.productID;
+        self.selectedUnit = m.periodUnit;
+    } else {
+        self.selectedIndex = sender.tag;
+        self.selectedProductID = nil;
+        self.selectedUnit = (sender.tag == 1) ? SK2PeriodUnitYear : SK2PeriodUnitWeek;
+    }
 
     for (UIView *v in self.plansStack.arrangedSubviews) {
         if (![v isKindOfClass:SubPlanItemView.class]) continue;
         SubPlanItemView *it = (SubPlanItemView *)v;
         [it applySelectedStyle:(it.tag == self.selectedIndex)];
     }
+
     [self updateAutoRenewLine];
     [self updateTrialHintUI];
 }
