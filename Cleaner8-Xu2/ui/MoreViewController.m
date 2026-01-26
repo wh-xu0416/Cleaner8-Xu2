@@ -307,7 +307,7 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 
     UIImageView *vipIcon = [UIImageView new];
     vipIcon.translatesAutoresizingMaskIntoConstraints = NO;
-    vipIcon.image = [UIImage imageNamed:@"ic_vip"];
+    vipIcon.image = [UIImage imageNamed:@"ic_big_vip"];
     vipIcon.contentMode = UIViewContentModeScaleAspectFit;
     [content addSubview:vipIcon];
 
@@ -340,8 +340,8 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
     [NSLayoutConstraint activateConstraints:@[
         [vipIcon.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
         [vipIcon.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
-        [vipIcon.widthAnchor constraintEqualToConstant:SW(60)],
-        [vipIcon.heightAnchor constraintEqualToConstant:SW(60)],
+        [vipIcon.widthAnchor constraintEqualToConstant:SW(66)],
+        [vipIcon.heightAnchor constraintEqualToConstant:SW(66)],
 
         [proLab.leadingAnchor constraintEqualToAnchor:vipIcon.trailingAnchor constant:SW(15)],
         [proLab.topAnchor constraintEqualToAnchor:content.topAnchor],

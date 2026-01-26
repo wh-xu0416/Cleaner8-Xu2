@@ -31,11 +31,11 @@ public class AppConstants: NSObject {
     public static let appsFlyerAttWaitTimeout: Double = 120
     
     // MARK: - Paywall / Subscription 配置
-    //  栏门页 2: 周费商品, 3: 年费商品
+    // 栏门页 2: 周费商品, 3: 年费商品
     public static let paywallGateModeRaw: Int = 2
 
     // 订阅列表页 0: 默认选中周费, 1: 默认选中年费
-    public static let subscriptionPageModeRaw: Int = 1
+    public static let subscriptionPageModeRaw: Int = 0
     
     // MARK: - ABTest Key
     public static let abKeyPaidRateRate: String = "paid_rate_rate"

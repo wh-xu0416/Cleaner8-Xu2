@@ -830,8 +830,6 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
      
     if (!ready) {
         [self updateAutoRenewLine];
-        BOOL hasCached = (self.products.count > 0);
-
         if (self.pendingAutoPurchase &&
             snap.productsState == ProductsLoadStateFailed &&
             !busy) {
@@ -856,9 +854,9 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
                    self.paywallMode == SubscriptionPaywallModeGateYearly);
 
     if (self.paywallMode == SubscriptionPaywallModeWeekly || self.paywallMode == SubscriptionPaywallModeGateWeekly) {
-        self.popularIndex = yearIdx;
+        self.popularIndex = weekIdx;
     } else if (self.paywallMode == SubscriptionPaywallModeYearly || self.paywallMode == SubscriptionPaywallModeGateYearly) {
-        self.popularIndex = yearIdx;
+        self.popularIndex = weekIdx;
     }
 
     if (!isGate) {
@@ -975,8 +973,8 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
     self.plansStack.spacing = AS(20);
 
     if (self.products.count == 0) {
-        [self addDefaultPlanItem:SK2PeriodUnitYear isPopular:YES tag:1];
-        [self addDefaultPlanItem:SK2PeriodUnitWeek isPopular:NO tag:0];
+        [self addDefaultPlanItem:SK2PeriodUnitWeek isPopular:YES  tag:0];
+        [self addDefaultPlanItem:SK2PeriodUnitYear isPopular:NO   tag:1];
 
         self.selectedIndex = [self isYearlyMode] ? 1 : 0;
         self.selectedUnit  = [self isYearlyMode] ? SK2PeriodUnitYear : SK2PeriodUnitWeek;
@@ -1023,11 +1021,19 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
     [self.plansStack addArrangedSubview:item];
 }
 
+static inline NSInteger ASPeriodRank(SK2PeriodUnit u) {
+    switch (u) {
+        case SK2PeriodUnitWeek: return 0;
+        case SK2PeriodUnitYear: return 1;
+        default: return 2;
+    }
+}
+
 - (NSArray<SK2ProductModel *> *)normalizedProducts:(NSArray<SK2ProductModel *> *)products {
     return [products sortedArrayUsingComparator:^NSComparisonResult(SK2ProductModel *a, SK2ProductModel *b) {
-        if (a.periodUnit != b.periodUnit) {
-            return (a.periodUnit > b.periodUnit) ? NSOrderedAscending : NSOrderedDescending;
-        }
+        NSInteger ra = ASPeriodRank(a.periodUnit);
+        NSInteger rb = ASPeriodRank(b.periodUnit);
+        if (ra != rb) return (ra < rb) ? NSOrderedAscending : NSOrderedDescending;
         return [a.productID ?: @"" compare:(b.productID ?: @"")];
     }];
 }
@@ -1065,16 +1071,13 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
 }
 
 - (SK2ProductModel *)currentProductForPurchase {
-    if (self.paywallMode == SubscriptionPaywallModeGateWeekly) {
-        return [self productForUnit:SK2PeriodUnitWeek];
-    }
-    if (self.paywallMode == SubscriptionPaywallModeGateYearly) {
-        return [self productForUnit:SK2PeriodUnitYear];
-    }
-    if (self.selectedIndex >= 0 && self.selectedIndex < self.products.count) {
-        return self.products[self.selectedIndex];
-    }
-    return nil;
+    SK2ProductModel *m = nil;
+    if (self.paywallMode == SubscriptionPaywallModeGateWeekly) m = [self productForUnit:SK2PeriodUnitWeek];
+    else if (self.paywallMode == SubscriptionPaywallModeGateYearly) m = [self productForUnit:SK2PeriodUnitYear];
+    else if (self.selectedIndex >= 0 && self.selectedIndex < self.products.count) m = self.products[self.selectedIndex];
+
+    if (!m && self.products.count > 0) m = self.products.firstObject;
+    return m;
 }
 
 - (void)updateAutoRenewLine {
@@ -1579,31 +1582,30 @@ static inline NSString *ASNonEmptyStringFromValue(id v) {
                  snap.purchaseState == PurchaseFlowStatePending);
     if (busy) return;
 
-    // 点击订阅按钮：统一先上报（参数从当前选择的 product 取）
     SK2ProductModel *mForClick = [self currentProductForPurchase];
     [self trackSubClickWithProduct:mForClick];
 
     if (!snap.networkAvailable) {
         [self showToastText:NSLocalizedString(@"Network Error", nil)];
-
-        // 网络问题导致无法购买，也记为 fail（避免漏斗断层）
         [self trackSubFailWithProduct:mForClick orderID:@"" error:@"network_error"];
         return;
     }
 
-//    if (![StoreKit2Manager shared].canPay) {
-//        [self showToastText:NSLocalizedString(@"App Store Error", nil)];
-//
-//        // 商店问题导致无法购买（屏幕使用时间限制、家长控制 / 儿童账号 / 家庭共享的限制、企业/学校设备（MDM 配置）、Apple ID / App Store 状态问题）
-//        [self trackSubFailWithProduct:mForClick orderID:@"" error:@"app_store_error"];
-//        return;
-//    }
-    
-    BOOL hasLocalProducts = (self.products.count > 0);
+    BOOL ready = (snap.productsState == ProductsLoadStateReady && snap.products.count > 0);
+    SK2ProductModel *m = [self currentProductForPurchase];
 
-    if (hasLocalProducts) {
+    if (ready && m) {
         self.pendingAutoPurchase = NO;
         [self beginPurchaseWithCurrentSelection];
+        return;
+    }
+
+    // productsState == Ready 但 count == 0：“商品列表空/后台配置问题”
+    if (snap.productsState == ProductsLoadStateReady && snap.products.count == 0) {
+        self.pendingAutoPurchase = NO;
+        [self hideLoading];
+        [self showToastText:NSLocalizedString(@"Please try again", nil)];
+        [self trackSubFailWithProduct:mForClick orderID:@"" error:@"products_empty"];
         return;
     }
 
@@ -1617,7 +1619,6 @@ static inline NSString *ASNonEmptyStringFromValue(id v) {
     [self showLoading];
     [[StoreKit2Manager shared] forceRefreshProducts];
 }
-
 
 - (void)tapRestore {
     StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;
@@ -1749,11 +1750,7 @@ static inline NSString *ASNonEmptyStringFromValue(id v) {
         self.loadingMask = mask;
 
         UIActivityIndicatorView *sp = nil;
-        if (@available(iOS 13.0, *)) {
-            sp = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
-        } else {
-            sp = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
-        }
+        sp = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
         sp.translatesAutoresizingMaskIntoConstraints = NO;
         [mask addSubview:sp];
         [NSLayoutConstraint activateConstraints:@[

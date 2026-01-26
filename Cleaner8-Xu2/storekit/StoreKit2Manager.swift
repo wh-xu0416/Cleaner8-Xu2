@@ -416,8 +416,23 @@ final class StoreKit2Manager: NSObject {
         }
 
         do {
-//            try? await Task.sleep(nanoseconds: UInt64(10 * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(10 * 1_000_000_000))
             let list = try await Product.products(for: productIDs)
+            guard !list.isEmpty else {
+                updateSnapshot { old in
+                    StoreSnapshot(
+                        networkAvailable: old.networkAvailable,
+                        availability: old.networkAvailable ? .available : .unavailable,
+                        productsState: .failed,
+                        products: old.products,
+                        subscriptionState: old.subscriptionState,
+                        purchaseState: old.purchaseState,
+                        lastErrorMessage: "No products returned",
+                        lastOrderID: old.lastOrderID
+                    )
+                }
+                return
+            }
             self.rawProducts = list
             let models = list.map { SK2ProductModel(product: $0) }
 
@@ -551,17 +566,17 @@ final class StoreKit2Manager: NSObject {
             await self?.uploadIAPIdentifiers(reason: "点击购买前")
         }
         
-        // 购买前：如果本地没有该商品，强制刷新一次
+        setPurchaseState(.purchasing, err: nil)
+
         if rawProducts.first(where: { $0.id == productID }) == nil,
            snapshot.networkAvailable {
             await refreshProducts(force: true)
         }
+
         guard let product = rawProducts.first(where: { $0.id == productID }) else {
             setPurchaseState(.failed, err: "Product not loaded")
             return .failed
         }
-
-        setPurchaseState(.purchasing, err: nil)
 
         do {
             let distinctId = ASIdentifiers.distinctId()
