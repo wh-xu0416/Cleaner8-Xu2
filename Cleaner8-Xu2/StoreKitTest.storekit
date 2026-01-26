@@ -1,0 +1,188 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "5FB83B5C",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "pt_BR",
+    "_storefront" : "BRA",
+    "_storeKitErrors" : [
+      {
+        "current" : {
+          "index" : 5,
+          "type" : "generic"
+        },
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : {
+          "index" : 1,
+          "type" : "purchase"
+        },
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : {
+          "index" : 0,
+          "type" : "verification"
+        },
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : {
+          "index" : 2,
+          "type" : "generic"
+        },
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : {
+          "index" : 2,
+          "type" : "generic"
+        },
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : {
+          "index" : 3,
+          "type" : "generic"
+        },
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : {
+          "index" : 3,
+          "type" : "generic"
+        },
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : {
+          "index" : 0,
+          "type" : "refund request"
+        },
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : {
+          "index" : 4,
+          "type" : "generic"
+        },
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "EA702727",
+      "localizations" : [
+        {
+          "description" : "Sub Desc",
+          "displayName" : "Sub",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "订阅详情",
+          "displayName" : "订阅",
+          "locale" : "zh_Hans"
+        }
+      ],
+      "name" : "Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "6.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "AF095BEF",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "英文",
+              "displayName" : "Weekly",
+              "locale" : "en_US"
+            },
+            {
+              "description" : "中文",
+              "displayName" : "Weekly",
+              "locale" : "zh_Hans"
+            }
+          ],
+          "productID" : "com.demo.pro.weekly",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "weekly",
+          "subscriptionGroupID" : "EA702727",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "300924F8",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "英文",
+              "displayName" : "Yearly",
+              "locale" : "en_US"
+            },
+            {
+              "description" : "中文",
+              "displayName" : "年费",
+              "locale" : "zh_Hans"
+            }
+          ],
+          "productID" : "com.demo.pro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "yearly ",
+          "subscriptionGroupID" : "EA702727",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

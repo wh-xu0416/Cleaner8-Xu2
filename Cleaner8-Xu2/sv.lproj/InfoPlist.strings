@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "Appen behöver åtkomst till fotobiblioteket för att bearbeta/komprimera media, upptäcka dubbletter. Allt lokalt, integritet skyddad.";
+"NSPhotoLibraryAddUsageDescription" = "Appen behöver åtkomst till fotobiblioteket för att bearbeta/komprimera media, upptäcka dubbletter. Allt lokalt, integritet skyddad.";
+"NSContactsUsageDescription" = "Åtkomst till kontakter endast för identifiering och organisering.";
+"NSUserTrackingUsageDescription" = "Spårning ger personliga funktioner, data är konfidentiell, inte delad. Tillåt spårning för alla funktioner?";
+"NSLocalNetworkUsageDescription" = "Vissa funktioner fungerar inte om trådlösa data är avstängda.";

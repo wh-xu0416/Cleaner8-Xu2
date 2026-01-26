@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "App heeft toegang nodig tot fotobibliotheek voor mediaverwerking, duplicaten detecteren. Alles lokaal, privacy gewaarborgd.";
+"NSPhotoLibraryAddUsageDescription" = "App heeft toegang nodig tot fotobibliotheek voor mediaverwerking, duplicaten detecteren. Alles lokaal, privacy gewaarborgd.";
+"NSContactsUsageDescription" = "Toegang tot contacten alleen voor identificatie en organisatie.";
+"NSUserTrackingUsageDescription" = "Tracking biedt gepersonaliseerde functies, data vertrouwelijk, niet gedeeld. Tracking toestaan voor alle functies?";
+"NSLocalNetworkUsageDescription" = "Sommige functies werken niet als draadloze data uit staat.";

@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "写真/動画の読み取り・処理、重複検出、圧縮のためフォトライブラリへのアクセスが必要です。全てローカル処理、プライバシー保護。";
+"NSPhotoLibraryAddUsageDescription" = "写真/動画の読み取り・処理、重複検出、圧縮のためフォトライブラリへのアクセスが必要です。全てローカル処理、プライバシー保護。";
+"NSContactsUsageDescription" = "連絡先へのアクセスは、識別と整理のみに使用します。";
+"NSUserTrackingUsageDescription" = "トラッキングでパーソナライズ機能を提供。データは機密保持、第三者に共有しません。全機能を使用するには許可しますか？";
+"NSLocalNetworkUsageDescription" = "ワイヤレスデータをオフにすると一部機能が動作しません。";

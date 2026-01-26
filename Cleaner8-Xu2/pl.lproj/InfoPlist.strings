@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "Aplikacja potrzebuje dostępu do biblioteki zdjęć do przetwarzania/kompresji media, wykrywania duplikatów. Wszystko lokalnie, prywatność chroniona.";
+"NSPhotoLibraryAddUsageDescription" = "Aplikacja potrzebuje dostępu do biblioteki zdjęć do przetwarzania/kompresji media, wykrywania duplikatów. Wszystko lokalnie, prywatność chroniona.";
+"NSContactsUsageDescription" = "Dostęp do kontaktów tylko do identyfikacji i organizacji.";
+"NSUserTrackingUsageDescription" = "Śledzenie oferuje funkcje personalizowane, dane poufne, nie udostępniane. Zezwolić na śledzenie dla wszystkich funkcji?";
+"NSLocalNetworkUsageDescription" = "Niektóre funkcje nie działają, jeśli dane bezprzewodowe są wyłączone.";

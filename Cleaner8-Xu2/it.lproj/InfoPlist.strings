@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "L'app richiede accesso alla libreria foto per processare/compressare media, rilevare duplicati. Tutto locale, privacy garantita.";
+"NSPhotoLibraryAddUsageDescription" = "L'app richiede accesso alla libreria foto per processare/compressare media, rilevare duplicati. Tutto locale, privacy garantita.";
+"NSContactsUsageDescription" = "Accesso ai contatti solo per identificare e organizzare.";
+"NSUserTrackingUsageDescription" = "Il tracciamento offre funzioni personalizzate, dati confidenziali, non condivisi. Permettere tracciamento per tutte le funzioni?";
+"NSLocalNetworkUsageDescription" = "Alcune funzioni non funzionano se i dati wireless sono disattivati.";

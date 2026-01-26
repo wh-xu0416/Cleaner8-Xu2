@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "Appen trenger tilgang til fotobiblioteket for å behandle/komprimere media, gjenkjenne duplikater. Alt lokalt, personvern beskyttet.";
+"NSPhotoLibraryAddUsageDescription" = "Appen trenger tilgang til fotobiblioteket for å behandle/komprimere media, gjenkjenne duplikater. Alt lokalt, personvern beskyttet.";
+"NSContactsUsageDescription" = "Tilgang til kontakter kun for identifikasjon og organisering.";
+"NSUserTrackingUsageDescription" = "Sporing gir personlige funksjoner, data er konfidensielt, ikke delt. Tillat sporing for alle funksjoner?";
+"NSLocalNetworkUsageDescription" = "Noen funksjoner virker ikke hvis trådløse data er slått av.";

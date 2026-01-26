@@ -1,0 +1,366 @@
+#import "LearnPageViewController.h"
+#import "Common.h"
+
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return w / SWDesignWidth();
+}
+
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
+
+static inline CGFloat SWScale(void) {
+    return MIN(SWScaleX(), SWScaleY());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
+#pragma mark - Cell (one page = one big image centered)
+
+@interface LearnBigImageCell : UICollectionViewCell
+@property (nonatomic, strong) UIImageView *imgView;
+@end
+
+@implementation LearnBigImageCell
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if ((self = [super initWithFrame:frame])) {
+        self.backgroundColor = UIColor.clearColor;
+
+        _imgView = [[UIImageView alloc] initWithFrame:CGRectZero];
+        _imgView.translatesAutoresizingMaskIntoConstraints = NO;
+        _imgView.contentMode = UIViewContentModeScaleAspectFit;
+        _imgView.clipsToBounds = YES;
+        [self.contentView addSubview:_imgView];
+
+        NSLayoutConstraint *w = [_imgView.widthAnchor constraintEqualToConstant:SW(402)];
+        w.priority = 999;
+        NSLayoutConstraint *h = [_imgView.heightAnchor constraintEqualToConstant:SW(402)];
+        h.priority = 999;
+
+        [NSLayoutConstraint activateConstraints:@[
+            [_imgView.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            [_imgView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+
+            w, h,
+            // 防止小屏溢出
+            [_imgView.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.leadingAnchor constant:SW(15)],
+            [_imgView.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-SW(15)],
+            [_imgView.topAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.topAnchor],
+            [_imgView.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor],
+        ]];
+    }
+    return self;
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.imgView.image = nil;
+}
+
+@end
+
+#pragma mark - VC
+
+@interface LearnPageViewController () <UICollectionViewDelegate, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate>
+@property (nonatomic, strong) UIImageView *bgImageView;
+@property (nonatomic, strong) UIView *descContainer;
+
+@property (nonatomic, strong) UIView *topBar;
+@property (nonatomic, strong) UIButton *backButton;
+
+@property (nonatomic, strong) UIImageView *qpImageView;
+@property (nonatomic, strong) UIImageView *bookImageView;
+
+@property (nonatomic, strong) UILabel *titleLabel;      
+@property (nonatomic, strong) UILabel *descriptionLabel;
+
+@property (nonatomic, strong) UICollectionView *collectionView;
+@property (nonatomic, strong) UIButton *nextButton;
+
+@property (nonatomic, strong) NSArray<NSString *> *instructions;
+@property (nonatomic, strong) NSArray<NSString *> *imageNames;
+@property (nonatomic, assign) NSInteger currentIndex;
+@end
+
+@implementation LearnPageViewController
+
+static NSString * const kCellId = @"LearnBigImageCell";
+
+- (instancetype)init {
+    if ((self = [super init])) {
+        _instructions = @[
+            NSLocalizedString(@"1、Open The “Photos\" APP",nil),
+            NSLocalizedString(@"2、Open The “Photos\" APP",nil),
+            NSLocalizedString(@"3、Tap the \"Select\" button in the upper right corner",nil),
+            NSLocalizedString(@"4、Click the \"Delete All\" Button on the Top Right Corner",nil),
+            NSLocalizedString(@"5、Next, tap the\n\"Delete From All Devices\" Button",nil)
+        ];
+        _imageNames = @[@"ic_learn_1", @"ic_learn_2", @"ic_learn_3", @"ic_learn_4", @"ic_learn_5"];
+        _currentIndex = 0;
+    }
+    return self;
+}
+
+- (UIColor *)brandBlue {
+    return [UIColor colorWithRed:2/255.0 green:77/255.0 blue:255/255.0 alpha:1.0]; // #024DFF
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    self.view.backgroundColor = UIColor.whiteColor;
+    self.edgesForExtendedLayout = UIRectEdgeAll;
+
+    [self buildUI];
+    [self updateStepUIAnimated:NO];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    self.navigationController.navigationBarHidden = YES;
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+
+    UICollectionViewFlowLayout *layout = (UICollectionViewFlowLayout *)self.collectionView.collectionViewLayout;
+    CGSize size = self.collectionView.bounds.size;
+    if (!CGSizeEqualToSize(layout.itemSize, size)) {
+        layout.itemSize = size;
+        layout.minimumLineSpacing = 0;
+        layout.sectionInset = UIEdgeInsetsZero;
+        [layout invalidateLayout];
+    }
+}
+
+#pragma mark - UI
+
+- (void)buildUI {
+    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+
+    self.bgImageView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ic_learn_bg"]];
+    self.bgImageView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.bgImageView.contentMode = UIViewContentModeScaleAspectFill;
+    self.bgImageView.clipsToBounds = YES;
+    [self.view addSubview:self.bgImageView];
+
+    self.topBar = [[UIView alloc] init];
+    self.topBar.translatesAutoresizingMaskIntoConstraints = NO;
+    self.topBar.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.topBar];
+
+    self.backButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.backButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.backButton setImage:[UIImage imageNamed:@"ic_back_blue"] forState:UIControlStateNormal];
+    [self.backButton addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
+    [self.topBar addSubview:self.backButton];
+
+    self.qpImageView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ic_qp"]];
+    self.qpImageView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.qpImageView.contentMode = UIViewContentModeScaleAspectFit;
+    self.qpImageView.userInteractionEnabled = YES;
+    [self.view addSubview:self.qpImageView];
+
+    self.bookImageView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ic_book"]];
+    self.bookImageView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.bookImageView.contentMode = UIViewContentModeScaleAspectFit;
+    [self.view addSubview:self.bookImageView];
+
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.text = NSLocalizedString(@"How to empty\n\"Recently Deleted\" album?",nil);
+    self.titleLabel.font = SWFontS(20, UIFontWeightSemibold);
+    self.titleLabel.textColor = UIColor.blackColor;
+    self.titleLabel.textAlignment = NSTextAlignmentCenter;
+    self.titleLabel.numberOfLines = 2;
+    [self.qpImageView addSubview:self.titleLabel];
+
+    self.descContainer = [[UIView alloc] init];
+    self.descContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descContainer.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.descContainer];
+
+    self.descriptionLabel = [[UILabel alloc] init];
+    self.descriptionLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descriptionLabel.font = SWFontS(20, UIFontWeightSemibold);
+    self.descriptionLabel.textColor = [self brandBlue];
+    self.descriptionLabel.textAlignment = NSTextAlignmentCenter;
+    self.descriptionLabel.numberOfLines = 2;
+    self.descriptionLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    [self.descriptionLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisVertical];
+
+    [self.descContainer addSubview:self.descriptionLabel];
+    
+    UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
+    layout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
+    layout.minimumLineSpacing = 0;
+
+    self.collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
+    self.collectionView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.collectionView.backgroundColor = UIColor.clearColor;
+    self.collectionView.showsHorizontalScrollIndicator = NO;
+    self.collectionView.pagingEnabled = YES;
+    self.collectionView.decelerationRate = UIScrollViewDecelerationRateFast;
+    self.collectionView.delegate = self;
+    self.collectionView.dataSource = self;
+    [self.collectionView registerClass:LearnBigImageCell.class forCellWithReuseIdentifier:kCellId];
+    [self.view addSubview:self.collectionView];
+
+    self.nextButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.nextButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.nextButton setTitle:NSLocalizedString(@"Next", nil) forState:UIControlStateNormal];
+    self.nextButton.backgroundColor = [self brandBlue];
+    self.nextButton.layer.cornerRadius = 35;
+    self.nextButton.titleLabel.font = SWFontS(20, UIFontWeightRegular);
+    [self.nextButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    [self.nextButton addTarget:self action:@selector(onNext) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.nextButton];
+    CGFloat twoLinesHeight = ceil(self.descriptionLabel.font.lineHeight * 2.0);
+
+    // Constraints
+    [NSLayoutConstraint activateConstraints:@[
+        [self.bgImageView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.bgImageView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.bgImageView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.bgImageView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+
+        [self.topBar.topAnchor constraintEqualToAnchor:safe.topAnchor],
+        [self.topBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.topBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.topBar.heightAnchor constraintEqualToConstant:SW(44)],
+
+        [self.backButton.leadingAnchor constraintEqualToAnchor:self.topBar.leadingAnchor constant:SW(20)],
+        [self.backButton.centerYAnchor constraintEqualToAnchor:self.topBar.centerYAnchor],
+        [self.backButton.widthAnchor constraintEqualToConstant:SW(24)],
+        [self.backButton.heightAnchor constraintEqualToConstant:SW(24)],
+
+        [self.qpImageView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.qpImageView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:SW(60)],
+        [self.qpImageView.widthAnchor constraintEqualToConstant:SW(342)],
+        [self.qpImageView.heightAnchor constraintEqualToConstant:SW(115)],
+
+        [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.qpImageView.centerXAnchor constant:-SW(20)],
+        [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.qpImageView.centerYAnchor constant:-SW(10)],
+        [self.titleLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.qpImageView.leadingAnchor constant:SW(12)],
+        [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.qpImageView.trailingAnchor constant:-SW(12)],
+
+        [self.bookImageView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(39)],
+        [self.bookImageView.topAnchor constraintEqualToAnchor:self.qpImageView.topAnchor constant:-SW(30)],
+        [self.bookImageView.widthAnchor constraintEqualToConstant:SW(88)],
+        [self.bookImageView.heightAnchor constraintEqualToConstant:SW(73)],
+
+        [self.nextButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(15)],
+        [self.nextButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(15)],
+        [self.nextButton.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
+        [self.nextButton.heightAnchor constraintEqualToConstant:SW(70)],
+
+        [self.descContainer.topAnchor constraintEqualToAnchor:self.qpImageView.bottomAnchor constant:SW(25)],
+        [self.descContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:SW(20)],
+        [self.descContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-SW(20)],
+        [self.descContainer.heightAnchor constraintEqualToConstant:twoLinesHeight],
+        [self.descriptionLabel.leadingAnchor constraintEqualToAnchor:self.descContainer.leadingAnchor],
+        [self.descriptionLabel.trailingAnchor constraintEqualToAnchor:self.descContainer.trailingAnchor],
+        [self.descriptionLabel.centerYAnchor constraintEqualToAnchor:self.descContainer.centerYAnchor],
+
+        [self.collectionView.topAnchor constraintEqualToAnchor:self.descContainer.bottomAnchor constant:SW(15)],
+        [self.collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.collectionView.bottomAnchor constraintEqualToAnchor:self.nextButton.topAnchor constant:-SW(10)],
+    ]];
+}
+
+#pragma mark - Actions
+
+- (void)onBack {
+    [self.navigationController popViewControllerAnimated:YES];
+}
+
+- (void)onNext {
+    // 最后一页：OK -> 返回
+    if (self.currentIndex >= (NSInteger)self.instructions.count - 1) {
+        [self.navigationController popViewControllerAnimated:YES];
+        return;
+    }
+
+    NSInteger next = self.currentIndex + 1;
+    if (next >= self.instructions.count) next = 0;
+    self.currentIndex = next;
+    [self updateStepUIAnimated:YES];
+}
+
+- (void)updateNextButtonTitle {
+    BOOL isLast = (self.currentIndex >= (NSInteger)self.instructions.count - 1);
+    NSString *t = isLast ? NSLocalizedString(@"OK", nil) : NSLocalizedString(@"Next", nil);
+    [self.nextButton setTitle:t forState:UIControlStateNormal];
+}
+
+- (void)updateStepUIAnimated:(BOOL)animated {
+    self.descriptionLabel.text = self.instructions[self.currentIndex];
+    [self updateNextButtonTitle];
+
+    if (self.currentIndex < self.imageNames.count) {
+        NSIndexPath *idx = [NSIndexPath indexPathForItem:self.currentIndex inSection:0];
+        [self.collectionView scrollToItemAtIndexPath:idx
+                                    atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally
+                                            animated:animated];
+    }
+}
+
+#pragma mark - UICollectionView
+
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
+    return self.imageNames.count;
+}
+
+- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    LearnBigImageCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:kCellId forIndexPath:indexPath];
+    cell.imgView.image = [UIImage imageNamed:self.imageNames[indexPath.item]];
+    return cell;
+}
+
+#pragma mark - UIScrollViewDelegate
+
+- (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
+    if (scrollView != self.collectionView) return;
+
+    CGFloat pageW = scrollView.bounds.size.width;
+    if (pageW <= 0) return;
+
+    NSInteger page = (NSInteger)llround(scrollView.contentOffset.x / pageW);
+    page = MAX(0, MIN(page, (NSInteger)self.instructions.count - 1));
+
+    if (page != self.currentIndex) {
+        self.currentIndex = page;
+        self.descriptionLabel.text = self.instructions[self.currentIndex];
+        [self updateNextButtonTitle];
+    }
+}
+
+- (void)scrollViewDidEndDragging:(UIScrollView *)scrollView willDecelerate:(BOOL)decelerate {
+    if (scrollView != self.collectionView) return;
+    if (decelerate) return;
+
+    CGFloat pageW = scrollView.bounds.size.width;
+    if (pageW <= 0) return;
+
+    NSInteger page = (NSInteger)llround(scrollView.contentOffset.x / pageW);
+    page = MAX(0, MIN(page, (NSInteger)self.instructions.count - 1));
+
+    if (page != self.currentIndex) {
+        self.currentIndex = page;
+        self.descriptionLabel.text = self.instructions[self.currentIndex];
+        [self updateNextButtonTitle];
+    }
+}
+
+
+@end

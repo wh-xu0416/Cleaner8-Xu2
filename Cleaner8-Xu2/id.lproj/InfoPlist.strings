@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "Aplikasi butuh akses galeri untuk baca/foto/video, proses gambar, identifikasi duplikat, kompres media. Semua proses lokal, aman privasi.";
+"NSPhotoLibraryAddUsageDescription" = "Aplikasi butuh akses galeri untuk baca/foto/video, proses gambar, identifikasi duplikat, kompres media. Semua proses lokal, aman privasi.";
+"NSContactsUsageDescription" = "Akses kontak hanya untuk identifikasi dan pengelolaan kontak.";
+"NSUserTrackingUsageDescription" = "Tracking berikan fitur personalisasi, data rahasia, tidak dibagikan ke pihak ketiga. Izinkan tracking untuk semua fitur?";
+"NSLocalNetworkUsageDescription" = "Beberapa fitur tidak berfungsi jika data nirkabel dimatikan.";

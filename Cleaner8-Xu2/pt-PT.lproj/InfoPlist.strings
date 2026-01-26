@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "App precisa acesso à biblioteca de fotos para processar/compressar media, detectar duplicatas. Tudo local, privacidade garantida.";
+"NSPhotoLibraryAddUsageDescription" = "App precisa acesso à biblioteca de fotos para processar/compressar media, detectar duplicatas. Tudo local, privacidade garantida.";
+"NSContactsUsageDescription" = "Acesso a contatos apenas para identificar e organizar.";
+"NSUserTrackingUsageDescription" = "Rastreamento oferece funções personalizadas, dados confidenciais, não compartilhados. Permitir rastreamento para todas as funções?";
+"NSLocalNetworkUsageDescription" = "Algumas funções não funcionam se dados sem fio estiverem desativados.";

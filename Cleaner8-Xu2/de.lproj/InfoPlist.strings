@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "App benötigt Zugriff auf Fotoalbum zur Medienverarbeitung, Duplikatenerkennung. Alles lokal verarbeitet, Datenschutz gewährleistet.";
+"NSPhotoLibraryAddUsageDescription" = "App benötigt Zugriff auf Fotoalbum zur Medienverarbeitung, Duplikatenerkennung. Alles lokal verarbeitet, Datenschutz gewährleistet.";
+"NSContactsUsageDescription" = "Zugriff auf Kontakte nur zur Identifizierung und Organisation.";
+"NSUserTrackingUsageDescription" = "Tracking bietet personalisierte Funktionen, Daten vertraulich, nicht weitergegeben. Tracking erlauben für alle Funktionen?";
+"NSLocalNetworkUsageDescription" = "Einige Funktionen funktionieren nicht bei ausgeschalteter drahtloser Datenübertragung.";

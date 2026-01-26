@@ -1,0 +1,400 @@
+#import "PrivateViewController.h"
+#import "UIViewController+ASPrivateBackground.h"
+#import "UIViewController+ASRootNav.h"
+#import "ASColors.h"
+#import "Common.h"
+#import "ASPasscodeManager.h"
+#import "SetPasswordViewController.h"
+#import "PrivateListViewController.h"
+#import "ASPrivatePermissionBanner.h"
+#import <Photos/Photos.h>
+
+static inline CGFloat SWDesignWidth(void) { return 402.0; }
+static inline CGFloat SWDesignHeight(void) { return 874.0; }
+static inline CGFloat SWScaleX(void) {
+    CGFloat w = UIScreen.mainScreen.bounds.size.width;
+    return w / SWDesignWidth();
+}
+
+static inline CGFloat SWScaleY(void) {
+    CGFloat h = UIScreen.mainScreen.bounds.size.height;
+    return h / SWDesignHeight();
+}
+
+static inline CGFloat SWScale(void) {
+    return MIN(SWScaleX(), SWScaleY());
+}
+static inline CGFloat SW(CGFloat v) { return round(v * SWScale()); }
+static inline UIFont *SWFontS(CGFloat size, UIFontWeight weight) {
+    return [UIFont systemFontOfSize:round(size * SWScale()) weight:weight];
+}
+static inline UIEdgeInsets SWInsets(CGFloat t, CGFloat l, CGFloat b, CGFloat r) {
+    return UIEdgeInsetsMake(SW(t), SW(l), SW(b), SW(r));
+}
+
+@interface ASPrivateEntryCard : UIControl
+@property (nonatomic, strong) UIImageView *leftIcon;
+@property (nonatomic, strong) UILabel *title;
+@property (nonatomic, strong) UIControl *pill;
+@end
+
+@implementation ASPrivateEntryCard
+- (instancetype)initWithIcon:(NSString *)icon title:(NSString *)title {
+    if (self=[super initWithFrame:CGRectZero]) {
+        self.translatesAutoresizingMaskIntoConstraints = NO;
+        self.backgroundColor = UIColor.whiteColor;
+        self.layer.cornerRadius = SW(16);
+        self.layer.masksToBounds = YES;
+
+        self.leftIcon = [UIImageView new];
+        self.leftIcon.translatesAutoresizingMaskIntoConstraints = NO;
+        self.leftIcon.contentMode = UIViewContentModeScaleAspectFit;
+        self.leftIcon.image = [[UIImage imageNamed:icon] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        [self addSubview:self.leftIcon];
+
+        self.title = [UILabel new];
+        self.title.translatesAutoresizingMaskIntoConstraints = NO;
+        self.title.text = title;
+        self.title.textColor = UIColor.blackColor;
+        self.title.font = SWFontS(20, UIFontWeightRegular);
+        self.title.adjustsFontSizeToFitWidth = YES;
+        self.title.minimumScaleFactor = 0.6;
+        [self addSubview:self.title];
+
+        // pill
+        self.pill = [UIControl new];
+        self.pill.translatesAutoresizingMaskIntoConstraints = NO;
+        self.pill.backgroundColor = ASBlue();
+        self.pill.layer.cornerRadius = SW(23);
+        self.pill.layer.masksToBounds = YES;
+        [self addSubview:self.pill];
+
+        UILabel *add = [UILabel new];
+        add.translatesAutoresizingMaskIntoConstraints = NO;
+        add.text = NSLocalizedString(@"Add", nil);
+        add.textColor = UIColor.whiteColor;
+        add.font = SWFontS(20, UIFontWeightRegular);
+        add.adjustsFontSizeToFitWidth = YES;
+        add.minimumScaleFactor = 0.6;
+        [add setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+        [self.pill addSubview:add];
+        
+        UIImageView *arrow = [UIImageView new];
+        arrow.translatesAutoresizingMaskIntoConstraints = NO;
+        arrow.contentMode = UIViewContentModeScaleAspectFit;
+        arrow.image = [[UIImage imageNamed:@"ic_todo"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        [self.pill addSubview:arrow];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [self.leftIcon.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:SW(20)],
+            [self.leftIcon.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+            [self.leftIcon.widthAnchor constraintEqualToConstant:SW(32)],
+            [self.leftIcon.heightAnchor constraintEqualToConstant:SW(32)],
+
+            [self.title.leadingAnchor constraintEqualToAnchor:self.leftIcon.trailingAnchor constant:SW(20)],
+            [self.title.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+
+            [self.pill.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-SW(20)],
+            [self.pill.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+            [self.pill.widthAnchor constraintLessThanOrEqualToConstant:SW(130)],
+            
+            [self.title.trailingAnchor constraintLessThanOrEqualToAnchor:self.pill.leadingAnchor constant:-SW(12)],
+
+            [add.leadingAnchor constraintEqualToAnchor:self.pill.leadingAnchor constant:SW(15)],
+            [add.topAnchor constraintEqualToAnchor:self.pill.topAnchor constant:SW(11)],
+            [add.bottomAnchor constraintEqualToAnchor:self.pill.bottomAnchor constant:-SW(11)],
+            [add.centerYAnchor constraintEqualToAnchor:self.pill.centerYAnchor],
+
+            [arrow.leadingAnchor constraintEqualToAnchor:add.trailingAnchor constant:SW(10)],
+            [arrow.centerYAnchor constraintEqualToAnchor:self.pill.centerYAnchor],
+            [arrow.widthAnchor constraintEqualToConstant:SW(9)],
+            [arrow.heightAnchor constraintEqualToConstant:SW(15)],
+            [arrow.trailingAnchor constraintEqualToAnchor:self.pill.trailingAnchor constant:-SW(19)],
+
+            [self.heightAnchor constraintEqualToConstant:SW(14+48+14)],
+        ]];
+
+    }
+    return self;
+}
+@end
+
+@interface PrivateViewController ()
+@property (nonatomic, strong) UILabel *navTitle;
+@property (nonatomic, strong) UIButton *lockBtn;
+
+@property (nonatomic, strong) ASPrivateEntryCard *photoCard;
+@property (nonatomic, strong) ASPrivateEntryCard *videoCard;
+@property (nonatomic, strong) ASPrivatePermissionBanner *banner;
+
+@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UIView *contentView;
+
+// 为了 banner 隐藏时不占位
+@property (nonatomic, strong) NSLayoutConstraint *bannerTopC;
+@property (nonatomic, strong) NSLayoutConstraint *bannerHeightC;
+
+@end
+
+@implementation PrivateViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    [self as_applyPrivateBackground];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateLockUI)
+                                                 name:ASPasscodeChangedNotification object:nil];
+
+    [self buildUI];
+    [self updateLockUI];
+    [self refreshPermissionBanner];
+}
+
+- (UIStatusBarStyle)preferredStatusBarStyle {
+    if (@available(iOS 13.0, *)) return UIStatusBarStyleDarkContent;
+    return UIStatusBarStyleDefault;
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    self.navigationController.navigationBarHidden = YES;
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self as_updatePrivateBackgroundLayout];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)buildUI {
+    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+
+    // top bar（固定不滚动）
+    UIView *bar = [UIView new];
+    bar.translatesAutoresizingMaskIntoConstraints = NO;
+    bar.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:bar];
+
+    self.navTitle = [UILabel new];
+    self.navTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    self.navTitle.text = NSLocalizedString(@"Private", nil);
+    self.navTitle.textColor = UIColor.blackColor;
+    self.navTitle.font = SWFontS(28, UIFontWeightSemibold);
+    [bar addSubview:self.navTitle];
+
+    self.lockBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.lockBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    self.lockBtn.contentEdgeInsets = SWInsets(10, 10, 10, 10);
+    [self.lockBtn addTarget:self action:@selector(lockTap) forControlEvents:UIControlEventTouchUpInside];
+    [bar addSubview:self.lockBtn];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [bar.topAnchor constraintEqualToAnchor:safe.topAnchor constant:SW(8)],
+        [bar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [bar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [bar.heightAnchor constraintEqualToConstant:SW(45)],
+
+        [self.lockBtn.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor constant:-SW(20)],
+        [self.lockBtn.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
+        [self.lockBtn.widthAnchor constraintEqualToConstant:SW(44)],
+        [self.lockBtn.heightAnchor constraintEqualToConstant:SW(44)],
+
+        [self.navTitle.centerXAnchor constraintEqualToAnchor:bar.centerXAnchor],
+        [self.navTitle.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
+        [self.navTitle.leadingAnchor constraintGreaterThanOrEqualToAnchor:bar.leadingAnchor constant:SW(20)],
+        [self.navTitle.trailingAnchor constraintLessThanOrEqualToAnchor:self.lockBtn.leadingAnchor constant:-SW(12)],
+    ]];
+
+    self.scrollView = [UIScrollView new];
+    self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollView.alwaysBounceVertical = NO;
+    if (@available(iOS 11.0, *)) {
+        self.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    }
+    [self.view addSubview:self.scrollView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.scrollView.topAnchor constraintEqualToAnchor:bar.bottomAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
+    ]];
+
+    self.contentView = [UIView new];
+    self.contentView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.scrollView addSubview:self.contentView];
+
+    if (@available(iOS 11.0, *)) {
+        [NSLayoutConstraint activateConstraints:@[
+            [self.contentView.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
+            [self.contentView.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor],
+            [self.contentView.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor],
+            [self.contentView.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
+
+            [self.contentView.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
+        ]];
+    } else {
+    }
+
+    UIImageView *img = [UIImageView new];
+    img.translatesAutoresizingMaskIntoConstraints = NO;
+    img.contentMode = UIViewContentModeScaleAspectFit;
+    img.image = [[UIImage imageNamed:@"ic_private"] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.contentView addSubview:img];
+
+    UILabel *desc = [UILabel new];
+    desc.translatesAutoresizingMaskIntoConstraints = NO;
+    desc.text = NSLocalizedString(@"Add Photos & Videos to Protected", nil);
+    desc.textColor = UIColor.blackColor;
+    desc.font = SWFontS(17, UIFontWeightMedium);
+    desc.textAlignment = NSTextAlignmentCenter;
+    desc.numberOfLines = 2;
+    desc.adjustsFontSizeToFitWidth = YES;
+    desc.minimumScaleFactor = 0.6;
+    [self.contentView addSubview:desc];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [img.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:SW(40)],
+        [img.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+        [img.widthAnchor constraintEqualToConstant:SW(182)],
+        [img.heightAnchor constraintEqualToConstant:SW(168)],
+
+        [desc.topAnchor constraintEqualToAnchor:img.bottomAnchor constant:SW(2)],
+        [desc.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+        [desc.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.leadingAnchor constant:SW(20)],
+        [desc.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-SW(20)],
+    ]];
+
+    // cards（放到 contentView 里）
+    self.photoCard = [[ASPrivateEntryCard alloc] initWithIcon:@"ic_photo_permission_not" title:NSLocalizedString(@"Secret Photos", nil)];
+    self.videoCard = [[ASPrivateEntryCard alloc] initWithIcon:@"ic_video_lock" title:NSLocalizedString(@"Secret Videos", nil)];
+    [self.contentView addSubview:self.photoCard];
+    [self.contentView addSubview:self.videoCard];
+
+    [self.photoCard addTarget:self action:@selector(openPhotos) forControlEvents:UIControlEventTouchUpInside];
+    [self.videoCard addTarget:self action:@selector(openVideos) forControlEvents:UIControlEventTouchUpInside];
+    [self.photoCard.pill addTarget:self action:@selector(openPhotos) forControlEvents:UIControlEventTouchUpInside];
+    [self.videoCard.pill addTarget:self action:@selector(openVideos) forControlEvents:UIControlEventTouchUpInside];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.photoCard.topAnchor constraintEqualToAnchor:desc.bottomAnchor constant:SW(40)],
+        [self.photoCard.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:SW(15)],
+        [self.photoCard.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-SW(15)],
+
+        [self.videoCard.topAnchor constraintEqualToAnchor:self.photoCard.bottomAnchor constant:SW(20)],
+        [self.videoCard.leadingAnchor constraintEqualToAnchor:self.photoCard.leadingAnchor],
+        [self.videoCard.trailingAnchor constraintEqualToAnchor:self.photoCard.trailingAnchor],
+    ]];
+
+    // permission banner（也放到 contentView 里）
+    self.banner = [ASPrivatePermissionBanner new];
+    self.banner.translatesAutoresizingMaskIntoConstraints = NO;
+    self.banner.hidden = YES;
+    __weak typeof(self) ws = self;
+    self.banner.onGoSettings = ^{
+        NSURL *url = [NSURL URLWithString:UIApplicationOpenSettingsURLString];
+        if (url) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+        [ws refreshPermissionBanner];
+    };
+    [self.contentView addSubview:self.banner];
+
+    self.bannerTopC = [self.banner.topAnchor constraintEqualToAnchor:self.videoCard.bottomAnchor constant:SW(34)];
+    self.bannerHeightC = [self.banner.heightAnchor constraintEqualToConstant:SW(145)];
+
+    [NSLayoutConstraint activateConstraints:@[
+        self.bannerTopC,
+        [self.banner.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+        [self.banner.widthAnchor constraintEqualToConstant:SW(310)],
+        self.bannerHeightC,
+
+        [self.banner.bottomAnchor constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.bottomAnchor constant:-SW(100)],
+    ]];
+}
+
+
+- (void)updateLockUI {
+    BOOL enabled = [ASPasscodeManager isEnabled];
+    NSString *icon = enabled ? @"ic_locked" : @"ic_unlock";
+    UIImage *img = [[UIImage imageNamed:icon] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    [self.lockBtn setImage:img forState:UIControlStateNormal];
+}
+
+- (void)lockTap {
+    UINavigationController *nav = [self as_rootNav];
+    if (![nav isKindOfClass:UINavigationController.class]) return;
+
+    if (![ASPasscodeManager isEnabled]) {
+        // 默认开锁：设置密码
+        SetPasswordViewController *vc = [SetPasswordViewController new];
+        vc.flow = ASPasswordFlowSet;
+        vc.onSuccess = ^{};
+        [nav pushViewController:vc animated:YES];
+    } else {
+        // 锁上：验证后关闭密码
+        SetPasswordViewController *vc = [SetPasswordViewController new];
+        vc.flow = ASPasswordFlowDisable;
+        vc.onSuccess = ^{};
+        [nav pushViewController:vc animated:YES];
+    }
+}
+
+#pragma mark - Permission
+
+- (BOOL)needFullAccess {
+    if (@available(iOS 14, *)) {
+        PHAuthorizationStatus s = [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+        return (s != PHAuthorizationStatusAuthorized); // limited / denied / notDetermined 都视为需要 Full
+    } else {
+        PHAuthorizationStatus s = [PHPhotoLibrary authorizationStatus];
+        return (s != PHAuthorizationStatusAuthorized);
+    }
+}
+
+- (void)refreshPermissionBanner {
+    BOOL show = [self needFullAccess];
+    self.banner.hidden = !show;
+
+    // 隐藏时高度=0，间距=0；显示时恢复
+    self.bannerHeightC.constant = show ? SW(145) : 0;
+    self.bannerTopC.constant = show ? SW(34) : 0;
+
+    [self.view layoutIfNeeded];
+}
+
+#pragma mark - Navigation
+
+- (void)openPhotos { [self openListWithType:0 title:NSLocalizedString(@"Secret Photos", nil)]; }
+- (void)openVideos { [self openListWithType:1 title:NSLocalizedString(@"Secret Videos", nil)]; }
+
+- (void)openListWithType:(NSInteger)type title:(NSString *)title {
+    UINavigationController *nav = [self as_rootNav];
+    if (![nav isKindOfClass:UINavigationController.class]) return;
+
+    void (^pushList)(void) = ^{
+        PrivateListViewController *list = [PrivateListViewController new];
+        list.mediaType = (type==0)?ASPrivateMediaTypePhoto:ASPrivateMediaTypeVideo;
+        list.navTitleText = title;
+        [nav pushViewController:list animated:YES];
+    };
+
+    if ([ASPasscodeManager isEnabled]) {
+        SetPasswordViewController *vc = [SetPasswordViewController new];
+        vc.flow = ASPasswordFlowVerify;
+
+        __weak typeof(nav) weakNav = nav;
+        vc.onSuccess = ^{
+            // 验证成功后，用 rootNav 继续 push 列表
+            // 此时密码页还在栈顶，先 pop 掉它再 push
+            [weakNav popViewControllerAnimated:NO];
+            pushList();
+        };
+        [nav pushViewController:vc animated:YES];
+    } else {
+        pushList();
+    }
+}
+
+@end

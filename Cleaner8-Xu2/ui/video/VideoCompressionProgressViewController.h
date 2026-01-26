@@ -1,0 +1,12 @@
+#import <UIKit/UIKit.h>
+#import <Photos/Photos.h>
+#import "VideoCompressionManager.h"
+
+@interface VideoCompressionProgressViewController : UIViewController
+
+- (instancetype)initWithAssets:(NSArray<PHAsset *> *)assets
+                       quality:(ASCompressionQuality)quality
+               totalBeforeBytes:(uint64_t)beforeBytes
+            estimatedAfterBytes:(uint64_t)afterBytes;
+
+@end

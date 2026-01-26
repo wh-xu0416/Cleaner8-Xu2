@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "App perlu akses galeri untuk proses media, kenal pasti duplikat, pemampatan. Semua proses tempatan, privasi terjamin.";
+"NSPhotoLibraryAddUsageDescription" = "App perlu akses galeri untuk proses media, kenal pasti duplikat, pemampatan. Semua proses tempatan, privasi terjamin.";
+"NSContactsUsageDescription" = "Akses kontak hanya untuk identifikasi dan pengorganisasian.";
+"NSUserTrackingUsageDescription" = "Penjejakan beri fungsi personal, data rahsia, tidak dikongsi. Benarkan penjejakan untuk semua fungsi?";
+"NSLocalNetworkUsageDescription" = "Sesetengah fungsi tidak berfungsi jika data wayarles dimatikan.";

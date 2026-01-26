@@ -1,0 +1,5 @@
+"NSPhotoLibraryUsageDescription" = "App media işleme/kompresyon, tekrar tespiti için fotoğraf kütüphanesi erişimi gerekir. Hepsi yerel, gizlilik garanti.";
+"NSPhotoLibraryAddUsageDescription" = "App media işleme/kompresyon, tekrar tespiti için fotoğraf kütüphanesi erişimi gerekir. Hepsi yerel, gizlilik garanti.";
+"NSContactsUsageDescription" = "Kişi erişimi sadece tanımlama ve düzenleme için.";
+"NSUserTrackingUsageDescription" = "İzleme kişiselleştirilmiş fonksiyonlar sunar, veri gizli, paylaşılmaz. Tüm fonksiyonlar için izlemeyi izin ver?";
+"NSLocalNetworkUsageDescription" = "Kablosuz veri kapalıysa bazı fonksiyonlar çalışmaz.";
