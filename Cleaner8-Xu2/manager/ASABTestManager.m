@@ -6,7 +6,7 @@
 
 #define kABKeyPaidRate (AppConstants.abKeyPaidRateRate)
 #define kABKeySetRate  (AppConstants.abKeySetRateRate)
-#define kABDefaultOpen (AppConstants.abDefaultClose)
+#define kABDefaultClose (AppConstants.abDefaultClose)
 
 static NSString * const kASABCacheFlagKey      = @"as_abtest_cached";
 static NSString * const kASABCacheDictKey      = @"as_abtest_cached_dict";
@@ -14,10 +14,10 @@ static NSString * const kASABCacheSourceDictKey= @"as_abtest_cached_source_dict"
 static NSString * const kASABCacheTimeKey      = @"as_abtest_cached_time";
 
 static inline NSString *ASABNormalize(NSString * _Nullable v) {
-    if (v.length == 0) return kABDefaultOpen;
+    if (v.length == 0) return kABDefaultClose;
     NSString *lv = v.lowercaseString;
-    if ([lv isEqualToString:kABDefaultOpen] || [lv isEqualToString:@"close"]) return lv;
-    return kABDefaultOpen;
+    if ([lv isEqualToString:@"open"] || [lv isEqualToString:@"close"]) return lv;
+    return kABDefaultClose;
 }
 
 static inline NSString *ASABSourceString(FIRRemoteConfigSource source) {
@@ -68,8 +68,8 @@ static inline void ASABLog(NSString *msg) {
     self.remoteConfig.configSettings = settings;
 
     NSDictionary *defaults = @{
-        kABKeyPaidRate : kABDefaultOpen,
-        kABKeySetRate  : kABDefaultOpen,
+        kABKeyPaidRate : kABDefaultClose,
+        kABKeySetRate  : kABDefaultClose,
     };
 
     [self.remoteConfig setDefaults:defaults];
@@ -149,11 +149,13 @@ static inline void ASABLog(NSString *msg) {
             [ud setDouble:[[NSDate date] timeIntervalSince1970] forKey:kASABCacheTimeKey];
 
             ASABLog([NSString stringWithFormat:@"已缓存 AB 结果：value=%@ source=%@", valueDict, sourceDict]);
-
+            // activate completion 成功后，写完 ud
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [[NSNotificationCenter defaultCenter] postNotificationName:@"ABTestStateChanged" object:nil];
+            });
             [self stopMonitorIfNeeded];
             self.isFetching = NO;
         }];
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"ABTestStateChanged" object:nil];
     }];
 }
 
@@ -179,7 +181,7 @@ static inline void ASABLog(NSString *msg) {
 
 - (NSString *)stringForKey:(NSString *)key {
     NSString *v = [self cachedValueDict][key];
-    if (![v isKindOfClass:NSString.class]) return kABDefaultOpen;
+    if (![v isKindOfClass:NSString.class]) return kABDefaultClose;
     return ASABNormalize(v);
 }
 

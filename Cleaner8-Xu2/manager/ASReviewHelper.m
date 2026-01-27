@@ -36,13 +36,13 @@ static inline NSString *ASABTrackedFlagKey(NSString *abKey) {
             return;
         }
         
-        // show打点
-        [[LTEventTracker shared] track: @"Rate" properties:@{@"position": source}];
-
         void (^doRequest)(void) = ^{
             if ([[NSUserDefaults standardUserDefaults] boolForKey:kOCSystemReviewDidRequestKey]) {
                 return;
             }
+            
+            // show打点
+            [[LTEventTracker shared] track: @"Rate" properties:@{@"position": source ?: @""}];
 
             [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kOCSystemReviewDidRequestKey];
 
