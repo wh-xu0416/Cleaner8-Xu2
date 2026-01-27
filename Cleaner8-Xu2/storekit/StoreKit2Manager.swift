@@ -82,7 +82,6 @@ public final class SK2ProductModel: NSObject {
 
         currencyCode = product.priceFormatStyle.currencyCode
         currencySymbol = product.priceFormatStyle.locale.currencySymbol ?? ""
-
         priceValue = NSDecimalNumber(decimal: product.price)
 
         if let p = product.subscription?.subscriptionPeriod {
@@ -95,8 +94,16 @@ public final class SK2ProductModel: NSObject {
             @unknown default: periodUnit = .unknown
             }
         } else {
-            periodValue = 0
-            periodUnit = .unknown
+            if product.id == AppConstants.productIDWeekly {
+                periodValue = 1
+                periodUnit = .week
+            } else if product.id == AppConstants.productIDYearly {
+                periodValue = 1
+                periodUnit = .year
+            } else {
+                periodValue = 0
+                periodUnit = .unknown
+            }
         }
     }
 }
@@ -274,6 +281,9 @@ final class StoreKit2Manager: NSObject {
     
     @MainActor
     private func paywallRank(for product: Product) -> Int {
+        if product.id == AppConstants.productIDWeekly { return 0 }
+        if product.id == AppConstants.productIDYearly { return 1 }
+        
         guard let p = product.subscription?.subscriptionPeriod else { return 99 }
         switch p.unit {
         case .week: return 0
@@ -443,7 +453,7 @@ final class StoreKit2Manager: NSObject {
         }
 
         do {
-//            try? await Task.sleep(nanoseconds: UInt64(15 * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(10 * 1_000_000_000))
             let list = try await Product.products(for: productIDs)
             guard !list.isEmpty else {
                 updateSnapshot { old in
@@ -608,7 +618,7 @@ final class StoreKit2Manager: NSObject {
         }
 
         do {
-            let distinctId = ASIdentifiers.distinctId()
+            let distinctId = ASIdentifiers.distinctId().uppercased()
             let uuid = UUID(uuidString: distinctId) ?? UUID()
             let result = try await product.purchase(options: [.appAccountToken(uuid)])
             switch result {

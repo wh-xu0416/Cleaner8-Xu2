@@ -961,7 +961,11 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
     BOOL show = NO;
 
     if (m) {
-        show = (m.periodUnit == SK2PeriodUnitWeek);
+        if ([m.productID isEqualToString:AppConstants.productIDWeekly]) {
+            show = YES;
+        } else {
+            show = (m.periodUnit == SK2PeriodUnitWeek);
+        }
     } else {
         show = (self.selectedUnit == SK2PeriodUnitWeek);
     }
