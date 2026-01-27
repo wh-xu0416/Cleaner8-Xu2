@@ -1388,8 +1388,8 @@ static inline NSString *ASExtractCurrencySymbolFromPriceString(NSString *s) {
         [row1.topAnchor constraintEqualToAnchor:tipsHost.topAnchor],
         [row1.centerXAnchor constraintEqualToAnchor:tipsHost.centerXAnchor],
         
-        [row1.leadingAnchor constraintGreaterThanOrEqualToAnchor:tipsHost.leadingAnchor constant:AS(10)],
-        [row1.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor constant:-AS(10)],
+        [row1.leadingAnchor constraintGreaterThanOrEqualToAnchor:tipsHost.leadingAnchor constant:AS(0)],
+        [row1.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor constant:-AS(0)],
 
         [row2.topAnchor constraintEqualToAnchor:row1.bottomAnchor constant:AS(10)],
         [row2.leadingAnchor constraintEqualToAnchor:row1.leadingAnchor],
