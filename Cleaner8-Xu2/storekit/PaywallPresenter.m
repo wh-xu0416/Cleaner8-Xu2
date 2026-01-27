@@ -4,7 +4,7 @@
 #import "SubscriptionViewController.h"
 #import "LTEventTracker.h"
 
-static NSString * const kPaywallDidDismissNotification = @"XXPaywallDidDismissNotification";
+static NSString * const kPaywallDidDismissNotification = @"PaywallDidDismissNotification";
 
 NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateChanged";
 
@@ -97,7 +97,6 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
                 if (!self) return;
 
                 if ([StoreKit2Manager shared].state != SubscriptionStateActive) {
-                    self.autoPaywallAttemptedThisSession = YES;
                     [self showPaywallWithSource:source];
                 } else {
                     [self firePendingContinueIfAny];
@@ -111,7 +110,6 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
 
                 if ([StoreKit2Manager shared].state == SubscriptionStateUnknown) {
                     [[NSNotificationCenter defaultCenter] removeObserver:token];
-                    self.autoPaywallAttemptedThisSession = YES;
                     [self showPaywallWithSource:source];
                 }
             });
@@ -120,7 +118,6 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
         }
 
         // inactive：直接弹
-        self.autoPaywallAttemptedThisSession = YES;
         [self showPaywallWithSource:source];
     });
 }
@@ -140,6 +137,8 @@ NSNotificationName const PaywallPresenterStateChanged = @"PaywallPresenterStateC
         if (top.presentedViewController) return;
 
         self.isPresenting = YES;
+
+        self.autoPaywallAttemptedThisSession = YES;
 
         SubscriptionPaywallMode mode = AppConstants.paywallGateModeRaw;
         SubscriptionViewController *vc = [[SubscriptionViewController alloc] initWithMode:mode];

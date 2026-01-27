@@ -4,6 +4,7 @@
 #import "Common.h"
 #import "PaywallPresenter.h"
 #import "ASReviewHelper.h"
+#import "ASABTestManager.h"
 
 #pragma mark - UI Helpers
 
@@ -80,7 +81,12 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
                                              selector:@selector(onSubscriptionStateChanged)
                                                  name:@"subscriptionStateChanged"
                                                object:nil];
-
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(updateProCardVisibility)
+                                                     name:@"ABTestStateChanged"
+                                                   object:nil];
+    
     [self updateProCardVisibility];
 }
 
@@ -234,18 +240,30 @@ static inline UIFont *ASFont(CGFloat size, UIFontWeight weight) {
 - (void)updateProCardVisibility {
     dispatch_async(dispatch_get_main_queue(), ^{
         SubscriptionState state = [StoreKit2Manager shared].state;
-
+        BOOL isPro = [PaywallPresenter shared].isProActive;
+        
         if (state == SubscriptionStateUnknown) {
             self.proCard.hidden = NO;
             self.contactTopToProCst.active = YES;
             self.contactTopToTitleCst.active = NO;
-            [self.view layoutIfNeeded];
-            return;
+        } else {
+            self.proCard.hidden = isPro;
+            self.contactTopToProCst.active = !isPro;
+            self.contactTopToTitleCst.active = isPro;
         }
 
-        self.proCard.hidden = [PaywallPresenter shared].isProActive;;
-        self.contactTopToProCst.active = ![PaywallPresenter shared].isProActive;;
-        self.contactTopToTitleCst.active = [PaywallPresenter shared].isProActive;;
+        BOOL showFeedback = [[ASABTestManager shared] isSetRateOpen];
+        self.feedbackCard.hidden = !showFeedback;
+        
+        static NSLayoutConstraint *settingToContactCst = nil;
+        if (self.feedbackCard.hidden) {
+            if (!settingToContactCst) {
+                settingToContactCst = [self.settingCard.topAnchor constraintEqualToAnchor:self.contactCard.bottomAnchor constant:SW(20)];
+            }
+            settingToContactCst.active = YES;
+        } else {
+            settingToContactCst.active = NO;
+        }
 
         [self.view layoutIfNeeded];
     });

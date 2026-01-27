@@ -207,7 +207,7 @@ private enum ASIdentifiers {
 
     static func distinctId() -> String {
         #if canImport(ThinkingSDK)
-        return TDAnalytics.getDistinctId()
+        return TDAnalytics.getDistinctId().uppercased()
         #else
         return ""
         #endif
@@ -618,7 +618,7 @@ final class StoreKit2Manager: NSObject {
         }
 
         do {
-            let distinctId = ASIdentifiers.distinctId().uppercased()
+            let distinctId = ASIdentifiers.distinctId()
             let uuid = UUID(uuidString: distinctId) ?? UUID()
             let result = try await product.purchase(options: [.appAccountToken(uuid)])
             switch result {
@@ -634,8 +634,8 @@ final class StoreKit2Manager: NSObject {
                     oid = String(transaction.id)
                 }
 
-                await refreshSubscriptionState()
                 await transaction.finish()
+                await refreshSubscriptionState(force: true)
 
                 setPurchaseState(.succeeded, err: nil, orderID: oid)
                 return .succeeded
@@ -677,7 +677,7 @@ final class StoreKit2Manager: NSObject {
             for await update in Transaction.updates {
                 if Task.isCancelled { return }
                 if case .verified(let transaction) = update {
-                    await self.refreshSubscriptionState()
+                    await self.refreshSubscriptionState(force: true)
                     await transaction.finish()
                 }
             }
@@ -858,6 +858,8 @@ final class StoreKit2Manager: NSObject {
         NotificationCenter.default.post(name: .storeSnapshotChanged, object: new)
 
         if old.subscriptionState != new.subscriptionState {
+            print("[StoreKit2Manager] subscriptionState \(old.subscriptionState) -> \(new.subscriptionState)")
+
             NotificationCenter.default.post(name: .subscriptionStateChanged, object: new.subscriptionState)
         }
 

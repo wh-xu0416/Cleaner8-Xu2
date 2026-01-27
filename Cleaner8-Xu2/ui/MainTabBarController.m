@@ -71,6 +71,11 @@ UINavigationControllerDelegate
         NSLocalizedString(@"Private", nil),
         NSLocalizedString(@"More", nil),
     ];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(_onDidBecomeActive)
+                                                 name:UIApplicationDidBecomeActiveNotification
+                                               object:nil];
 
     self.tabNavs = [NSMutableArray arrayWithCapacity:self.tabTitles.count];
     for (NSInteger i = 0; i < self.tabTitles.count; i++) {
@@ -131,14 +136,19 @@ UINavigationControllerDelegate
 
     [self sw_ensureTabLoadedAtIndex:self.selectedIndex];
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        [[PaywallPresenter shared] showPaywallIfNeededWithSource:@"guide"];
-    });
+//    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+//                   dispatch_get_main_queue(), ^{
+//        [[PaywallPresenter shared] showPaywallIfNeededWithSource:@"guide"];
+//    });
+}
+
+- (void)_onDidBecomeActive {
+    [[PaywallPresenter shared] showPaywallIfNeededWithSource:@"guide"];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    [[PaywallPresenter shared] showPaywallIfNeededWithSource:@"guide"];
 
     UINavigationController *rootNav = self.navigationController;
     rootNav.interactivePopGestureRecognizer.enabled = YES;

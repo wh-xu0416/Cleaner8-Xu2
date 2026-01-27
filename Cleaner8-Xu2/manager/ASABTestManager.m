@@ -153,6 +153,7 @@ static inline void ASABLog(NSString *msg) {
             [self stopMonitorIfNeeded];
             self.isFetching = NO;
         }];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ABTestStateChanged" object:nil];
     }];
 }
 

@@ -320,7 +320,7 @@ static inline id SafeKVC(id obj, NSString *key) {
 
 @end
 
-static NSString * const kPaywallDidDismissNotification = @"XXPaywallDidDismissNotification";
+static NSString * const kPaywallDidDismissNotification = @"PaywallDidDismissNotification";
 
 #pragma mark - SubscriptionViewController
 
@@ -816,6 +816,14 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
 - (void)render {
     StoreSnapshot *snap = [StoreKit2Manager shared].snapshot;
 
+    if (snap.subscriptionState == SubscriptionStateActive) {
+        if (self.presentingViewController) {
+            [self dismissViewControllerAnimated:YES completion:nil];
+        } else if (self.navigationController) {
+            [self.navigationController popViewControllerAnimated:YES];
+        }
+    }
+    
     BOOL hasNet = snap.networkAvailable;
     BOOL busy = (snap.purchaseState == PurchaseFlowStatePurchasing ||
                  snap.purchaseState == PurchaseFlowStateRestoring ||
@@ -928,12 +936,6 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
     [self updateAutoRenewLine];
     [self updateTrialHintUI];
     
-
-    if (snap.subscriptionState == SubscriptionStateActive) {
-        if (self.presentingViewController) {
-            [self dismissViewControllerAnimated:YES completion:nil];
-        }
-    }
 
     if (ready && !busy && self.pendingAutoPurchase) {
         self.pendingAutoPurchase = NO;
@@ -1386,8 +1388,8 @@ static inline NSString *ASExtractCurrencySymbolFromPriceString(NSString *s) {
         [row1.topAnchor constraintEqualToAnchor:tipsHost.topAnchor],
         [row1.centerXAnchor constraintEqualToAnchor:tipsHost.centerXAnchor],
         
-        [row1.leadingAnchor constraintGreaterThanOrEqualToAnchor:tipsHost.leadingAnchor constant:AS(20)],
-        [row1.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor constant:-AS(20)],
+        [row1.leadingAnchor constraintGreaterThanOrEqualToAnchor:tipsHost.leadingAnchor constant:AS(10)],
+        [row1.trailingAnchor constraintLessThanOrEqualToAnchor:tipsHost.trailingAnchor constant:-AS(10)],
 
         [row2.topAnchor constraintEqualToAnchor:row1.bottomAnchor constant:AS(10)],
         [row2.leadingAnchor constraintEqualToAnchor:row1.leadingAnchor],

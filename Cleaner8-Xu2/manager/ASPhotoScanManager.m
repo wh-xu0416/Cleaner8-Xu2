@@ -678,6 +678,7 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
 - (void)refreshAllAssetsFetchResult {
     self.allAssetsFetchResult = [PHAsset fetchAssetsWithOptions:[self allImageVideoFetchOptions]];
+    ASIncLog("数据数量 %lu" ,self.allAssetsFetchResult.count);
 }
 
 - (void)setModule:(ASHomeModuleType)type state:(ASModuleScanState)st {
@@ -1126,6 +1127,7 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     }
 
     if (current == ASPhotoAuthStateNone) {
+        ASIncLog(@"无权限");
         [self as_storeAuthState:ASPhotoAuthStateNone];
         showPlaceholderOnMain();
         [self resetPublicStateForNoPermission];
@@ -1134,6 +1136,7 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     }
 
     if (!hasStored) {
+        ASIncLog(@"无缓存全量扫描");
         [self as_storeAuthState:current];
         [self dropCacheFile];
         [self startFullScanWithProgress:nil completion:self.completionBlock];
@@ -1141,6 +1144,7 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     }
 
     if (last != current) {
+        ASIncLog(@"权限变化重新扫描");
         [self as_storeAuthState:current];
         [self dropCacheFile];
         [self startFullScanWithProgress:nil completion:self.completionBlock];
@@ -1150,6 +1154,7 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     [self as_storeAuthState:current];
 
     if ([self loadCacheIfExists]) {
+        ASIncLog(@"有缓存不扫描");
         __weak typeof(self) weakSelf = self;
         [self applyCacheToPublicStateWithCompletion:^{
             __strong typeof(weakSelf) self = weakSelf;
@@ -1173,6 +1178,7 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
         }];
         return token;
     }
+    ASIncLog(@"全量扫描");
 
     [self startFullScanWithProgress:nil completion:self.completionBlock];
     return token;
@@ -1519,7 +1525,6 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
             self.cache.blurDesiredK = [self blurryDesiredKForLibraryQuick];
             NSUInteger desiredK = self.cache.blurDesiredK;
 
-            // 6. 启动并发流水线
             // 创建并发队列
             dispatch_queue_t concurrentQ = dispatch_queue_create("as.photo.scan.concurrent", DISPATCH_QUEUE_CONCURRENT);
             // 信号量控制最大并发数
@@ -1539,12 +1544,7 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
                     
                     @autoreleasepool {
                         NSError *error = nil;
-                        
-                        // [关键优化] buildModelForAsset 内部现在必须包含:
-                        // 1. 加载缩略图
-                        // 2. 计算 pHash
-                        // 3. 计算 Vision Feature (如果是可比图片)
-                        // 确保这一步完成后，Model 已经包含了所有需要对比的数据
+         
                         ASAssetModel *model = [self buildModelForAsset:asset computeCompareBits:YES error:&error];
                         
                         if (model) {
@@ -3326,7 +3326,7 @@ static const NSUInteger kASLocalIdChunk = 3500;
             if (thumb) {
                 m.phash256Data = [self computeColorPHash256Data:thumb];
                 // 提前计算并缓存 Vision 数据，防止 matchAndGroup 时阻塞串行队列
-//                m.visionPrintData = [self computeVisionPrintDataFromImage:thumb];
+                m.visionPrintData = [self computeVisionPrintDataFromImage:thumb];
             }
         }
     }
@@ -3346,24 +3346,28 @@ static const NSUInteger kASLocalIdChunk = 3500;
 - (UIImage *)requestThumbnailSyncForAsset:(PHAsset *)asset target:(CGSize)target {
     __block UIImage *img = nil;
 
-        PHImageRequestOptions *opt = [PHImageRequestOptions new];
-        opt.synchronous = YES;
-        opt.networkAccessAllowed = NO;
-        opt.resizeMode = PHImageRequestOptionsResizeModeFast;
+    PHImageRequestOptions *opt = [PHImageRequestOptions new];
+    opt.synchronous = YES;
+    opt.networkAccessAllowed = NO;
+    opt.resizeMode = PHImageRequestOptionsResizeModeFast;
+    if ([self as_currentAuthState] == ASPhotoAuthStateLimited) {
+        opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    } else {
         opt.deliveryMode = PHImageRequestOptionsDeliveryModeFastFormat;
-        opt.version = PHImageRequestOptionsVersionCurrent;
+    }
+    opt.version = PHImageRequestOptionsVersionCurrent;
 
-        [self.imageManager requestImageForAsset:asset
-                                     targetSize:target
-                                    contentMode:PHImageContentModeAspectFill
-                                        options:opt
-                                  resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
-            if ([info[PHImageResultIsDegradedKey] boolValue]) return;
-            if (info[PHImageCancelledKey]) return;
-            if (info[PHImageErrorKey]) return;
-            img = result;
-        }];
-        return img;
+    [self.imageManager requestImageForAsset:asset
+                                 targetSize:target
+                                contentMode:PHImageContentModeAspectFill
+                                    options:opt
+                              resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+        if ([info[PHImageCancelledKey] boolValue]) return;
+        if (info[PHImageErrorKey]) return;
+        if (!result) return;
+        img = result;
+    }];
+    return img;
 }
 
 - (UIImage *)requestVideoFrameSyncForAsset:(PHAsset *)asset seconds:(Float64)seconds target:(CGSize)target {
@@ -3663,7 +3667,10 @@ static inline void ASDCT1D_64(const float *in, float *out) {
 #pragma mark - Grouping
 
 - (BOOL)matchAndGroup:(ASAssetModel *)model asset:(PHAsset *)asset {
-    if (!model.phash256Data || model.phash256Data.length < 32) return NO;
+    if (!model.phash256Data || model.phash256Data.length < 32) {
+        NSLog(@"[WARN] 无法获取资源 Hash，跳过对比: %@", model.localId);
+        return NO;
+    }
 
     BOOL isImage = (asset.mediaType == PHAssetMediaTypeImage);
     NSMutableDictionary<NSNumber *, NSMutableArray<ASAssetModel *> *> *index = isImage ? self.indexImage : self.indexVideo;
