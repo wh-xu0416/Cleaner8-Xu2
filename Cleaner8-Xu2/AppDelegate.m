@@ -10,7 +10,7 @@
 
 static NSString * const kASHasLaunchedBeforeKey = @"as_has_launched_before";
 static NSString * const kASATTDidFinishNotification = @"as_att_did_finish";
-static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding"; // 和你 Onboarding 里保持一致
+static NSString * const kHasCompletedOnboardingKey = @"hasCompletedOnboarding"; 
 
 #ifdef DEBUG
 static inline void ASLog(NSString *module, NSString *msg) {

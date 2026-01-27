@@ -63,9 +63,7 @@ static inline NSString *ASABTrackedFlagKey(NSString *abKey) {
 }
 
 + (BOOL)_isReviewAllowedByABForSourceAndTrackIfNeeded:(NSString *)source {
-    if (source.length == 0) return YES;
-
-    NSString *abKey = nil;
+    if (source.length == 0) return YES; // 其它来源不参与 24h 规则
 
     static NSSet<NSString *> *paidSources;
     static dispatch_once_t onceToken;
@@ -88,28 +86,38 @@ static inline NSString *ASABTrackedFlagKey(NSString *abKey) {
         ]];
     });
 
-    if ([paidSources containsObject:source] ||
-        [source isEqualToString:kABKeyPaidRate]) {
-        abKey = kABKeyPaidRate;
+    BOOL isPaidRateSource = ([paidSources containsObject:source] ||
+                            [source isEqualToString:kABKeyPaidRate]);
 
-    } else if ([source isEqualToString:@"setting"] ||
-               [source isEqualToString:kABKeySetRate]) {
-        abKey = kABKeySetRate;
+    BOOL isSetRateSource  = ([source isEqualToString:@"setting"] ||
+                            [source isEqualToString:kABKeySetRate]);
 
-    } else {
+    // 仅 paid_rate_rate 来源：超过时间不允许弹
+    if (isPaidRateSource && ![self _isWithin24HoursSinceInstall]) {
+        return NO;
+    }
+
+    // 其它来源：不走 AB 控制
+    if (!isPaidRateSource && !isSetRateSource) {
         return YES;
     }
 
-    ASABTestManager *ab = [ASABTestManager shared];
-    NSString *val = [ab stringForKey:abKey]; // open/close；无缓存默认 close
+    NSString *abKey = isPaidRateSource ? kABKeyPaidRate : kABKeySetRate;
 
-    // 仅当 Remote 时打点默认值不打点 且每个 key 只打一次 且安装24小时内才打点
-    if ([ab isRemoteValueForKey:abKey] && [self _isWithin24HoursSinceInstall]) {
-        NSString *flagKey = ASABTrackedFlagKey(abKey);
-        NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
-        if (![ud boolForKey:flagKey]) {
-            [[LTEventTracker shared] track:abKey properties:@{@"page_name": val ?: @""}];
-            [ud setBool:YES forKey:flagKey];
+    ASABTestManager *ab = [ASABTestManager shared];
+    NSString *val = [ab stringForKey:abKey]; // open/close；无缓存默认 close（你现在默认是 close）
+
+    if ([ab isRemoteValueForKey:abKey]) {
+        BOOL shouldTrack =
+            isPaidRateSource ? [self _isWithin24HoursSinceInstall] : YES;
+
+        if (shouldTrack) {
+            NSString *flagKey = ASABTrackedFlagKey(abKey);
+            NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
+            if (![ud boolForKey:flagKey]) {
+                [[LTEventTracker shared] track:abKey properties:@{@"page_name": val ?: @""}];
+                [ud setBool:YES forKey:flagKey];
+            }
         }
     }
 
