@@ -6,18 +6,28 @@
 
 #define kABKeyPaidRate (AppConstants.abKeyPaidRateRate)
 #define kABKeySetRate  (AppConstants.abKeySetRateRate)
+#define kABKeyWeeklySku (AppConstants.abKeyWeeklySku)
 #define kABDefaultClose (AppConstants.abDefaultClose)
+#define kABWeeklySkuDefault (AppConstants.abWeeklySkuDefault)
 
 static NSString * const kASABCacheFlagKey      = @"as_abtest_cached";
 static NSString * const kASABCacheDictKey      = @"as_abtest_cached_dict";
 static NSString * const kASABCacheSourceDictKey= @"as_abtest_cached_source_dict";
 static NSString * const kASABCacheTimeKey      = @"as_abtest_cached_time";
+static NSString * const kASABWeeklySkuLockedKey = @"as_abtest_weekly_sku_locked"; // 周SKU锁定值
 
 static inline NSString *ASABNormalize(NSString * _Nullable v) {
     if (v.length == 0) return kABDefaultClose;
     NSString *lv = v.lowercaseString;
     if ([lv isEqualToString:@"open"] || [lv isEqualToString:@"close"]) return lv;
     return kABDefaultClose;
+}
+
+static inline NSString *ASABNormalizeWeeklySku(NSString * _Nullable v) {
+    if (v.length == 0) return kABWeeklySkuDefault;
+    NSString *lv = v.lowercaseString;
+    if ([lv isEqualToString:@"trial899"] || [lv isEqualToString:@"trial999"]) return lv;
+    return kABWeeklySkuDefault;
 }
 
 static inline NSString *ASABSourceString(FIRRemoteConfigSource source) {
@@ -70,6 +80,7 @@ static inline void ASABLog(NSString *msg) {
     NSDictionary *defaults = @{
         kABKeyPaidRate : kABDefaultClose,
         kABKeySetRate  : kABDefaultClose,
+        kABKeyWeeklySku : kABWeeklySkuDefault,
     };
 
     [self.remoteConfig setDefaults:defaults];
@@ -129,20 +140,33 @@ static inline void ASABLog(NSString *msg) {
 
             FIRRemoteConfigValue *paidV = [self.remoteConfig configValueForKey:kABKeyPaidRate];
             FIRRemoteConfigValue *setV  = [self.remoteConfig configValueForKey:kABKeySetRate];
+            FIRRemoteConfigValue *weeklySkuV = [self.remoteConfig configValueForKey:kABKeyWeeklySku];
 
             NSString *paid = ASABNormalize(paidV.stringValue);
             NSString *set  = ASABNormalize(setV.stringValue);
+            NSString *weeklySku = ASABNormalizeWeeklySku(weeklySkuV.stringValue);
+
+            // 周SKU只在本地没有锁定值时才写入
+            NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
+            NSString *lockedWeeklySku = [ud stringForKey:kASABWeeklySkuLockedKey];
+            if (lockedWeeklySku.length == 0) {
+                [ud setObject:weeklySku forKey:kASABWeeklySkuLockedKey];
+                ASABLog([NSString stringWithFormat:@"首次锁定周SKU：%@", weeklySku]);
+            } else {
+                ASABLog([NSString stringWithFormat:@"周SKU已锁定，保持原值：%@，忽略远程值：%@", lockedWeeklySku, weeklySku]);
+            }
 
             NSDictionary *valueDict = @{
                 kABKeyPaidRate : paid,
                 kABKeySetRate  : set,
+                kABKeyWeeklySku : weeklySku,
             };
             NSDictionary *sourceDict = @{
                 kABKeyPaidRate : ASABSourceString(paidV.source),
                 kABKeySetRate  : ASABSourceString(setV.source),
+                kABKeyWeeklySku : ASABSourceString(weeklySkuV.source),
             };
 
-            NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
             [ud setBool:YES forKey:kASABCacheFlagKey];
             [ud setObject:valueDict forKey:kASABCacheDictKey];
             [ud setObject:sourceDict forKey:kASABCacheSourceDictKey];
@@ -191,6 +215,38 @@ static inline void ASABLog(NSString *msg) {
 
 - (BOOL)isPaidRateOpen { return [self isOpenForKey:kABKeyPaidRate]; }
 - (BOOL)isSetRateOpen  { return [self isOpenForKey:kABKeySetRate];  }
+
+- (NSString *)weeklySkuValue {
+    // 优先读取锁定的本地值
+    NSString *locked = [[NSUserDefaults standardUserDefaults] stringForKey:kASABWeeklySkuLockedKey];
+    if (locked.length > 0) {
+        return ASABNormalizeWeeklySku(locked);
+    }
+    // 没有锁定值时返回默认值
+    return kABWeeklySkuDefault;
+}
+
+// 栏门页面调用：尝试锁定周SKU值（如果AB测试已获取且本地未锁定）
+- (void)tryLockWeeklySkuIfNeeded {
+    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
+    NSString *locked = [ud stringForKey:kASABWeeklySkuLockedKey];
+    if (locked.length > 0) {
+        ASABLog([NSString stringWithFormat:@"周SKU已锁定：%@", locked]);
+        return;
+    }
+
+    // 检查AB测试缓存中是否有值
+    NSString *v = [self cachedValueDict][kABKeyWeeklySku];
+    if ([v isKindOfClass:NSString.class] && v.length > 0) {
+        NSString *normalized = ASABNormalizeWeeklySku(v);
+        [ud setObject:normalized forKey:kASABWeeklySkuLockedKey];
+        ASABLog([NSString stringWithFormat:@"从AB缓存锁定周SKU：%@", normalized]);
+    } else {
+        // AB测试未获取，锁定默认值
+        [ud setObject:kABWeeklySkuDefault forKey:kASABWeeklySkuLockedKey];
+        ASABLog([NSString stringWithFormat:@"AB未获取，锁定默认周SKU：%@", kABWeeklySkuDefault]);
+    }
+}
 
 - (BOOL)isRemoteValueForKey:(NSString *)key {
     NSString *src = [self cachedSourceDict][key];

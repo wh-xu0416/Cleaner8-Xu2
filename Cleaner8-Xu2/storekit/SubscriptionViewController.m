@@ -1,6 +1,7 @@
 #import "SubscriptionViewController.h"
 #import "Cleaner8_Xu2-Swift.h"
 #import "LTEventTracker.h"
+#import "ASABTestManager.h"
 
 #pragma mark - Helpers
 
@@ -399,8 +400,41 @@ static NSString * const kPaywallDidDismissNotification = @"PaywallDidDismissNoti
 
 @implementation SubscriptionViewController
 
-static NSString * const kDefaultWeeklyPrice = @"$7.99";
+static NSString * const kDefaultWeeklyPrice799 = @"$7.99";
+static NSString * const kDefaultWeeklyPrice899 = @"$8.99";
+static NSString * const kDefaultWeeklyPrice999 = @"$9.99";
 static NSString * const kDefaultYearlyPrice = @"$39.99";
+
+#pragma mark - AB Test Weekly SKU Helper
+
+// 根据AB测试获取当前应该使用的周SKU产品ID
+- (NSString *)currentWeeklyProductID {
+    NSString *abValue = [[ASABTestManager shared] weeklySkuValue];
+    if ([abValue isEqualToString:AppConstants.abWeeklySkuTrial899]) {
+        return AppConstants.productIDWeeklyTrial899;
+    } else if ([abValue isEqualToString:AppConstants.abWeeklySkuTrial999]) {
+        return AppConstants.productIDWeeklyTrial999;
+    }
+    return AppConstants.productIDWeekly;
+}
+
+// 根据AB测试获取当前周SKU的默认价格
+- (NSString *)currentWeeklyDefaultPrice {
+    NSString *abValue = [[ASABTestManager shared] weeklySkuValue];
+    if ([abValue isEqualToString:AppConstants.abWeeklySkuTrial899]) {
+        return kDefaultWeeklyPrice899;
+    } else if ([abValue isEqualToString:AppConstants.abWeeklySkuTrial999]) {
+        return kDefaultWeeklyPrice999;
+    }
+    return kDefaultWeeklyPrice799;
+}
+
+// 判断产品ID是否为周SKU
+- (BOOL)isWeeklyProductID:(NSString *)productID {
+    return [productID isEqualToString:AppConstants.productIDWeekly] ||
+           [productID isEqualToString:AppConstants.productIDWeeklyTrial899] ||
+           [productID isEqualToString:AppConstants.productIDWeeklyTrial999];
+}
 
 - (BOOL)isYearlyMode {
     return (self.paywallMode == SubscriptionPaywallModeYearly ||
@@ -410,8 +444,8 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
 - (NSString *)defaultPriceForPeriodUnit:(SK2PeriodUnit)unit {
     switch (unit) {
         case SK2PeriodUnitYear: return kDefaultYearlyPrice;
-        case SK2PeriodUnitWeek: return kDefaultWeeklyPrice;
-        default: return [self isYearlyMode] ? kDefaultYearlyPrice : kDefaultWeeklyPrice;
+        case SK2PeriodUnitWeek: return [self currentWeeklyDefaultPrice];
+        default: return [self isYearlyMode] ? kDefaultYearlyPrice : [self currentWeeklyDefaultPrice];
     }
 }
 
@@ -429,10 +463,14 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+
+    // 页面加载时尝试锁定周SKU值
+    [[ASABTestManager shared] tryLockWeeklySkuIfNeeded];
+
     if (ShouldTrackSource(self.source)) {
         [[LTEventTracker shared] track:@"sub_show" properties:@{@"IAP": self.source}];
     }
-    
+
     self.view.backgroundColor = HexColor(@"#FFF7F7F9");
 
     self.allowDismiss = YES;
@@ -963,7 +1001,8 @@ static NSString * const kDefaultYearlyPrice = @"$39.99";
     BOOL show = NO;
 
     if (m) {
-        if ([m.productID isEqualToString:AppConstants.productIDWeekly]) {
+        // 所有周SKU都显示试用提示
+        if ([self isWeeklyProductID:m.productID]) {
             show = YES;
         } else {
             show = (m.periodUnit == SK2PeriodUnitWeek);
@@ -1179,7 +1218,23 @@ static inline NSString *ASExtractCurrencySymbolFromPriceString(NSString *s) {
 }
 
 - (NSArray<SK2ProductModel *> *)normalizedProducts:(NSArray<SK2ProductModel *> *)products {
-    return [products sortedArrayUsingComparator:^NSComparisonResult(SK2ProductModel *a, SK2ProductModel *b) {
+    // 根据AB测试过滤周SKU，只保留当前应该显示的周SKU
+    NSString *currentWeeklyID = [self currentWeeklyProductID];
+    NSMutableArray<SK2ProductModel *> *filtered = [NSMutableArray array];
+
+    for (SK2ProductModel *m in products) {
+        // 如果是周SKU，只保留AB测试选中的那个
+        if ([self isWeeklyProductID:m.productID]) {
+            if ([m.productID isEqualToString:currentWeeklyID]) {
+                [filtered addObject:m];
+            }
+        } else {
+            // 非周SKU（如年费）直接保留
+            [filtered addObject:m];
+        }
+    }
+
+    return [filtered sortedArrayUsingComparator:^NSComparisonResult(SK2ProductModel *a, SK2ProductModel *b) {
         NSInteger ra = ASPeriodRank(a.periodUnit);
         NSInteger rb = ASPeriodRank(b.periodUnit);
         if (ra != rb) return (ra < rb) ? NSOrderedAscending : NSOrderedDescending;
@@ -1228,7 +1283,8 @@ static inline NSString *ASExtractCurrencySymbolFromPriceString(NSString *s) {
 
 - (SK2ProductModel *)currentProductForPurchase {
     if (self.paywallMode == SubscriptionPaywallModeGateWeekly) {
-        return [self productForID:AppConstants.productIDWeekly];
+        // 栏门周费模式：根据AB测试选择周SKU
+        return [self productForID:[self currentWeeklyProductID]];
     }
     if (self.paywallMode == SubscriptionPaywallModeGateYearly) {
         return [self productForID:AppConstants.productIDYearly];
@@ -1238,7 +1294,7 @@ static inline NSString *ASExtractCurrencySymbolFromPriceString(NSString *s) {
     if (self.selectedIndex >= 0 && self.selectedIndex < self.products.count) {
         m = self.products[self.selectedIndex];
     }
-    
+
     if (!m && self.products.count > 0) m = self.products.firstObject;
     return m;
 }

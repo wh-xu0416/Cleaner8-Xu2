@@ -17,8 +17,13 @@
 
   ],
   "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_disableDialogs" : false,
     "_failTransactionsEnabled" : false,
     "_locale" : "pt_BR",
+    "_renewalBillingIssuesEnabled" : false,
     "_storefront" : "BRA",
     "_storeKitErrors" : [
       {
@@ -93,7 +98,8 @@
         "enabled" : false,
         "name" : "Offer Code Redeem Sheet"
       }
-    ]
+    ],
+    "_timeRate" : 0
   },
   "subscriptionGroups" : [
     {
@@ -139,6 +145,80 @@
           "productID" : "com.demo.pro.weekly",
           "recurringSubscriptionPeriod" : "P1W",
           "referenceName" : "weekly",
+          "subscriptionGroupID" : "EA702727",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "8.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "AF095BF0",
+          "introductoryOffer" : {
+            "internalID" : "AF095BF1",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P3D"
+          },
+          "localizations" : [
+            {
+              "description" : "3-day free trial",
+              "displayName" : "Weekly Trial $8.99",
+              "locale" : "en_US"
+            },
+            {
+              "description" : "3天免费试用",
+              "displayName" : "周费试用 $8.99",
+              "locale" : "zh_Hans"
+            }
+          ],
+          "productID" : "com.demo.pro.weekly.trial899",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "weekly_trial_899",
+          "subscriptionGroupID" : "EA702727",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "AF095BF2",
+          "introductoryOffer" : {
+            "internalID" : "AF095BF3",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P3D"
+          },
+          "localizations" : [
+            {
+              "description" : "3-day free trial",
+              "displayName" : "Weekly Trial $9.99",
+              "locale" : "en_US"
+            },
+            {
+              "description" : "3天免费试用",
+              "displayName" : "周费试用 $9.99",
+              "locale" : "zh_Hans"
+            }
+          ],
+          "productID" : "com.demo.pro.weekly.trial999",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "weekly_trial_999",
           "subscriptionGroupID" : "EA702727",
           "type" : "RecurringSubscription",
           "winbackOffers" : [

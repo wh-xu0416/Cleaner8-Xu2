@@ -94,7 +94,9 @@ public final class SK2ProductModel: NSObject {
             @unknown default: periodUnit = .unknown
             }
         } else {
-            if product.id == AppConstants.productIDWeekly {
+            if product.id == AppConstants.productIDWeekly ||
+               product.id == AppConstants.productIDWeeklyTrial899 ||
+               product.id == AppConstants.productIDWeeklyTrial999 {
                 periodValue = 1
                 periodUnit = .week
             } else if product.id == AppConstants.productIDYearly {
@@ -281,9 +283,11 @@ final class StoreKit2Manager: NSObject {
     
     @MainActor
     private func paywallRank(for product: Product) -> Int {
-        if product.id == AppConstants.productIDWeekly { return 0 }
+        if product.id == AppConstants.productIDWeekly ||
+           product.id == AppConstants.productIDWeeklyTrial899 ||
+           product.id == AppConstants.productIDWeeklyTrial999 { return 0 }
         if product.id == AppConstants.productIDYearly { return 1 }
-        
+
         guard let p = product.subscription?.subscriptionPeriod else { return 99 }
         switch p.unit {
         case .week: return 0
@@ -348,7 +352,12 @@ final class StoreKit2Manager: NSObject {
     
     @objc static let shared = StoreKit2Manager()
 
-    let productIDs: [String] = [AppConstants.productIDYearly,AppConstants.productIDWeekly]
+    let productIDs: [String] = [
+        AppConstants.productIDYearly,
+        AppConstants.productIDWeekly,
+        AppConstants.productIDWeeklyTrial899,
+        AppConstants.productIDWeeklyTrial999
+    ]
 
     @objc private(set) var snapshot: StoreSnapshot = StoreSnapshot(
         networkAvailable: true,
