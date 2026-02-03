@@ -26,7 +26,7 @@ static inline NSString *ASABNormalize(NSString * _Nullable v) {
 static inline NSString *ASABNormalizeWeeklySku(NSString * _Nullable v) {
     if (v.length == 0) return kABWeeklySkuDefault;
     NSString *lv = v.lowercaseString;
-    if ([lv isEqualToString:@"trial899"] || [lv isEqualToString:@"trial999"]) return lv;
+    if ([lv isEqualToString:AppConstants.abWeeklySkuTrial899] || [lv isEqualToString:AppConstants.abWeeklySkuTrial999]) return lv;
     return kABWeeklySkuDefault;
 }
 

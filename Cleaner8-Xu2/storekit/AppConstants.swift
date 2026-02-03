@@ -42,15 +42,15 @@ public class AppConstants: NSObject {
     // MARK: - ABTest Key
     public static let abKeyPaidRateRate: String = "paid_rate_rate"
     public static let abKeySetRateRate: String  = "set_rate_rate"
-    public static let abKeyWeeklySku: String    = "weekly_sku"      // 周SKU AB测试 key
+    public static let abKeyWeeklySku: String    = "ab_purchase_0203"      // 周SKU AB测试 key
 
     public static let abDefaultOpen: String = "open"
     public static let abDefaultClose: String = "close"
 
     // MARK: - Weekly SKU AB Test Values
-    public static let abWeeklySkuDefault: String = "default"        // 默认 $7.99
-    public static let abWeeklySkuTrial899: String = "trial899"      // 3天免费试用 $8.99
-    public static let abWeeklySkuTrial999: String = "trial999"      // 3天免费试用 $9.99
+    public static let abWeeklySkuDefault: String = "799"        // 默认 $7.99
+    public static let abWeeklySkuTrial899: String = "899"      // 3天免费试用 $8.99
+    public static let abWeeklySkuTrial999: String = "999"      // 3天免费试用 $9.99
 
     // MARK: - 所有周SKU产品ID列表
     public static let allWeeklyProductIDs: [String] = [
