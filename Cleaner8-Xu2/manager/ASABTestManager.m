@@ -3,6 +3,7 @@
 #import <FirebaseCore/FirebaseCore.h>
 #import <Network/Network.h>
 #import "Cleaner8_Xu2-Swift.h"
+#import "LTEventTracker.h"
 
 #define kABKeyPaidRate (AppConstants.abKeyPaidRateRate)
 #define kABKeySetRate  (AppConstants.abKeySetRateRate)
@@ -41,6 +42,15 @@ static inline NSString *ASABSourceString(FIRRemoteConfigSource source) {
 
 static inline void ASABLog(NSString *msg) {
     NSLog(@"【ABTest】%@", msg ?: @"");
+}
+
+static inline void ASABTrackSampling(NSString *key, NSString *value) {
+    NSString *eventName = [NSString stringWithFormat:@"%@", key];
+    NSDictionary *properties = @{
+        @"page_name": value ?: @"799",
+    };
+    [[LTEventTracker shared] track:eventName properties:properties];
+    ASABLog([NSString stringWithFormat:@"AB打点 event=%@ value=%@", eventName, value]);
 }
 
 @interface ASABTestManager ()
@@ -146,12 +156,17 @@ static inline void ASABLog(NSString *msg) {
             NSString *set  = ASABNormalize(setV.stringValue);
             NSString *weeklySku = ASABNormalizeWeeklySku(weeklySkuV.stringValue);
 
+            // 打点：记录AB测试抽样结果
+            ASABTrackSampling(kABKeyPaidRate, paid);
+            ASABTrackSampling(kABKeySetRate, set);
+
             // 周SKU只在本地没有锁定值时才写入
             NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
             NSString *lockedWeeklySku = [ud stringForKey:kASABWeeklySkuLockedKey];
             if (lockedWeeklySku.length == 0) {
                 [ud setObject:weeklySku forKey:kASABWeeklySkuLockedKey];
                 ASABLog([NSString stringWithFormat:@"首次锁定周SKU：%@", weeklySku]);
+                ASABTrackSampling(kABKeyWeeklySku, weeklySku);
             } else {
                 ASABLog([NSString stringWithFormat:@"周SKU已锁定，保持原值：%@，忽略远程值：%@", lockedWeeklySku, weeklySku]);
             }
@@ -241,10 +256,13 @@ static inline void ASABLog(NSString *msg) {
         NSString *normalized = ASABNormalizeWeeklySku(v);
         [ud setObject:normalized forKey:kASABWeeklySkuLockedKey];
         ASABLog([NSString stringWithFormat:@"从AB缓存锁定周SKU：%@", normalized]);
+        ASABTrackSampling(kABKeyWeeklySku, normalized);
+
     } else {
         // AB测试未获取，锁定默认值
         [ud setObject:kABWeeklySkuDefault forKey:kASABWeeklySkuLockedKey];
         ASABLog([NSString stringWithFormat:@"AB未获取，锁定默认周SKU：%@", kABWeeklySkuDefault]);
+        ASABTrackSampling(kABKeyWeeklySku, kABWeeklySkuDefault);
     }
 }
 
