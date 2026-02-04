@@ -1621,9 +1621,9 @@ static inline NSString *ASNonEmptyStringFromValue(id v) {
     if ([m.productID isEqualToString:AppConstants.productIDWeekly]) {
         return @"weekly";
     } else if ([m.productID isEqualToString:AppConstants.productIDWeeklyTrial899]) {
-        return @"weekly_trial899";
+        return @"weekly_899";
     } else if ([m.productID isEqualToString:AppConstants.productIDWeeklyTrial999]) {
-        return @"weekly_trial999";
+        return @"weekly_999";
     } else if ([m.productID isEqualToString:AppConstants.productIDYearly]) {
         return @"yearly";
     }
