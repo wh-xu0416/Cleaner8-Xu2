@@ -1616,6 +1616,19 @@ static inline NSString *ASNonEmptyStringFromValue(id v) {
 
 - (NSString *)trackPlanIDForProduct:(SK2ProductModel *)m {
     if (!m) return @"";
+
+    // 区分不同的周SKU
+    if ([m.productID isEqualToString:AppConstants.productIDWeekly]) {
+        return @"weekly";
+    } else if ([m.productID isEqualToString:AppConstants.productIDWeeklyTrial899]) {
+        return @"weekly_trial899";
+    } else if ([m.productID isEqualToString:AppConstants.productIDWeeklyTrial999]) {
+        return @"weekly_trial999";
+    } else if ([m.productID isEqualToString:AppConstants.productIDYearly]) {
+        return @"yearly";
+    }
+
+    // 兜底：按周期类型返回
     switch (m.periodUnit) {
         case SK2PeriodUnitWeek: return @"weekly";
         case SK2PeriodUnitYear: return @"yearly";
