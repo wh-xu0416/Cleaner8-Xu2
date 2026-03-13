@@ -51,10 +51,12 @@ static const NSUInteger kBlurKeepMin     = 0;      // 至少 40 张
 static const NSUInteger kBlurKeepMax     = 300;     // 最多 300 张
 static const NSUInteger kBlurWarmup      = 20;
 
-// 并发控制：同时处理 6 张图片（避免 OOM 和发热过高）
-static const NSInteger kASScanConcurrencyLimit = 6;
+// 并发控制：同时处理 4 张图片（降低并发数减少内存峰值）
+static const NSInteger kASScanConcurrencyLimit = 4;
 
-// 阈值: 缩略图取 512x512
+// 阈值: 缩略图取 256x256（降低尺寸减少内存占用）
+static const CGFloat kASThumbnailSize = 256.0f;
+
 const ASComparePolicy kPolicySimilar   = { .phashThreshold = 119, .visionThreshold = 0.56f };
 const ASComparePolicy kPolicyDuplicate = { .phashThreshold = 30,  .visionThreshold = 0.20f };
 
@@ -79,7 +81,7 @@ static NSCache<NSString*, NSNumber*> *ASBlurMemo(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         c = [NSCache new];
-        c.countLimit = 20000;
+        c.countLimit = 5000;  // 降低缓存数量减少内存占用
     });
     return c;
 }
@@ -171,7 +173,7 @@ static NSCache<NSString *, NSNumber *> *ASScreenRecordingMemo(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         cache = [[NSCache alloc] init];
-        cache.countLimit = 10000;
+        cache.countLimit = 3000;  // 降低缓存数量减少内存占用
     });
     return cache;
 }
@@ -700,13 +702,15 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     if (self=[super init]) {
         _workQ = dispatch_queue_create("as.photo.scan.q", DISPATCH_QUEUE_SERIAL);
         _imageManager = [PHCachingImageManager new];
+        // 配置 PHCachingImageManager 内存限制
+        _imageManager.allowsCachingHighQualityImages = NO;
 
         _ioQ = dispatch_queue_create("as.photo.scan.io", DISPATCH_QUEUE_SERIAL);
         _pendingUpsertIDsPersist = [NSMutableSet set];
         _pendingRemovedIDsPersist = [NSMutableSet set];
         _lastCheckpointT = 0;
         _lastCheckpointCount = 0;
-    
+
             _progressObservers = [NSMutableDictionary dictionary];
             _observersQ = dispatch_queue_create("as.photo.scan.observers", DISPATCH_QUEUE_SERIAL);
 
@@ -728,16 +732,21 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
             _cache = [ASScanCache new];
 
             _visionMemo = [[NSCache alloc] init];
-            _visionMemo.countLimit = 3000;
+            _visionMemo.countLimit = 1000;  // 降低 Vision 缓存数量减少内存占用
 
             if ([self as_currentAuthState] != ASPhotoAuthStateNone) {
                 [self refreshAllAssetsFetchResult];
             }
-            
+
             [[PHPhotoLibrary sharedPhotoLibrary] registerChangeObserver:self];
             [[NSNotificationCenter defaultCenter] addObserver:self
                                                      selector:@selector(as_appDidEnterBackground)
                                                          name:UIApplicationDidEnterBackgroundNotification
+                                                       object:nil];
+            // 监听内存警告，及时清理缓存
+            [[NSNotificationCenter defaultCenter] addObserver:self
+                                                     selector:@selector(as_didReceiveMemoryWarning)
+                                                         name:UIApplicationDidReceiveMemoryWarningNotification
                                                        object:nil];
 
     }
@@ -752,8 +761,39 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
     });
 }
 
+- (void)as_didReceiveMemoryWarning {
+    // 内存警告时清理缓存
+    [self.visionMemo removeAllObjects];
+    [ASBlurMemo() removeAllObjects];
+    [ASScreenRecordingMemo() removeAllObjects];
+    [self.imageManager stopCachingImagesForAllAssets];
+}
+
+// 清理 model 中的 visionPrintData 释放内存
+- (void)clearVisionPrintDataFromModels {
+    void (^clearFromArray)(NSArray<ASAssetModel *> *) = ^(NSArray<ASAssetModel *> *arr) {
+        for (ASAssetModel *m in arr) {
+            m.visionPrintData = nil;
+        }
+    };
+
+    void (^clearFromGroups)(NSArray<ASAssetGroup *> *) = ^(NSArray<ASAssetGroup *> *groups) {
+        for (ASAssetGroup *g in groups) {
+            for (ASAssetModel *m in g.assets) {
+                m.visionPrintData = nil;
+            }
+        }
+    };
+
+    clearFromGroups(self.dupGroupsM);
+    clearFromGroups(self.simGroupsM);
+    clearFromArray(self.comparableImagesM);
+    clearFromArray(self.comparableVideosM);
+}
+
 - (void)dealloc {
     [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 // 断点续扫
@@ -802,9 +842,9 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 - (void)checkpointSaveAsyncForce:(BOOL)force {
     CFTimeInterval now = CACurrentMediaTime();
 
-    // 节流 每 200 张或 3 秒一次
-    BOOL hitCount = (self.snapshot.scannedCount - self.lastCheckpointCount) >= 200;
-    BOOL hitTime  = (now - self.lastCheckpointT) >= 3;
+    // 节流 每 500 张或 5 秒一次（降低频率减少内存拷贝）
+    BOOL hitCount = (self.snapshot.scannedCount - self.lastCheckpointCount) >= 500;
+    BOOL hitTime  = (now - self.lastCheckpointT) >= 5;
 
     if (!force && !(hitCount || hitTime)) return;
 
@@ -1581,88 +1621,90 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 - (void)processSingleScannedModel:(ASAssetModel *)model asset:(PHAsset *)asset desiredK:(NSUInteger)desiredK {
     if (self.cancelled) return;
 
-    // 1. 更新全局统计
-    self.snapshot.scannedCount += 1;
-    self.snapshot.scannedBytes += model.fileSizeBytes;
+    @autoreleasepool {
+        // 1. 更新全局统计
+        self.snapshot.scannedCount += 1;
+        self.snapshot.scannedBytes += model.fileSizeBytes;
 
-    // 2. 更新时间锚点
-    NSDate *cd = ASPrimaryDateForAsset(asset);
-    NSDate *md = asset.modificationDate ?: cd;
-    NSDate *maxAnchor = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
-    if ([cd compare:maxAnchor] == NSOrderedDescending) maxAnchor = cd;
-    if ([md compare:maxAnchor] == NSOrderedDescending) maxAnchor = md;
-    self.cache.anchorDate = [self as_safeAnchorDate:maxAnchor];
+        // 2. 更新时间锚点
+        NSDate *cd = ASPrimaryDateForAsset(asset);
+        NSDate *md = asset.modificationDate ?: cd;
+        NSDate *maxAnchor = self.cache.anchorDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+        if ([cd compare:maxAnchor] == NSOrderedDescending) maxAnchor = cd;
+        if ([md compare:maxAnchor] == NSOrderedDescending) maxAnchor = md;
+        self.cache.anchorDate = [self as_safeAnchorDate:maxAnchor];
 
-    // 3. 更新日期索引 (用于相似度分桶)
-    NSDate *day = [self as_dayStart:cd];
-    if (!self.currentDay || ![day isEqualToDate:self.currentDay]) {
-        self.currentDay = day;
-        [self.indexImage removeAllObjects];
-        [self.indexVideo removeAllObjects];
-    }
-
-    // 4. 分类逻辑
-    if (ASIsScreenshot(asset)) {
-        [self.screenshotsM addObject:model];
-        self.snapshot.screenshotCount += 1;
-        self.snapshot.screenshotBytes += model.fileSizeBytes;
-        // 截图不参与相似度对比，但需触发进度
-        [self emitProgressMaybe];
-        [self checkpointSaveAsyncForce:NO];
-        return;
-    }
-
-    if (asset.mediaType == PHAssetMediaTypeImage) {
-        // 加入 "其他" 候选
-        [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateScanning];
-        [self otherCandidateAddIfNeeded:model asset:asset];
-        
-        // 模糊归类
-        if (model.blurScore >= 0.f) {
-            [self updateBlurryTopKFixed:model desiredK:desiredK];
+        // 3. 更新日期索引 (用于相似度分桶)
+        NSDate *day = [self as_dayStart:cd];
+        if (!self.currentDay || ![day isEqualToDate:self.currentDay]) {
+            self.currentDay = day;
+            [self.indexImage removeAllObjects];
+            [self.indexVideo removeAllObjects];
         }
-    }
 
-    if (ASIsScreenRecording(asset)) {
-        [self.screenRecordingsM addObject:model];
-        self.snapshot.screenRecordingCount += 1;
-        self.snapshot.screenRecordingBytes += model.fileSizeBytes;
-        [self emitProgressMaybe];
-        [self checkpointSaveAsyncForce:NO];
-        return;
-    }
-
-    if (asset.mediaType == PHAssetMediaTypeVideo && model.fileSizeBytes >= kBigVideoMinBytes) {
-        [self.bigVideosM addObject:model];
-        self.snapshot.bigVideoCount += 1;
-        self.snapshot.bigVideoBytes += model.fileSizeBytes;
-    }
-
-    // 5. 核心对比逻辑 (Duplicate / Similar)
-    if (ASAllowedForCompare(asset)) {
-        [self setModule:ASHomeModuleTypeSimilarImage state:ASModuleScanStateAnalyzing];
-        [self setModule:ASHomeModuleTypeSimilarVideo state:ASModuleScanStateAnalyzing];
-        [self setModule:ASHomeModuleTypeDuplicateImage state:ASModuleScanStateAnalyzing];
-        [self setModule:ASHomeModuleTypeDuplicateVideo state:ASModuleScanStateAnalyzing];
-
-        // 这里不再会有 IO 操作，VisionData 在并发步骤已备好
-        BOOL grouped = [self matchAndGroup:model asset:asset];
-        
-        if (grouped && asset.mediaType == PHAssetMediaTypeImage) {
-            [self otherCandidateRemoveIfExistsLocalId:model.localId];
+        // 4. 分类逻辑
+        if (ASIsScreenshot(asset)) {
+            [self.screenshotsM addObject:model];
+            self.snapshot.screenshotCount += 1;
+            self.snapshot.screenshotBytes += model.fileSizeBytes;
+            // 截图不参与相似度对比，但需触发进度
+            [self emitProgressMaybe];
+            [self checkpointSaveAsyncForce:NO];
+            return;
         }
 
         if (asset.mediaType == PHAssetMediaTypeImage) {
-            [self.comparableImagesM addObject:model];
-        } else if (asset.mediaType == PHAssetMediaTypeVideo) {
-            [self.comparableVideosM addObject:model];
+            // 加入 "其他" 候选
+            [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateScanning];
+            [self otherCandidateAddIfNeeded:model asset:asset];
+
+            // 模糊归类
+            if (model.blurScore >= 0.f) {
+                [self updateBlurryTopKFixed:model desiredK:desiredK];
+            }
         }
 
-        [self recomputeCleanableStatsFast];
-    }
+        if (ASIsScreenRecording(asset)) {
+            [self.screenRecordingsM addObject:model];
+            self.snapshot.screenRecordingCount += 1;
+            self.snapshot.screenRecordingBytes += model.fileSizeBytes;
+            [self emitProgressMaybe];
+            [self checkpointSaveAsyncForce:NO];
+            return;
+        }
 
-    [self emitProgressMaybe];
-    [self checkpointSaveAsyncForce:NO];
+        if (asset.mediaType == PHAssetMediaTypeVideo && model.fileSizeBytes >= kBigVideoMinBytes) {
+            [self.bigVideosM addObject:model];
+            self.snapshot.bigVideoCount += 1;
+            self.snapshot.bigVideoBytes += model.fileSizeBytes;
+        }
+
+        // 5. 核心对比逻辑 (Duplicate / Similar)
+        if (ASAllowedForCompare(asset)) {
+            [self setModule:ASHomeModuleTypeSimilarImage state:ASModuleScanStateAnalyzing];
+            [self setModule:ASHomeModuleTypeSimilarVideo state:ASModuleScanStateAnalyzing];
+            [self setModule:ASHomeModuleTypeDuplicateImage state:ASModuleScanStateAnalyzing];
+            [self setModule:ASHomeModuleTypeDuplicateVideo state:ASModuleScanStateAnalyzing];
+
+            // 这里不再会有 IO 操作，VisionData 在并发步骤已备好
+            BOOL grouped = [self matchAndGroup:model asset:asset];
+
+            if (grouped && asset.mediaType == PHAssetMediaTypeImage) {
+                [self otherCandidateRemoveIfExistsLocalId:model.localId];
+            }
+
+            if (asset.mediaType == PHAssetMediaTypeImage) {
+                [self.comparableImagesM addObject:model];
+            } else if (asset.mediaType == PHAssetMediaTypeVideo) {
+                [self.comparableVideosM addObject:model];
+            }
+
+            [self recomputeCleanableStatsFast];
+        }
+
+        [self emitProgressMaybe];
+        [self checkpointSaveAsyncForce:NO];
+    }
 }
 
 // 辅助方法：完成扫描后的收尾 (必须在 workQ 中调用)
@@ -1714,7 +1756,10 @@ static NSString * const kASHasScannedOnceKey      = @"as_has_scanned_once_v1";
 
         // 存盘
         [self saveCacheAsync];
-        
+
+        // 扫描完成后清理 visionPrintData 释放内存（数据已缓存在 visionMemo 中）
+        [self clearVisionPrintDataFromModels];
+
         // 更新 UI 模块状态
         [self setModule:ASHomeModuleTypeBlurryPhotos state:ASModuleScanStateFinished];
         [self setModule:ASHomeModuleTypeOtherPhotos state:ASModuleScanStateFinished];
@@ -1991,17 +2036,19 @@ static inline BOOL ASModelIsScreenshot(ASAssetModel *m) {
     NSMutableArray<ASAssetModel*> *out = [NSMutableArray array];
 
     for (PHAsset *a in result) {
-        if (a.mediaType != PHAssetMediaTypeImage) continue;
-        if (ASIsScreenshot(a)) continue;
-        NSString *lid = a.localIdentifier ?: @"";
-        if (!lid.length) continue;
-        if ([exclude containsObject:lid]) continue;
+        @autoreleasepool {
+            if (a.mediaType != PHAssetMediaTypeImage) continue;
+            if (ASIsScreenshot(a)) continue;
+            NSString *lid = a.localIdentifier ?: @"";
+            if (!lid.length) continue;
+            if ([exclude containsObject:lid]) continue;
 
-        NSError *err = nil;
-        ASAssetModel *m = [self buildModelForAsset:a computeCompareBits:NO error:&err];
-        if (!m) continue;
+            NSError *err = nil;
+            ASAssetModel *m = [self buildModelForAsset:a computeCompareBits:NO error:&err];
+            if (!m) continue;
 
-        [out addObject:m];
+            [out addObject:m];
+        }
     }
     return out;
 }
@@ -2059,31 +2106,35 @@ static inline NSString *ASBlurCacheKeyForAsset(PHAsset *a) {
     if (asset.mediaType != PHAssetMediaTypeImage) return -1.f;
     if (ASIsScreenshot(asset)) return -1.f;
 
-    UIImage *thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(512, 512)];
-    if (!thumb.CGImage) return -1.f;
+    __block float score = -1.f;
 
-    vImage_Buffer gray = {0};
-    if (![self vImageGrayFromCGImage:thumb.CGImage outGray:&gray] || !gray.data) return -1.f;
+    @autoreleasepool {
+        UIImage *thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(kASThumbnailSize, kASThumbnailSize)];
+        if (!thumb.CGImage) return -1.f;
 
-    vImage_Buffer roi = [self vImageCenterROIFromGray:gray frac:0.60f];
-    vImage_Buffer roi8 = [self copyROIToContiguousPlanar8:roi];
+        vImage_Buffer gray = {0};
+        if (![self vImageGrayFromCGImage:thumb.CGImage outGray:&gray] || !gray.data) return -1.f;
 
-    uint8_t *p = (uint8_t *)roi8.data;
-    uint64_t n = (uint64_t)roi8.width * (uint64_t)roi8.height;
-    double sum=0, sum2=0;
-    for (uint64_t i=0;i<n;i++){ double v=p[i]; sum+=v; sum2+=v*v; }
-    double mean = sum / (double)MAX(n,1);
-    double var  = sum2/(double)MAX(n,1) - mean*mean;
-    if (var < 0) var = 0;
-    double std  = sqrt(var);
+        vImage_Buffer roi = [self vImageCenterROIFromGray:gray frac:0.60f];
+        vImage_Buffer roi8 = [self copyROIToContiguousPlanar8:roi];
 
-    float score = -1.f;
-    if (mean > 20.0 && std > 8.0) {
-        score = [self tenengradMeanSqOnROI8:roi8];
+        uint8_t *p = (uint8_t *)roi8.data;
+        uint64_t n = (uint64_t)roi8.width * (uint64_t)roi8.height;
+        double sum=0, sum2=0;
+        for (uint64_t i=0;i<n;i++){ double v=p[i]; sum+=v; sum2+=v*v; }
+        double mean = sum / (double)MAX(n,1);
+        double var  = sum2/(double)MAX(n,1) - mean*mean;
+        if (var < 0) var = 0;
+        double std  = sqrt(var);
+
+        if (mean > 20.0 && std > 8.0) {
+            score = [self tenengradMeanSqOnROI8:roi8];
+        }
+
+        free(roi8.data);
+        free(gray.data);
     }
 
-    free(roi8.data);
-    free(gray.data);
     [ASBlurMemo() setObject:@(score) forKey:key];
 
     return score;
@@ -2192,6 +2243,7 @@ static inline NSString *ASBlurCacheKeyForAsset(PHAsset *a) {
     const size_t h = CGImageGetHeight(cg);
     if (w == 0 || h == 0) return NO;
 
+    // 直接使用 vImageConvert_ARGB8888toPlanar8 减少中间缓冲区
     vImage_Buffer rgba = {0};
     rgba.width = w;
     rgba.height = h;
@@ -2215,23 +2267,12 @@ static inline NSString *ASBlurCacheKeyForAsset(PHAsset *a) {
     outGray->data = malloc(outGray->rowBytes * h);
     if (!outGray->data) { free(rgba.data); return NO; }
 
-    vImage_Buffer argb = {0};
-    argb.width = w;
-    argb.height = h;
-    argb.rowBytes = w * 4;
-    argb.data = malloc(argb.rowBytes * h);
-    if (!argb.data) { free(rgba.data); free(outGray->data); outGray->data=NULL; return NO; }
-
-    const uint8_t permuteMap[4] = {3, 0, 1, 2};
-    vImage_Error e = vImagePermuteChannels_ARGB8888(&rgba, &argb, permuteMap, kvImageNoFlags);
-    free(rgba.data);
-    if (e != kvImageNoError) { free(argb.data); free(outGray->data); outGray->data=NULL; return NO; }
-
-    const int16_t mtx[4] = {0, 77, 150, 29};  // *256
+    // 使用 vImage 直接转换，避免额外的 argb 缓冲区
+    const int16_t mtx[4] = {77, 150, 29, 0};  // RGB to Gray: 0.299*R + 0.587*G + 0.114*B
     const int32_t divisor = 256;
-    e = vImageMatrixMultiply_ARGB8888ToPlanar8(&argb, outGray, mtx, divisor, NULL, 0, kvImageNoFlags);
+    vImage_Error e = vImageMatrixMultiply_ARGB8888ToPlanar8(&rgba, outGray, mtx, divisor, NULL, 0, kvImageNoFlags);
 
-    free(argb.data);
+    free(rgba.data);
 
     if (e != kvImageNoError) {
         free(outGray->data);
@@ -2822,17 +2863,19 @@ static const NSUInteger kASLocalIdChunk = 3500;
     NSMutableArray<ASAssetModel *> *out = [NSMutableArray arrayWithCapacity:fr.count];
 
     for (PHAsset *a in fr) {
-        NSString *lid = a.localIdentifier ?: @"";
-        if (!lid.length) continue;
-        if ([exclude containsObject:lid]) continue;
+        @autoreleasepool {
+            NSString *lid = a.localIdentifier ?: @"";
+            if (!lid.length) continue;
+            if ([exclude containsObject:lid]) continue;
 
-        ASAssetModel *m = modelByLocal[lid];
-        if (m) {
-            [out addObject:m];
-        } else {
-            NSError *err = nil;
-            ASAssetModel *fallback = [self buildModelForAsset:a computeCompareBits:NO error:&err];
-            if (fallback) [out addObject:fallback];
+            ASAssetModel *m = modelByLocal[lid];
+            if (m) {
+                [out addObject:m];
+            } else {
+                NSError *err = nil;
+                ASAssetModel *fallback = [self buildModelForAsset:a computeCompareBits:NO error:&err];
+                if (fallback) [out addObject:fallback];
+            }
         }
     }
 
@@ -3027,61 +3070,65 @@ static const NSUInteger kASLocalIdChunk = 3500;
 
     NSCalendar *cal = self.scanCalendar ?: [NSCalendar currentCalendar];
     for (NSDate *dayStart in dayStarts) {
-        NSDate *dayEnd = [cal dateByAddingUnit:NSCalendarUnitDay value:1 toDate:dayStart options:0];
+        @autoreleasepool {
+            NSDate *dayEnd = [cal dateByAddingUnit:NSCalendarUnitDay value:1 toDate:dayStart options:0];
 
-        PHFetchOptions *opt = [self allImageVideoFetchOptions];
-        opt.predicate = [NSPredicate predicateWithFormat:
-            @"((mediaType == %d) OR (mediaType == %d)) AND creationDate >= %@ AND creationDate < %@",
-            PHAssetMediaTypeImage, PHAssetMediaTypeVideo, dayStart, dayEnd
-        ];
+            PHFetchOptions *opt = [self allImageVideoFetchOptions];
+            opt.predicate = [NSPredicate predicateWithFormat:
+                @"((mediaType == %d) OR (mediaType == %d)) AND creationDate >= %@ AND creationDate < %@",
+                PHAssetMediaTypeImage, PHAssetMediaTypeVideo, dayStart, dayEnd
+            ];
 
-        PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithOptions:opt];
+            PHFetchResult<PHAsset *> *fr = [PHAsset fetchAssetsWithOptions:opt];
 
-        [self.indexImage removeAllObjects];
-        [self.indexVideo removeAllObjects];
+            [self.indexImage removeAllObjects];
+            [self.indexVideo removeAllObjects];
 
-        for (PHAsset *asset in fr) {
-            NSDate *cd = asset.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
-            NSDate *md = asset.modificationDate ?: cd;
-            if ([cd compare:maxA] == NSOrderedDescending) maxA = cd;
-            if ([md compare:maxA] == NSOrderedDescending) maxA = md;
+            for (PHAsset *asset in fr) {
+                @autoreleasepool {
+                    NSDate *cd = asset.creationDate ?: [NSDate dateWithTimeIntervalSince1970:0];
+                    NSDate *md = asset.modificationDate ?: cd;
+                    if ([cd compare:maxA] == NSOrderedDescending) maxA = cd;
+                    if ([md compare:maxA] == NSOrderedDescending) maxA = md;
 
-            NSError *err = nil;
-            ASAssetModel *m = [self buildModelForAsset:asset computeCompareBits:YES error:&err];
-            if (!m) continue;
+                    NSError *err = nil;
+                    ASAssetModel *m = [self buildModelForAsset:asset computeCompareBits:YES error:&err];
+                    if (!m) continue;
 
-            if (ASIsScreenshot(asset)) {
-                [self.screenshotsM addObject:m];
-                continue;
-            }
+                    if (ASIsScreenshot(asset)) {
+                        [self.screenshotsM addObject:m];
+                        continue;
+                    }
 
-            if (asset.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(asset)) {
-                float score = [self blurScoreForAsset:asset];
-                if (score >= 0.f) {
-                    m.blurScore = score;
-                    [self updateBlurryTopKIncremental:m desiredK:desiredK];
+                    if (asset.mediaType == PHAssetMediaTypeImage && !ASIsScreenshot(asset)) {
+                        float score = [self blurScoreForAsset:asset];
+                        if (score >= 0.f) {
+                            m.blurScore = score;
+                            [self updateBlurryTopKIncremental:m desiredK:desiredK];
+                        }
+                    }
+
+                    if (ASIsScreenRecording(asset)) {
+                        [self.screenRecordingsM addObject:m];
+                        continue;
+                    }
+
+                    if (asset.mediaType == PHAssetMediaTypeVideo && m.fileSizeBytes >= kBigVideoMinBytes) {
+                        [self.bigVideosM addObject:m];
+                    }
+
+                    if (!ASAllowedForCompare(asset)) continue;
+
+                    [self matchAndGroup:m asset:asset];
+
+                    if (asset.mediaType == PHAssetMediaTypeImage) {
+                        if (!self.comparableImagesM) self.comparableImagesM = [NSMutableArray array];
+                        [self.comparableImagesM addObject:m];
+                    } else if (asset.mediaType == PHAssetMediaTypeVideo) {
+                        if (!self.comparableVideosM) self.comparableVideosM = [NSMutableArray array];
+                        [self.comparableVideosM addObject:m];
+                    }
                 }
-            }
-
-            if (ASIsScreenRecording(asset)) {
-                [self.screenRecordingsM addObject:m];
-                continue;
-            }
-
-            if (asset.mediaType == PHAssetMediaTypeVideo && m.fileSizeBytes >= kBigVideoMinBytes) {
-                [self.bigVideosM addObject:m];
-            }
-
-            if (!ASAllowedForCompare(asset)) continue;
-
-            [self matchAndGroup:m asset:asset];
-
-            if (asset.mediaType == PHAssetMediaTypeImage) {
-                if (!self.comparableImagesM) self.comparableImagesM = [NSMutableArray array];
-                [self.comparableImagesM addObject:m];
-            } else if (asset.mediaType == PHAssetMediaTypeVideo) {
-                if (!self.comparableVideosM) self.comparableVideosM = [NSMutableArray array];
-                [self.comparableVideosM addObject:m];
             }
         }
     }
@@ -3251,7 +3298,7 @@ static const NSUInteger kASLocalIdChunk = 3500;
         if (!asset) return nil;
 
         @autoreleasepool {
-            UIImage *thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(512, 512)];
+            UIImage *thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(kASThumbnailSize, kASThumbnailSize)];
             if (!thumb.CGImage) return nil;
 
             VNGenerateImageFeaturePrintRequest *req = [VNGenerateImageFeaturePrintRequest new];
@@ -3298,7 +3345,7 @@ static const NSUInteger kASLocalIdChunk = 3500;
     if (!a) return;
 
     @autoreleasepool {
-        UIImage *thumb = [self requestThumbnailSyncForAsset:a target:CGSizeMake(512, 512)];
+        UIImage *thumb = [self requestThumbnailSyncForAsset:a target:CGSizeMake(kASThumbnailSize, kASThumbnailSize)];
         if (!thumb.CGImage) return;
 
         NSData *data = [self computeVisionPrintDataFromImage:thumb];
@@ -3322,7 +3369,7 @@ static const NSUInteger kASLocalIdChunk = 3500;
 
     if (computeCompareBits && ASAllowedForCompare(asset)) {
         @autoreleasepool {
-            UIImage *thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(512, 512)];
+            UIImage *thumb = [self requestThumbnailSyncForAsset:asset target:CGSizeMake(kASThumbnailSize, kASThumbnailSize)];
             if (thumb) {
                 m.phash256Data = [self computeColorPHash256Data:thumb];
                 // 提前计算并缓存 Vision 数据，防止 matchAndGroup 时阻塞串行队列
@@ -3346,27 +3393,29 @@ static const NSUInteger kASLocalIdChunk = 3500;
 - (UIImage *)requestThumbnailSyncForAsset:(PHAsset *)asset target:(CGSize)target {
     __block UIImage *img = nil;
 
-    PHImageRequestOptions *opt = [PHImageRequestOptions new];
-    opt.synchronous = YES;
-    opt.networkAccessAllowed = NO;
-    opt.resizeMode = PHImageRequestOptionsResizeModeFast;
-    if ([self as_currentAuthState] == ASPhotoAuthStateLimited) {
-        opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
-    } else {
-        opt.deliveryMode = PHImageRequestOptionsDeliveryModeFastFormat;
-    }
-    opt.version = PHImageRequestOptionsVersionCurrent;
+    @autoreleasepool {
+        PHImageRequestOptions *opt = [PHImageRequestOptions new];
+        opt.synchronous = YES;
+        opt.networkAccessAllowed = NO;
+        opt.resizeMode = PHImageRequestOptionsResizeModeFast;
+        if ([self as_currentAuthState] == ASPhotoAuthStateLimited) {
+            opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+        } else {
+            opt.deliveryMode = PHImageRequestOptionsDeliveryModeFastFormat;
+        }
+        opt.version = PHImageRequestOptionsVersionCurrent;
 
-    [self.imageManager requestImageForAsset:asset
-                                 targetSize:target
-                                contentMode:PHImageContentModeAspectFill
-                                    options:opt
-                              resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
-        if ([info[PHImageCancelledKey] boolValue]) return;
-        if (info[PHImageErrorKey]) return;
-        if (!result) return;
-        img = result;
-    }];
+        [self.imageManager requestImageForAsset:asset
+                                     targetSize:target
+                                    contentMode:PHImageContentModeAspectFill
+                                        options:opt
+                                  resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
+            if ([info[PHImageCancelledKey] boolValue]) return;
+            if (info[PHImageErrorKey]) return;
+            if (!result) return;
+            img = result;
+        }];
+    }
     return img;
 }
 
@@ -4076,38 +4125,48 @@ static inline void ASDCT1D_64(const float *in, float *out) {
 #pragma mark - Progress emit
 
 - (void)emitProgress {
-    self.snapshot.lastUpdated = [NSDate date];
+    @autoreleasepool {
+        self.snapshot.lastUpdated = [NSDate date];
 
-    NSArray<ASAssetGroup *> *dupCopy = [self.dupGroupsM copy] ?: self.cache.duplicateGroups ?: @[];
-    NSArray<ASAssetGroup *> *simCopy = [self.simGroupsM copy] ?: self.cache.similarGroups ?: @[];
-    NSArray<ASAssetModel *> *shotCopy = [self.screenshotsM copy] ?: self.cache.screenshots ?: @[];
-    NSArray<ASAssetModel *> *recCopy  = [self.screenRecordingsM copy] ?: self.cache.screenRecordings ?: @[];
-    NSArray<ASAssetModel *> *bigCopy  = [self.bigVideosM copy] ?: self.cache.bigVideos ?: @[];
+        NSArray<ASAssetGroup *> *dupCopy = [self.dupGroupsM copy] ?: self.cache.duplicateGroups ?: @[];
+        NSArray<ASAssetGroup *> *simCopy = [self.simGroupsM copy] ?: self.cache.similarGroups ?: @[];
+        NSArray<ASAssetModel *> *shotCopy = [self.screenshotsM copy] ?: self.cache.screenshots ?: @[];
+        NSArray<ASAssetModel *> *recCopy  = [self.screenRecordingsM copy] ?: self.cache.screenRecordings ?: @[];
+        NSArray<ASAssetModel *> *bigCopy  = [self.bigVideosM copy] ?: self.cache.bigVideos ?: @[];
 
-    ASScanSnapshot *snap = self.snapshot;
+        ASScanSnapshot *snap = self.snapshot;
 
-    NSArray<ASAssetModel *> *blurryCopy = [self.blurryPhotosM copy] ?: self.cache.blurryPhotos ?: @[];
-    NSArray<ASAssetModel *> *otherCopy  = [self.otherPhotosM copy]  ?: self.cache.otherPhotos  ?: @[];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        self.duplicateGroups = dupCopy;
-        self.similarGroups = [self mergedSimilarGroupsForUIFromDup:dupCopy sim:simCopy];
-        self.screenshots = shotCopy;
-        self.screenRecordings = recCopy;
-        self.bigVideos = bigCopy;
-        self.blurryPhotos = blurryCopy;
-        self.otherPhotos  = otherCopy;
+        NSArray<ASAssetModel *> *blurryCopy = [self.blurryPhotosM copy] ?: self.cache.blurryPhotos ?: @[];
+        NSArray<ASAssetModel *> *otherCopy  = [self.otherPhotosM copy]  ?: self.cache.otherPhotos  ?: @[];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.duplicateGroups = dupCopy;
+            self.similarGroups = [self mergedSimilarGroupsForUIFromDup:dupCopy sim:simCopy];
+            self.screenshots = shotCopy;
+            self.screenRecordings = recCopy;
+            self.bigVideos = bigCopy;
+            self.blurryPhotos = blurryCopy;
+            self.otherPhotos  = otherCopy;
 
-        [self notifyProgressObserversOnMain:snap];
-    });
-
+            [self notifyProgressObserversOnMain:snap];
+        });
+    }
 }
 
 - (void)emitProgressMaybe {
     static CFTimeInterval lastT = 0;
+    static NSUInteger lastCleanupCount = 0;
     CFTimeInterval t = CACurrentMediaTime();
     if (self.snapshot.scannedCount % 100 == 0 || (t - lastT) > 2.5) {
         lastT = t;
-        [self emitProgress];
+        @autoreleasepool {
+            [self emitProgress];
+        }
+
+        // 每扫描 500 个资源清理一次 imageManager 缓存，减少内存峰值
+        if (self.snapshot.scannedCount - lastCleanupCount >= 500) {
+            lastCleanupCount = self.snapshot.scannedCount;
+            [self.imageManager stopCachingImagesForAllAssets];
+        }
     }
 }
 
