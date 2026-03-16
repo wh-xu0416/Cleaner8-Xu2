@@ -2118,6 +2118,13 @@ static inline NSString *ASBlurCacheKeyForAsset(PHAsset *a) {
         vImage_Buffer roi = [self vImageCenterROIFromGray:gray frac:0.60f];
         vImage_Buffer roi8 = [self copyROIToContiguousPlanar8:roi];
 
+        // 图片太小或其他原因提取 roi 失败，清理内存并返回 -1
+        if (!roi8.data) {
+            free(gray.data);
+            [ASBlurMemo() setObject:@(-1.f) forKey:key];
+            return -1.f;
+        }
+    
         uint8_t *p = (uint8_t *)roi8.data;
         uint64_t n = (uint64_t)roi8.width * (uint64_t)roi8.height;
         double sum=0, sum2=0;
@@ -2143,10 +2150,13 @@ static inline NSString *ASBlurCacheKeyForAsset(PHAsset *a) {
 #pragma mark - vImage helpers
 
 - (vImage_Buffer)copyROIToContiguousPlanar8:(vImage_Buffer)roi {
+    // 增加判空保护，防止后面的 malloc(0) 或 memcpy 崩
+    if (!roi.data || roi.width == 0 || roi.height == 0) return (vImage_Buffer){0};
+
     vImage_Buffer out = {0};
     out.width = roi.width;
     out.height = roi.height;
-    out.rowBytes = roi.width; // 连续
+    out.rowBytes = roi.width;
     out.data = malloc(out.rowBytes * out.height);
     if (!out.data) return (vImage_Buffer){0};
 
@@ -2157,7 +2167,6 @@ static inline NSString *ASBlurCacheKeyForAsset(PHAsset *a) {
     }
     return out;
 }
-
 - (float)tenengradMeanSqOnROI8:(vImage_Buffer)roi8 {
     const uint32_t w = (uint32_t)roi8.width, h = (uint32_t)roi8.height;
     if (w < 5 || h < 5) return 0.f;
@@ -2336,10 +2345,17 @@ static inline NSString *ASBlurCacheKeyForAsset(PHAsset *a) {
 }
 
 - (vImage_Buffer)vImageCenterROIFromGray:(vImage_Buffer)gray frac:(float)frac {
+    if (!gray.data || gray.width == 0 || gray.height == 0) return (vImage_Buffer){0};
+
     frac = fmaxf(0.1f, fminf(frac, 1.0f));
     uint32_t rw = (uint32_t)lrintf((float)gray.width * frac);
     uint32_t rh = (uint32_t)lrintf((float)gray.height * frac);
-    rw = MAX(16, rw); rh = MAX(16, rh);
+
+    rw = MAX(16, rw);
+    rh = MAX(16, rh);
+
+    rw = MIN((uint32_t)gray.width, rw);
+    rh = MIN((uint32_t)gray.height, rh);
 
     uint32_t x0 = (uint32_t)((gray.width  - rw) / 2);
     uint32_t y0 = (uint32_t)((gray.height - rh) / 2);
